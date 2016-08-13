@@ -5,7 +5,6 @@ from astropy.io import fits
 from array import array
 import math
 import numpy as np
-#import yaml
 import datetime
 import ROOT
 from ROOT import gROOT, gDirectory, gPad, gSystem, gStyle, kTRUE, kFALSE
@@ -32,7 +31,7 @@ ROOT.gStyle.SetPalette(53)
 psfCalOnly = 3.0
 listFileTr = par[2:]
 print listFileTr
-ch = ROOT.TChain("trGammas")
+ch = ROOT.TChain("EVENTS")
 for nameFileTr in listFileTr:
     ch.Add(nameFileTr)
 print "Total number of events:", ch.GetEntries()
@@ -42,10 +41,16 @@ nameFileOut = "PlotsAllSky_" + suffix + ".root"
 fileOut = ROOT.TFile(nameFileOut, "RECREATE")
 print "Output file:", fileOut.GetName()
 
-listPathFilePerf = [["/home/takhsm/FermiMVA/CalTkr/v20r9p9_TRANSIENT_P8R1_TRANSIENT_R100_perf.root", "/home/takhsm/FermiMVA/CalTkr/v20r9p9_SOURCE_P8R1_SOURCE_perf.root"], ["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"]]
+listPathFilePerf = [
+["/home/takhsm/FermiMVA/CalTkr/v20r9p9_TRANSIENT_P8R1_TRANSIENT_R100_perf.root", 
+"/home/takhsm/FermiMVA/CalTkr/v20r9p9_SOURCE_P8R1_SOURCE_perf.root"], 
+["/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root", 
+"/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R30_perf.root", 
+"/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R10_perf.root"]]
+
 cfg = ClassConfig('Both', [10, 3, 1])
-er = EnergyLogRegion(4, 4.75, 0.25)
-erplot = EnergyLogRegion(4, 4.75, 0.25)
+er = EnergyLogRegion(7, 4.35, 0.2)
+erplot = er #EnergyLogRegion(4, 4.75, 0.25)
 aaStrSelect = cfg.aaStrSelect
 aStrSelect = cfg.aStrSelect
 
@@ -66,8 +71,6 @@ ridge = GalacticRidge("GalacticRidge", config=cfg, perf=htgPerf, eRegion=er, ePl
 aInnerGal = [ InnerGalaxy("InnerGalaxyR41", 41, config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=erplot)]
 for obj in pCandleCatalogue.aObjectDict:
     aTgt.append(PointSource(obj["Name"], obj["RA"], obj["DEC"], obj["L"], obj["B"], obj["Z"], rAppa, rOffMax, rOffMin, rOnMax, cfg, er, erplot, htgPerf))
-#for trs in pTransientCatalogue.aObjectDict:
-#    aTrs.append(PointSource(trs["Name"], trs["RA"], trs["DEC"], trs["L"], trs["B"], trs["Z"], rAppa, rOffMax, rOffMin, rOnMax, cfg, er, erplot, htgPerf, trs["Start"], trs["End"]))
 print ""
 print "================"
 print "Filling events."
@@ -170,44 +173,6 @@ for aS in aaStrSelect:
     nAcross = max(nAcross, len(aS))
 cMap.Divide(nAcross, nDown)
 legGrpMap = ROOT.TLegend(0.1,0.1,0.9,0.9,"Event energy", 'NDC')
-# aGrpRadiusOnMax = []
-# aGrpRadiusOffMin = []
-# aGrpRadiusOffMax = []
-# nPoint = 100
-# for ctEvent in range(len(aaStrSelect)):
-#     aGrpRadiusOnMax.append(ROOT.TGraphPolar(nPoint))
-#     aGrpRadiusOnMax[-1].SetName("grpRadiusOnMax%s" % aStrSelect[ctEvent])
-#     aGrpRadiusOnMax[-1].SetTitle("Maximum radius of the stacked ON region")
-#     aGrpRadiusOnMax[-1].SetLineWidth(1)
-#     aGrpRadiusOnMax[-1].SetLineColor(kWhite)
-#     aGrpRadiusOnMax[-1].SetMarkerStyle(1)
-#     aGrpRadiusOnMax[-1].SetMarkerColor(kWhite)
-#     aGrpRadiusOnMax[-1].SetFillStyle(1001)
-#     aGrpRadiusOnMax[-1].SetFillColor(kWhite)
-#     for iPoint in range(nPoint):
-#         aGrpRadiusOnMax[-1].SetPoint(iPoint, 2.*math.pi*iPoint/nPoint, rOnMax[ctEvent])
-#     aGrpRadiusOffMax.append(ROOT.TGraphPolar(nPoint))
-#     aGrpRadiusOffMax[-1].SetName("grpRadiusOffMax%s" % aStrSelect[ctEvent])
-#     aGrpRadiusOffMax[-1].SetTitle("Maximum radius of the stacked OFF region")
-#     aGrpRadiusOffMax[-1].SetLineWidth(1)
-#     aGrpRadiusOffMax[-1].SetLineColor(kGray)
-#     aGrpRadiusOffMax[-1].SetMarkerStyle(1)
-#     aGrpRadiusOffMax[-1].SetMarkerColor(kGray)
-#     aGrpRadiusOffMax[-1].SetFillStyle(1001)
-#     aGrpRadiusOffMax[-1].SetFillColor(kGray)
-#     for iPoint in range(nPoint):
-#         aGrpRadiusOffMax[-1].SetPoint(iPoint, 2*math.pi*iPoint/nPoint, rOffMax[ctEvent])
-#     aGrpRadiusOffMin.append(ROOT.TGraphPolar(nPoint))
-#     aGrpRadiusOffMin[-1].SetName("grpRadiusOffMin%s" % aStrSelect[ctEvent])
-#     aGrpRadiusOffMin[-1].SetTitle("Minimum radius of the stacked OFF region")
-#     aGrpRadiusOffMin[-1].SetLineWidth(1)
-#     aGrpRadiusOffMin[-1].SetLineColor(kGray+1)
-#     aGrpRadiusOffMin[-1].SetMarkerStyle(1)
-#     aGrpRadiusOffMin[-1].SetMarkerColor(kGray+1)
-#     aGrpRadiusOffMin[-1].SetFillStyle(1001)
-#     aGrpRadiusOffMin[-1].SetFillColor(kGray+1)
-#     for iPoint in range(nPoint):
-#         aGrpRadiusOffMin[-1].SetPoint(iPoint, 2*math.pi*iPoint/nPoint, rOffMin[ctEvent])
 
 aaTitleMap = []
 for ctEvent in range(len(aStrSelect)):
@@ -247,12 +212,6 @@ for pS in range(len(aaStrSelect)):
             aaaGrpMap[-1][-1][-1].Write("", ROOT.TObject.kOverwrite)
             aaaGrpMap[-1][-1][-1].SetTitle("")
         cMap.cd(1+pS*nAcross+qS)
-#        aGrpRadiusOffMax[pS].Draw('NCF')
-#        aGrpRadiusOffMin[pS].Draw('NCF')
-#        aGrpRadiusOnMax[pS].Draw('NCF')
-#        if qS==0 and pS==0:
-#            legGrpMap.AddEntry(aGrpRadiusOnMax[pS], "ON region", 'f')
-#            legGrpMap.AddEntry(aGrpRadiusOffMax[qS], "OFF region", 'f')
         aaMgrMap[-1][-1].Draw("NP")
         aaTitleMap[pS][qS].Draw('same')
         gPad.Update()
@@ -300,14 +259,8 @@ for ctEvent in range(len(aaStrSelect)):
         fRadiusOffMin[ctEvent].append([])
         fRadiusOffMax[ctEvent].append([])
         for binE in range(er.nBin):
-            #if ctEvent==0:
-             #   rOnMax[ctEvent][clEvent].append(0.1)
-              #  rOffMin[ctEvent][clEvent].append(0.5)
-               # rOffMax[ctEvent][clEvent].append(rAppa)
-            #elif ctEvent==1:
             rOnMax[ctEvent][clEvent].append(htgPerf.getPSF68(ctEvent, clEvent, er.aBin[binE]+er.wBin/2.0))
             rOffMin[ctEvent][clEvent].append(htgPerf.getPSF68(ctEvent, clEvent, er.aBin[binE]+er.wBin/2.0))
-                #rOffMax[ctEvent][clEvent].append(htgPerf.getPSF68(ctEvent, clEvent, er.aBin[binE]+er.wBin/2.0))
             rOffMax[ctEvent][clEvent].append(rAppa)
 
             fRadiusOnMax[ctEvent][clEvent].append(ROOT.TF2("fRadiusOnMax%s_%s_%s" % (ctEvent, clEvent, binE), "x**2+y**2 - %s**2" % rOnMax[ctEvent][clEvent][binE], -rAppa, rAppa, -rAppa, rAppa))
@@ -481,59 +434,6 @@ for pS in range(len(aaStrSelect)):
         aaHtgEnergy[-1][-1].SetMarkerColor(pColor.akColor(qS+(1-pS)*qS))
 
         print "Merging histograms."
-        # listHtgNumOn = ROOT.TList()
-        # listHtgNumOff = ROOT.TList()
-        # listHtgNumSig = ROOT.TList()
-        # listHtgNumBkg = ROOT.TList()
-        # listHtgEnergy = ROOT.TList()
-        # for rbj in pCandleCatalogue.aObjectDict:
-        #     fileOut.cd(rbj["Name"])
-        #     hNumOn = gDirectory.Get("hNumOn%s_%s_%s" % (rbj["Name"], pS, qS))
-        #     print hNumOn, hNumOn.GetNbinsX()
-        #     aaHtgNumOn[pS][qS].Add(hNumOn)
-        #     print aaHtgNumOn[pS][qS].Integral()
-        #     hNumOff = gDirectory.Get("hNumOff%s_%s_%s" % (rbj["Name"], pS, qS))
-        #     print hNumOff, hNumOff.GetNbinsX()
-        #     aaHtgNumOff[pS][qS].Add(hNumOff)
-        #     print aaHtgNumOff[pS][qS].Integral()
-        #     hNumSig = gDirectory.Get("hNumSig%s_%s_%s" % (rbj["Name"], pS, qS))
-        #     print hNumSig, hNumSig.GetNbinsX()
-        #     aaHtgNumSig[pS][qS].Add(hNumSig)
-        #     print aaHtgNumSig[pS][qS].Integral()
-        #     hNumBkg = gDirectory.Get("hNumBkg%s_%s_%s" % (rbj["Name"], pS, qS))
-        #     print hNumBkg, hNumBkg.GetNbinsX()
-        #     aaHtgNumBkg[pS][qS].Add(hNumBkg)
-        #     print aaHtgNumBkg[pS][qS].Integral()
-        #     hEnergy = gDirectory.Get("hEnergy%s_%s_%s" % (rbj["Name"], pS, qS))
-        #     print hEnergy, hEnergy.GetNbinsX()
-        #     aaHtgEnergy[pS][qS].Add(hEnergy)
-        #     print aaHtgEnergy[pS][qS].Integral()
-            # listHtgNumOn.Add(gDirectory.Get("hNumOn%s_%s_%s" % (rbj["Name"], pS, qS)))
-            # listHtgNumOff.Add(gDirectory.Get("hNumOff%s_%s_%s" % (rbj["Name"], pS, qS)))
-            # listHtgNumSig.Add(gDirectory.Get("hNumSig%s_%s_%s" % (rbj["Name"], pS, qS)))
-            # listHtgNumBkg.Add(gDirectory.Get("hNumBkg%s_%s_%s" % (rbj["Name"], pS, qS)))
-            # listHtgEnergy.Add(gDirectory.Get("hEnergy%s_%s_%s" % (rbj["Name"], pS, qS)))
-
-        # print "Merging",
-        # listHtgNumOn.Print()
-        # aaHtgNumOn[pS][qS].Merge(listHtgNumOn)
-        # print "Merging",
-        # listHtgNumOff.Print()
-        # aaHtgNumOff[pS][qS].Merge(listHtgNumOff)
-        # print "Merging",
-        # listHtgNumSig.Print()
-        # aaHtgNumSig[pS][qS].Merge(listHtgNumSig)
-        # print "Merging",
-        # listHtgNumBkg.Print()
-        # aaHtgNumBkg[pS][qS].Merge(listHtgNumBkg)
-        # print "Merging",
-        # listHtgEnergy.Print()
-        # aaHtgEnergy[pS][qS].Merge(listHtgEnergy)
-        # del listHtgNumOn
-        # del listHtgNumOff
-        # del listHtgNumSig
-        # del listHtgNumBkg
-        # del listHtgEnergy
         
         print "Saving histograms."
         fileOut.cd("Stacking")
