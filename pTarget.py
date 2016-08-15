@@ -8,10 +8,10 @@ import math
 from pMETandMJD import *
 from math import cos, sin, tan, acos, asin, atan, radians, degrees
 from ROOT import kWhite, kBlack, kGray, kRed, kGreen, kBlue, kYellow, kMagenta, kCyan, kOrange, kSpring, kTeal, kAzure, kViolet, kPink
-from ROOT import gROOT, gDirectory, gPad, gSystem, gStyle, kTRUE, kFALSE
+from ROOT import gROOT, gDirectory, gPad, gSystem, gStyle, kTRUE, kFALSE, TH1, TH2
 
 class Target:
-    def __init__(self, strName, config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), tStart=252460800.0, tEnd=410227200.0):
+    def __init__(self, strName, config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), tStart=252460800.0, tEnd=504921604.0):
         self.name = strName
         self.aaClass = config.aaStrSelect
         self.aClass = config.aStrSelect
@@ -58,6 +58,12 @@ class Target:
                 self.npaaTIME[-1].append(np.empty(0, dtype=np.double))
                 self.npaaEVENT_CLASS[-1].append(np.empty(0, dtype=np.int32))
                 self.npaaEVENT_TYPE[-1].append(np.empty(0, dtype=np.int32))
+
+        self.trObj = ROOT.TTree('trFriend{0}'.format(self.name), 'Friend tree for {0}'.format(self.name))
+        self.flagOn = np.zeros(1, dtype=bool)
+        self.flagOff = np.zeros(1, dtype=bool)
+        self.trObj.Branch('FLAG_ON', self.flagOn,'FLAG_ON/O')
+        self.trObj.Branch('FLAG_OFF', self.flagOff,'FLAG_OFF/O')
 
         print "*", self.name
         print "Period (MET):", self.tStart, " - ", self.tEnd
@@ -354,6 +360,7 @@ class Target:
         self.legHtgFill = legHtgFill
 
     def writeObjects(self):
+        self.trObj.Write("", ROOT.TObject.kOverwrite)
         for aHtg in self.aaHtgNumOn:
             for htg in aHtg:
                 htg.Write("", ROOT.TObject.kOverwrite)                    
@@ -455,7 +462,7 @@ class Target:
                 tbhdu.writeto(strNameFitsFile, clobber=True)
 
 class PointSource(Target):
-    def __init__(self, strName, raTgt, decTgt, glTgt, gbTgt, zRedshift=0, rAppa=12., rOffMax=[1.7, 12.], rOffMin=[1., 8.], rOnMax=[0.45, 4.0], config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"], tStart=252460800.0, tEnd=410227200.0):
+    def __init__(self, strName, raTgt, decTgt, glTgt, gbTgt, zRedshift=0, rAppa=12., rOffMax=[1.7, 12.], rOffMin=[1., 8.], rOnMax=[0.45, 4.0], config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"], tStart=252460800.0, tEnd=504921604.0):
         Target.__init__(self, strName, config, eRegion, ePlotRegion, tStart, tEnd)
         #self.name = strName
         self.perf = perf
@@ -625,7 +632,8 @@ class PointSource(Target):
                         
     def fill(self, raEvent, decEvent, glEvent, gbEvent, eEvent, ctEvent, clEvent, zEvent, tEvent, cthEvent):
         #Target.fill(self, lEvent, bEvent, eEvent, ctEvent, clEvent)
-        clEvent = int(clEvent)
+        self.flagOn[0] = kFALSE
+        self.flagOff[0] = kFALSE
         binE = self.energySet.findBin(eEvent)
         plotE = self.energyPlot.findBin(eEvent)
         raRad = math.radians(raEvent)
@@ -635,7 +643,6 @@ class PointSource(Target):
         vecTgt = np.array([cos(radians(self.decCntr))*cos(radians(self.raCntr)), cos(radians(self.decCntr))*sin(radians(self.raCntr)), sin(radians(self.decCntr))])
         vecEve = np.array([cos(decRad)*cos(raRad), cos(decRad)*sin(raRad), sin(decRad)])
         radTheta = acos(np.dot(vecTgt, vecEve))
-
         if tEvent>=self.tStart and tEvent<= self.tEnd and binE>=0 and binE<self.energySet.nBin and zEvent<self.zCut[ctEvent-1]:
             if degrees(radTheta)<=self.radius:
                 vecNorth = np.array([cos(radians(self.decCntr+90))*cos(radians(self.raCntr)), cos(radians(self.decCntr+90))*sin(radians(self.raCntr)), sin(radians(self.decCntr+90))])
@@ -689,6 +696,7 @@ class PointSource(Target):
                         self.npaaEVENT_TYPE[ctEvent-1][clEventPlus] = np.append(self.npaaEVENT_TYPE[ctEvent-1][clEventPlus], 2)
 
                     if math.degrees(radTheta) < self.rOnMax[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][plotE]:
+                        self.flagOn[0] = kTRUE
                         for clEventPlus in range(clEvent-int(ctEvent==1 and clEvent==3)):
                             self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent)
                         self.aaHtgEnergyOn[ctEvent-1][clEventPlus].Fill(eEvent)# (10**(eEvent-3))**2)
@@ -701,12 +709,13 @@ class PointSource(Target):
                         elif ctEvent==2:
                             self.aaGreHighEnergy[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1].SetPointEYhigh(self.aaGreHighEnergy[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1].GetN()-1, abs(math.log10(1+self.perf.getEdisp68_cth(1, clEvent-1, eEvent, cthEvent))))
                             self.aaGreHighEnergy[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1].SetPointEYlow(self.aaGreHighEnergy[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1].GetN()-1, abs(math.log10(1-self.perf.getEdisp68_cth(1, clEvent-1, eEvent, cthEvent))))
-                    elif math.degrees(radTheta) >= self.rOffMin[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]: # and math.degrees(radTheta) < self.rOffMax[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]
+                    elif math.degrees(radTheta) >= self.rOffMin[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]: 
+                        self.flagOff[0] = kTRUE
                         for clEventPlus in range(clEvent-int(ctEvent==1 and clEvent==3)):
                             self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent)
                             self.aaHtgEnergyOff[ctEvent-1][clEventPlus].Fill(eEvent)
                             self.aaHtgLCCountOff[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
-                    #self.aaHtgLCCountOff[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1].Fill(tEvent-self.tStart)
+        self.trObj.Fill()
 
     def calc(self):
         Target.calc(self)
@@ -1090,7 +1099,7 @@ class PointSource(Target):
                     fc.Write("", ROOT.TObject.kOverwrite)                
 
 class EarthLimb(Target):
-    def __init__(self, strName, zOff1Min=[1.7, 12.], zOff1Max=[1., 8.],zOff2Min=[1.7, 12.], zOff2Max=[1., 8.], zOnMin=[], zOnMax=[0.45, 4.0], config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"]):
+    def __init__(self, strName, zOff1Min=[90, 90], zOff1Max=[100, 100],zOff2Min=[120, 120], zOff2Max=[130, 130], zOnMin=[111.1002, 108.1002], zOnMax=[112.9545, 115.9545], config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"]):
         Target.__init__(self, strName, config, eRegion, ePlotRegion)
         self.perf = perf
         self.zOnMin = []
@@ -1109,7 +1118,7 @@ class EarthLimb(Target):
             self.zOff2Min.append([])
             self.zOff2Max.append([])
             self.saOn.append([])
-            self.saOn.append([])
+            self.saOff.append([])
             for hSS in range(len(self.aaClass[hS])):
                 self.zOnMin[hS].append([])
                 self.zOnMax[hS].append([])
@@ -1118,7 +1127,7 @@ class EarthLimb(Target):
                 self.zOff2Min[hS].append([])
                 self.zOff2Max[hS].append([])
                 self.saOn[hS].append([])
-                self.saOn[hSS].append([])
+                self.saOff[hS].append([])
                 for ie in range(self.energySet.nBin):
                     if hS==0:
                         self.zOnMin[hS][hSS].append(111.10)
@@ -1130,18 +1139,64 @@ class EarthLimb(Target):
                     elif hS==1:
                         self.zOnMin[hS][hSS].append(111.10+0.1-self.perf.getPSF68(hS, hSS, self.energySet.aBin[ie]+self.energySet.wBin/2.0))
                         self.zOnMax[hS][hSS].append(112.95-0.1+self.perf.getPSF68(hS, hSS, self.energySet.aBin[ie]+self.energySet.wBin/2.0))
-                        self.zOff1Min[hS][hSS].append(105)
+                        self.zOff1Min[hS][hSS].append(95)
                         self.zOff1Max[hS][hSS].append(111.10-self.perf.getPSF95(hS, hSS, self.energySet.aBin[ie]+self.energySet.wBin/2.0))
                         self.zOff2Min[hS][hSS].append(112.95+self.perf.getPSF95(hS, hSS, self.energySet.aBin[ie]+self.energySet.wBin/2.0))
-                        self.zOff2Max[hS][hSS].append(120)
-                    self.saOn[hS][hSS].append( 2.0 * math.pi * ( cos(radians(self.zOnMin[hs][hSS][-1])) - cos(radians(self.zOnMax[hS][hSS][-1])) ) )
-                    self.saOff[hS][hSS].append( 2.0 * math.pi * ( cos(radians(self.zOffMin1[hS][hSS][-1])) - cos(radians(self.zOffMax1[hS][hSS][-1])) ) + 2.0 * math.pi * ( cos(radians(self.zOffMin2[hS][hSS][-1])) - cos(radians(self.zOffMax2[hS][hSS][-1])) ))
+                        self.zOff2Max[hS][hSS].append(125)
+                    self.saOn[hS][hSS].append( 2.0 * math.pi * ( cos(radians(self.zOnMin[hS][hSS][-1])) - cos(radians(self.zOnMax[hS][hSS][-1])) ) )
+                    self.saOff[hS][hSS].append( 2.0 * math.pi * ( cos(radians(self.zOff1Min[hS][hSS][-1])) - cos(radians(self.zOff1Max[hS][hSS][-1])) ) + 2.0 * math.pi * ( cos(radians(self.zOff2Min[hS][hSS][-1])) - cos(radians(self.zOff2Max[hS][hSS][-1])) ))
         print "Solid angle of ON region:", self.saOn
         print "Solid angle of OFF region:", self.saOff
         aaHtgZenithTheta = []
 
+    def fill(self, raEvent, decEvent, lEvent, bEvent, eEvent, ctEvent, clEvent, zEvent, tEvent, cthEvent):
+        self.flagOn[0] = kFALSE
+        self.flagOff[0] = kFALSE
+        binE = self.energySet.findBin(eEvent)
+        plotE = self.energyPlot.findBin(eEvent)
+        if binE>=0 and binE<self.energySet.nBin and tEvent>=self.tStart and tEvent<= self.tEnd:
+            zOff1Min = self.zOff1Min[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]
+            zOff1Max = self.zOff1Max[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]
+            zOff2Min = self.zOff2Min[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]
+            zOff2Max = self.zOff2Max[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]
+            zOnMax = self.zOnMax[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]
+            zOnMin = self.zOnMin[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]
+
+            if zEvent>=zOff1Min:
+                for clEventPlus in range(clEvent-int(ctEvent==1 and clEvent==3)):
+                    # for FITS
+                    self.npaaENERGY[ctEvent-1][clEventPlus] = np.append(self.npaaENERGY[ctEvent-1][clEventPlus], eEvent)
+                    self.npaaRA[ctEvent-1][clEventPlus] = np.append(self.npaaRA[ctEvent-1][clEventPlus], raEvent)
+                    self.npaaDEC[ctEvent-1][clEventPlus] = np.append(self.npaaDEC[ctEvent-1][clEventPlus], decEvent)
+                    self.npaaL[ctEvent-1][clEventPlus] = np.append(self.npaaL[ctEvent-1][clEventPlus], lEvent)
+                    self.npaaB[ctEvent-1][clEventPlus] = np.append(self.npaaB[ctEvent-1][clEventPlus], bEvent)
+                    self.npaaTHETA[ctEvent-1][clEventPlus] = np.append(self.npaaTHETA[ctEvent-1][clEventPlus], cthEvent)
+                    self.npaaZENITH_ANGLE[ctEvent-1][clEventPlus] = np.append(self.npaaZENITH_ANGLE[ctEvent-1][clEventPlus], zEvent)
+                    self.npaaTIME[ctEvent-1][clEventPlus] = np.append(self.npaaTIME[ctEvent-1][clEventPlus], tEvent)
+                    if ctEvent==1:
+                        self.npaaEVENT_CLASS[ctEvent-1][clEventPlus] = np.append(self.npaaEVENT_CLASS[ctEvent-1][clEventPlus], 128*2**(clEvent-1)/2)
+                    elif ctEvent==2:
+                        self.npaaEVENT_CLASS[ctEvent-1][clEventPlus] = np.append(self.npaaEVENT_CLASS[ctEvent-1][clEventPlus], 4096*2**(clEvent-1))
+                    if cthEvent<0.7:
+                        self.npaaEVENT_TYPE[ctEvent-1][clEventPlus] = np.append(self.npaaEVENT_TYPE[ctEvent-1][clEventPlus], 1)
+                    else:
+                        self.npaaEVENT_TYPE[ctEvent-1][clEventPlus] = np.append(self.npaaEVENT_TYPE[ctEvent-1][clEventPlus], 2)
+
+                    if zEvent>=zOnMin and zEvent<zOnMax:
+                        self.flagOn[0] = kTRUE
+                        self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent)
+                        self.aaHtgEnergyOn[ctEvent-1][clEventPlus].Fill(eEvent)
+                        self.aaHtgLCCountOn[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
+                    elif (zEvent>=zOff1Min and zEvent<zOff1Max) or (zEvent>=zOff2Min and zEvent<zOff2Max):
+                        self.flagOff[0] = kTRUE
+                        self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent)
+                        self.aaHtgEnergyOff[ctEvent-1][clEventPlus].Fill(eEvent)
+                        self.aaHtgLCCountOff[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
+        self.trObj.Fill()
+
+
 class GalacticRidge(Target):
-    def __init__(self, strName, bOffMin=[50., 50.], lOffMin=[90., 90.], lOffMax=[-90., -90.], bOnMax=[1.5, 3.0], lOnMin=[-50., -51.5], lOnMax=[40., 41.5], config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"], tStart=252460800.0, tEnd=410227200.0):
+    def __init__(self, strName, bOffMin=[50., 50.], lOffMin=[90., 90.], lOffMax=[-90., -90.], bOnMax=[1.5, 3.0], lOnMin=[-50., -51.5], lOnMax=[40., 41.5], config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"], tStart=252460800.0, tEnd=504921604.0):
         Target.__init__(self, strName, config, eRegion, ePlotRegion, tStart, tEnd)
         self.perf = perf
         self.saOn = []
@@ -1246,9 +1301,13 @@ class GalacticRidge(Target):
         print "Construction finished."
 
     def fill(self, raEvent, decEvent, lEvent, bEvent, eEvent, ctEvent, clEvent, zEvent, tEvent, cthEvent):
+        self.flagOn[0] = kFALSE
+        self.flagOff[0] = kFALSE
         clEvent = int(clEvent)
         binE = self.energySet.findBin(eEvent)
         plotE = self.energyPlot.findBin(eEvent)
+        lEventCor = lEvent
+        raEventCor = raEvent
         if binE>=0 and binE<self.energySet.nBin and tEvent>=self.tStart and tEvent<= self.tEnd:
             if lEvent>180:
                 lEventCor = -360+lEvent
@@ -1286,14 +1345,17 @@ class GalacticRidge(Target):
                         self.npaaEVENT_TYPE[ctEvent-1][clEventPlus] = np.append(self.npaaEVENT_TYPE[ctEvent-1][clEventPlus], 2)
 
                     if lEventCor>lOnMin and lEventCor<lOnMax and bEvent>-bOnMax and bEvent<bOnMax:
+                        self.flagOn[0] = kTRUE
                         self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent)
                         self.aaHtgEnergyOn[ctEvent-1][clEventPlus].Fill(eEvent)#, (10**(eEvent-3))**2)
                         self.aaHtgLCCountOn[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
                     elif (lEventCor<lOffMax and (bEvent>bOffMin or bEvent<-bOffMin)) or (lEventCor>lOffMin and (bEvent>bOffMin or bEvent<-bOffMin)):
+                        self.flagOff[0] = kTRUE
                         self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent)
                         self.aaHtgEnergyOff[ctEvent-1][clEventPlus].Fill(eEvent)#, (10**(eEvent-3))**2)
                         self.aaHtgLCCountOff[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
 #    def __init__(self, strName, bOffMin=[50., 50.], lOffMin=[90., 90.], lOffMax=[-90., -90.], bOnMax=[1.5, 5.5], lOnMin=[-50., -54], lOnMax=[40., 44.], config = ClassConfig(), self.energySet=EnergyLogRegion(3,4.75,0.25)):
+        self.trObj.Fill()
 
     def calc(self):
         Target.calc(self)
@@ -1407,7 +1469,7 @@ class GalacticRidge(Target):
         print "Writing finished."
 
 class InnerGalaxy(Target):
-    def __init__(self, strName, radius=41., config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"], tStart=252460800.0, tEnd=410227200.0):
+    def __init__(self, strName, radius=41., config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"], tStart=252460800.0, tEnd=504921604.0):
         Target.__init__(self, strName, config, eRegion, ePlotRegion, tStart, tEnd)
         self.perf = perf
         self.saOn = []
@@ -1482,15 +1544,18 @@ class InnerGalaxy(Target):
                     lMaskMin = self.lMaskMin[ctEvent-1][clEventPlus][binE]
                     bMaskMax = self.bMaskMax[ctEvent-1][clEventPlus][binE]
                     if pCommon.anglePointsDegToDeg(0., 0., lEvent, bEvent)<rOnMax and (abs(bEvent)>=bMaskMax or abs(lEvent)<lMaskMin):
+                        self.flagOn[0] = kTRUE
                         self.aaaHtgMap[ctEvent-1][clEventPlus][plotE].Fill(-lEvent, bEvent)
                         self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent)
                         self.aaHtgEnergyOn[ctEvent-1][clEventPlus].Fill(eEvent)#, (10**(eEvent-3))**2)
                         self.aaHtgLCCountOn[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
                     elif (lEvent<lOffMax and (bEvent>bOffMin or bEvent<-bOffMin)) or (lEvent>lOffMin and (bEvent>bOffMin or bEvent<-bOffMin)):
+                        self.flagOff[0] = kTRUE
                         self.aaaHtgMap[ctEvent-1][clEventPlus][plotE].Fill(-lEvent, bEvent)
                         self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent)
                         self.aaHtgEnergyOff[ctEvent-1][clEventPlus].Fill(eEvent)#, (10**(eEvent-3))**2)
                         self.aaHtgLCCountOff[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
+        self.trObj.Fill()
 
     def calc(self):
         Target.calc(self)

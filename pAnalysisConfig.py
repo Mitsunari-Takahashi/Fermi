@@ -1,6 +1,4 @@
-from ROOT import TH2D
-from ROOT import TH2F
-from ROOT import TAxis
+from ROOT import TH1, TH2, TAxis
 import ROOT
 #from array import array
 import numpy as np

@@ -42,8 +42,8 @@ fileOut = ROOT.TFile(nameFileOut, "RECREATE")
 print "Output file:", fileOut.GetName()
 
 listPathFilePerf = [
-["/home/takhsm/FermiMVA/CalTkr/v20r9p9_TRANSIENT_P8R1_TRANSIENT_R100_perf.root", 
-"/home/takhsm/FermiMVA/CalTkr/v20r9p9_SOURCE_P8R1_SOURCE_perf.root"], 
+["/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/CalTkr/v20r09p09_P8R2_SOURCE_P8R2_TRANSIENT100_perf.root", 
+"/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/CalTkr/v20r09p09_P8R2_SOURCE_P8R2_SOURCE_perf.root"],
 ["/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root", 
 "/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R30_perf.root", 
 "/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R10_perf.root"]]
@@ -67,6 +67,7 @@ aTrs = []
 print "Target list: "
 print "*", "Galactic ridge" 
 ridge = GalacticRidge("GalacticRidge", config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=erplot)
+limb = EarthLimb("EarthLimb", config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=erplot)
 #aInnerGal = [InnerGalaxy("InnerGalaxyR16", 16, config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=erplot), InnerGalaxy("InnerGalaxyR41", 41, config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=erplot)]
 aInnerGal = [ InnerGalaxy("InnerGalaxyR41", 41, config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=erplot)]
 for obj in pCandleCatalogue.aObjectDict:
@@ -77,20 +78,29 @@ print "Filling events."
 print "================"
 timeStart = datetime.datetime.now()
 print "Started at", timeStart
-step1 = ch.GetEntries()/100/100
+step1 = ch.GetEntries()/100
 step2 = step1*100
 iStep=0
 for iEve in range(ch.GetEntries()):
     ch.GetEntry(iEve)
-    ridge.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, ch.s, ch.z, ch.t, ch.cth)
+    cls = 0
+    if ch.s==128 or ch.s==16384:
+        cls = 3
+    elif ch.s==8192:
+        cls = 2
+    elif ch.s==4 or ch.s==4096:
+        cls = 1
+    ridge.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth)
+    limb.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth)
     for ingal in aInnerGal:
-        ingal.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, ch.s, ch.z, ch.t)
+        ingal.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t)
     for tgt in aTgt:
-        tgt.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, ch.s, ch.z, ch.t, ch.cth)
+        tgt.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth)
     for trs in aTrs:
-        trs.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, ch.s, ch.z, ch.t, ch.cth)
+        trs.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth)
     meter1 = ""
     if iEve%(step1)==0:
+#        print ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth
         iStep=iStep+1
         if iEve%(step2)==0:
             rate = int((iEve*100.)/ch.GetEntries()+0.5)
@@ -130,6 +140,14 @@ ridge.calc()
 fileOut.cd(ridge.name)
 ridge.draw()
 ridge.writeObjects()
+print "*", limb.name
+fileOut.cd()
+fileOut.mkdir(limb.name)
+fileOut.cd(limb.name)
+limb.calc()
+fileOut.cd(limb.name)
+limb.draw()
+limb.writeObjects()
 for ingal in aInnerGal:
     print "*", ingal.name
     fileOut.cd()
