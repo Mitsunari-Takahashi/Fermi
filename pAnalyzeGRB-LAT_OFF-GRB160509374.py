@@ -127,8 +127,8 @@ for nameGrb in listTgtGRB:
     dictHtgPrecut = {}
     dictHtgPostcut = {}
     for cpc in aCutPsf:
-        dictHtgPrecut[cpc] = ROOT.TH2D('hPrecutPSF{0}'.format(cpc), 'Counted event number before the cut within PSF{0}'.format(cpc), 15, 0, 15, 7, 4.35, 5.75)
-        dictHtgPostcut[cpc] = ROOT.TH2D('hPostcutPSF{0}'.format(cpc), 'Expected event number after the cut within PSF{0}'.format(cpc), 15, 0, 15, 7, 4.35, 5.75)
+        dictHtgPrecut[cpc] = ROOT.TH3D('hPrecutPSF{0}'.format(cpc), 'Counted event number before the cut within PSF{0}'.format(cpc), 15, 0, 15, 7, 4.35, 5.75, 180, 0, 180)
+        dictHtgPostcut[cpc] = ROOT.TH3D('hPostcutPSF{0}'.format(cpc), 'Expected event number after the cut within PSF{0}'.format(cpc), 15, 0, 15, 7, 4.35, 5.75, 180, 0, 180)
     for pathFileDat in listFileDat:
         fileDat = ROOT.TFile(pathFileDat, 'READ')
         print fileDat.GetName()
@@ -142,18 +142,18 @@ for nameGrb in listTgtGRB:
                 radThetaB = acos(np.dot(vecTgt, vecEvtB))
                 degDistB = degrees(radThetaB)
                 aDictDistCutB = []
-                for kcc in range(len(aaStrSelect[1])):
+                for kcc in range(len(aaStrSelect[1])): # Fill each event to every CLASS bin.
                     aDictDistCutB.append({ 'PSF95': (htgPerf.getPSF95_cth(1, kcc-1, chDat.EvtJointLogEnergy, chDat.Cal1MomZDir) + err_rad), 'PSF68': (htgPerf.getPSF68_cth(1, kcc-1, chDat.EvtJointLogEnergy, chDat.Cal1MomZDir) + err_rad) })
                     if degDistB<aDictDistCutB[kcc]['PSF95']:
                         nEvtPrecutPSF95[kcc] = nEvtPrecutPSF95[kcc] + 1
-                        dictHtgPrecut[95].Fill(12+kcc, chDat.EvtJointLogEnergy)
+                        dictHtgPrecut[95].Fill(12+kcc, chDat.EvtJointLogEnergy, chDat.Cal1MomZDir)
                         nEvtPostcutPSF95[kcc] = nEvtPostcutPSF95[kcc]+aHtgRej[kcc].GetBinContent(aHtgRej[kcc].GetXaxis().FindBin(chDat.EvtJointLogEnergy), aHtgRej[kcc].GetYaxis().FindBin(chDat.Cal1MomZDir))
-                        dictHtgPostcut[95].Fill( 12+kcc, chDat.EvtJointLogEnergy, aHtgRej[kcc].GetBinContent(aHtgRej[kcc].GetXaxis().FindBin(chDat.EvtJointLogEnergy),aHtgRej[kcc].GetYaxis().FindBin(chDat.Cal1MomZDir)) )
+                        dictHtgPostcut[95].Fill( 12+kcc, chDat.EvtJointLogEnergy, chDat.Cal1MomZDir, aHtgRej[kcc].GetBinContent(aHtgRej[kcc].GetXaxis().FindBin(chDat.EvtJointLogEnergy),aHtgRej[kcc].GetYaxis().FindBin(chDat.Cal1MomZDir)) )
                         if degDistB<aDictDistCutB[kcc]['PSF68']:
                             nEvtPrecutPSF68[kcc] = nEvtPrecutPSF68[kcc] + 1
-                            dictHtgPrecut[68].Fill(12+kcc, chDat.EvtJointLogEnergy)
+                            dictHtgPrecut[68].Fill(12+kcc, chDat.EvtJointLogEnergy, chDat.Cal1MomZDir)
                             nEvtPostcutPSF68[kcc] = nEvtPostcutPSF68[kcc]+aHtgRej[kcc].GetBinContent(aHtgRej[kcc].GetXaxis().FindBin(chDat.EvtJointLogEnergy), aHtgRej[kcc].GetYaxis().FindBin(chDat.Cal1MomZDir))
-                            dictHtgPostcut[68].Fill( 12+kcc, chDat.EvtJointLogEnergy, aHtgRej[kcc].GetBinContent(aHtgRej[kcc].GetXaxis().FindBin(chDat.EvtJointLogEnergy),aHtgRej[kcc].GetYaxis().FindBin(chDat.Cal1MomZDir)) )
+                            dictHtgPostcut[68].Fill( 12+kcc, chDat.EvtJointLogEnergy, chDat.Cal1MomZDir, aHtgRej[kcc].GetBinContent(aHtgRej[kcc].GetXaxis().FindBin(chDat.EvtJointLogEnergy),aHtgRej[kcc].GetYaxis().FindBin(chDat.Cal1MomZDir)) )
         for kcc in range(len(aaStrSelect[1])):
             print "Number of events within PSF95 after/before cut", aaStrSelect[1][kcc], ":", nEvtPostcutPSF95[kcc],"/",nEvtPrecutPSF95[kcc]
             print "Number of events within PSF68 after/before cut", aaStrSelect[1][kcc], ":", nEvtPostcutPSF68[kcc],"/",nEvtPrecutPSF68[kcc]
