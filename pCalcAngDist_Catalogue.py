@@ -26,7 +26,8 @@ calcAngDist_Catalogue([RA in deg, DEC in deg], 'Path of your catalogue')
 """
     HDULIST = fits.open(fitsCatalogue)
     TBDATA = HDULIST[1].data
-    A_POSI_RAD = aPosiDeg * math.radians(1)
+    npaPosiDeg = np.array(aPosiDeg)
+    A_POSI_RAD = npaPosiDeg * math.radians(1)
     VEC_POSI = vecterSkyPosition(A_POSI_RAD)
     NSRC = len(TBDATA['Source_Name'])
     aAngDist = np.array([])
