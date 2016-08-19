@@ -127,8 +127,8 @@ for nameGrb in listTgtGRB:
     dictHtgPrecut = {}
     dictHtgPostcut = {}
     for cpc in aCutPsf:
-        dictHtgPrecut[cpc] = ROOT.TH3D('hPrecutPSF{0}'.format(cpc), 'Counted event number before the cut within PSF{0}'.format(cpc), 15, 0, 15, 7, 4.35, 5.75, 180, 0, 180)
-        dictHtgPostcut[cpc] = ROOT.TH3D('hPostcutPSF{0}'.format(cpc), 'Expected event number after the cut within PSF{0}'.format(cpc), 15, 0, 15, 7, 4.35, 5.75, 180, 0, 180)
+        dictHtgPrecut[cpc] = ROOT.TH3D('hPrecutPSF{0}'.format(cpc), 'Counted event number before the cut within PSF{0}'.format(cpc), 15, 0, 15, 7, 4.35, 5.75, 50, 0, 1.0)
+        dictHtgPostcut[cpc] = ROOT.TH3D('hPostcutPSF{0}'.format(cpc), 'Expected event number after the cut within PSF{0}'.format(cpc), 15, 0, 15, 7, 4.35, 5.75, 50, 0, 1.0)
     for pathFileDat in listFileDat:
         fileDat = ROOT.TFile(pathFileDat, 'READ')
         print fileDat.GetName()
