@@ -12,6 +12,8 @@ from astropy.coordinates import SkyCoord  # High-level coordinates
 from astropy.coordinates import ICRS, Galactic, FK4, FK5  # Low-level frames
 from astropy.coordinates import Angle, Latitude, Longitude  # Angles
 import astropy.units as u
+import healpy as hp
+from healpy import pixelfunc as hppf
 import commands
 #sys.path.append("/disk/gamma/cta/store/takhsm/FermiMVA/AllSky")
 #sys.path.append("/home/takhsm/FermiMVA/python")
@@ -100,30 +102,24 @@ for nameFileIn in listFileIn:
     
 
     # Output objects
-#    aHtgExpSum = []
-#    aHtgLtSum = []
-#    aHtgExpTime = []
-#    for hRegion in range(nOff+1):
-#        aHtgExpSum.append(ROOT.TH2D('htgExpSum_GRB{0}_{1}'.format(nameGrb, hRegion), '{0} summed exposure histogram for GRB{1}'.format(aStrRegion[hRegion],nameGrb),7, 4.35, 5.75, 180, 0, 180))
-#        aHtgLtSum.append(ROOT.TH1D("htgLtSum_GRB{0}_{1}".format(nameGrb, hRegion), "{0} summed livetime for GRB{1}".format(aStrRegion[hRegion], nameGrb), 180, 0, 180))
-#        aHtgExpTime.append(ROOT.TH2D('htgExpTime_GRB{0}_{1}'.format(nameGrb, hRegion), 'Time dependency of {0} exposure for GRB{1}'.format(aStrRegion[hRegion],nameGrb), int(tPost-tPro)/5400, tPro, tPost, 180, 0, 180))
     fmw = ConvertMetToFMW(trigger_time)
     fmwStart = ConvertMetToFMW(metStart)
     fmwStop = ConvertMetToFMW(metStop)
     print "Fermi Mission Week:", fmwStart, "-", fmwStop
     coordsGrb = SkyCoord(raSrc, decSrc, unit="deg")
-#    aFileToI = ["", "", ""]
     aFileToI = []
     fileRoot = ROOT.TFile("Exposure_GRB{0}{1}.root".format(nameGrb, nameFileSuffix), "update")
     aHtgLt = []
+    aHtgExp = []
     aHtgExp_ZE = []
     aHtgExp_ZT = []
     aHtgExpZ90 = []
     for hRegion in range(nOff+1):
         #aHtgLt.append(ROOT.TH1D("htgLt{0}".format(iRegion), "{0} Livetime".format(aStrRegion[iRegion]), 180, 0, 180))
         #aHtgExp.append(ROOT.TH2D("htgExp{0}".format(iRegion), "{0} Exposure".format(aStrRegion[iRegion]), 7, 4.35, 5.75, 180, 0, 180))
-        aHtgLt.append(ROOT.TH1D("htgLt_GRB{0}_{1}".format(nameGrb, hRegion), "Livetime vs. zenith for GRB{1} (Spatially {0});Zenith angle [deg];Live time [s]".format(aStrRegion[hRegion], nameGrb), 180, 0, 180))
-        aHtgExp_ZE.append(ROOT.TH2D('htgExp_ZE_GRB{0}_{1}'.format(nameGrb, hRegion), 'Exposure on zenith vs. energy for GRB{1} (Spatially {0});log10(Energy [MeV]);Zenith angle [deg]'.format(aStrRegion[hRegion],nameGrb),7, 4.35, 5.75, 180, 0, 180))
+        aHtgLt.append(ROOT.TH2D("htgLt_GRB{0}_{1}".format(nameGrb, hRegion), "Livetime vs. zenith for GRB{1} (Spatially {0});Cos(Inclination angle);Zenith angle [deg];Live time [s]".format(aStrRegion[hRegion], nameGrb), 40, 0.2, 1.0, 180, 0, 180))
+        aHtgExp.append(ROOT.TH3D('htgExp_GRB{0}_{1}'.format(nameGrb, hRegion), 'Exposure on zenith vs. inclination vs. energy for GRB{1} (Spatially {0});log10(Energy [MeV]);Cos(Inclination angle);Zenith angle [deg]'.format(aStrRegion[hRegion],nameGrb),7, 4.35, 5.75, 40, 0.2, 1.0, 180, 0, 180))
+#        aHtgExp_ZE.append(ROOT.TH2D('htgExp_ZE_GRB{0}_{1}'.format(nameGrb, hRegion), 'Exposure on zenith vs. energy for GRB{1} (Spatially {0});log10(Energy [MeV]);Zenith angle [deg]'.format(aStrRegion[hRegion],nameGrb),7, 4.35, 5.75, 180, 0, 180))
         aHtgExp_ZT.append(ROOT.TH2D('htgExp_ZT_GRB{0}_{1}'.format(nameGrb, hRegion), 'Exposure on zenith vs. time for GRB{1} (Spatially {0});Time from the GRB trigger [sec];Zenith angle [deg]'.format(aStrRegion[hRegion],nameGrb), max(10, int(tPost-tPro)/54000), tPro, tPost, 180, 0, 180))
  
     for iFileSc in range(len(aPathFileScAll)):
@@ -171,11 +167,11 @@ for nameFileIn in listFileIn:
                 angZenith = coordsZenith.separation(coordsGrb)
                 degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
                 for iR in range(nOff+1):
-                    aHtgLt[iR].Fill(degZenith, tti)
-                    for iE in range(aHtgExp_ZE[iR].GetNbinsX()):
-                        acc = htgAcc.GetBinContent(htgAcc.GetXaxis().FindBin(aHtgExp_ZE[iR].GetXaxis().GetBinCenter(iE+1)), htgAcc.GetYaxis().FindBin(cos(radSCZ)))
+                    aHtgLt[iR].Fill(cos(radSCZ), degZenith, tti)
+                    for iE in range(aHtgExp[iR].GetNbinsX()):
+                        acc = htgAcc.GetBinContent(htgAcc.GetXaxis().FindBin(aHtgExp[iR].GetXaxis().GetBinCenter(iE+1)), htgAcc.GetYaxis().FindBin(cos(radSCZ)))
                         exp = acc * tti / 2. / math.pi / htgAcc.GetYaxis().GetBinWidth(1)
-                        aHtgExp_ZE[iR].Fill(aHtgExp_ZE[iR].GetXaxis().GetBinCenter(iE+1), degZenith, exp)
+                        aHtgExp[iR].Fill(aHtgExp[iR].GetXaxis().GetBinCenter(iE+1), cos(radSCZ), degZenith, exp)
                         aHtgExp_ZT[iR].Fill((aSTART[iTI]+aSTOP[iTI])/2.-trigger_time, degZenith, exp)
             if iTI%(nTI/200)==0:
                 rate = int((aSTOP[iTI]-metStart)/(metStop-metStart)*100.+0.5)
@@ -190,19 +186,15 @@ for nameFileIn in listFileIn:
     fileRoot.cd()
     for jR in range(nOff+1):
         aHtgLt[jR].Write()
-        aHtgExp_ZE[jR].Write()
+        aHtgExp[jR].Write()
         aHtgExp_ZT[jR].Write()
-        aHtgExpZ90.append(aHtgExp_ZE[jR].ProjectionX('htgExpZ90_GRB{0}_{1}'.format(nameGrb, jR), 1, aHtgExp_ZE[jR].GetYaxis().FindBin(90.-0.1)))
-        aHtgExpZ90[jR].SetTitle('Exposure with zenith<90 vs. energy for GRB{1} (Spatially {0})'.format(aStrRegion[jR],nameGrb))
-        aHtgExpZ90[jR].SetXTitle('log10(Energy [MeV])')
-        aHtgExpZ90[jR].SetYTitle('Exposure [a.u.]')
-        aHtgExpZ90[jR].Write()
-
-        #aHtgExpSum[jR].Add(aHtgExp[jR])
-        #aHtgLtSum[jR].Add(aHtgLt[jR])
-
-#fileRootSum = ROOT.TFile('SummedExposure.root', 'UPDATE')
-#fileRootSum.cd()
-#for kR in range(nOff+1):
-#    aHtgExpSum[kR].Write()
-#    aHtgLtSum[kR].Write()
+        # aHtgExp_ZE.append(aHtgExp[jR].ProjectionX('htgExp_ZE_GRB{0}_{1}'.format(nameGrb, jR), 1, aHtgExp_ZE[jR].GetYaxis().FindBin(90.-0.1)))
+        # aHtgExp_ZE[jR].SetTitle('Exposure with inclination vs. energy for GRB{1} (Spatially {0})'.format(aStrRegion[jR],nameGrb))
+        # aHtgExp_ZE[jR].SetXTitle('log10(Energy [MeV])')
+        # aHtgExp_ZE[jR].SetYTitle('Exposure [a.u.]')
+        # aHtgExp_ZE[jR].Write()
+        # aHtgExpZ90.append(aHtgExp[jR].ProjectionX('htgExpZ90_GRB{0}_{1}'.format(nameGrb, jR), 1, aHtgExp_ZE[jR].GetYaxis().FindBin(90.-0.1)))
+        # aHtgExpZ90[jR].SetTitle('Exposure with zenith<90 vs. energy for GRB{1} (Spatially {0})'.format(aStrRegion[jR],nameGrb))
+        # aHtgExpZ90[jR].SetXTitle('log10(Energy [MeV])')
+        # aHtgExpZ90[jR].SetYTitle('Exposure [a.u.]')
+        # aHtgExpZ90[jR].Write()
