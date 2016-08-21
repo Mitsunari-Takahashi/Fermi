@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 def ConvertToDeg(RA_hms, DEC_dms):
    DateOffset=51910.0
    RA_deg=RA_hms[0]*15+RA_hms[1]*(15/60.)+RA_hms[2]*(15/3600.)

@@ -29,7 +29,7 @@ def find_galoff_healpxs(nhpside=16, threshold_flux50=0, path_catalogue_excl='/nf
         radec_rad = [pi/2.-theta, phi]
         radec_deg = [degrees(radec_rad[0]), degrees(radec_rad[1])]
         gal_deg = convert_radec_to_galactic(radec_deg)
-        if abs(gal_deg[1])>=50 && 90<=gal_deg[0]<270:
+        if abs(gal_deg[1])>=50 and 90<=gal_deg[0]<270:
             ar_ang_dist = calcAngDist_Catalogue(radec_deg, path_catalogue_excl, threshold_flux50)
             for di in ar_ang_dict:
                 if di['ANG_DIST']<=MAX_PIX_DEG:
@@ -43,14 +43,15 @@ def find_pointon_healpxs(ra_poi, dec_poi, ang_cut, nhpside=512):
     NPIX = hppf.nside2npix(nhpside)
     MAX_PIX_DEG = degrees(hppf.max_pixrad(nhpside))
     RADEC_POI = [radians(ra_poi), radians(dec_poi)]
-    VEC_POI = hppf.ang2vec(RADEC_POI[0], RADEC_POI[1])
+#    print RADEC_POI
+    VEC_POI = hppf.ang2vec(pi/2.-RADEC_POI[1], RADEC_POI[0])
     ar_pix_incl = []
     for ipix in range(NPIX):
-        vec = pix2vec(nhpside, ipix)
+        vec = hppf.pix2vec(nhpside, ipix)
         ang_dist = get_ang_dist_vectors(VEC_POI, vec)
         if degrees(ang_dist)<ang_cut:
-            ar_pix_inc.append(ipix)
-    return ar_pix_inc
+            ar_pix_incl.append(ipix)
+    return ar_pix_incl
     
 
     

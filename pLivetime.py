@@ -11,27 +11,32 @@ from astropy.coordinates import SkyCoord  # High-level coordinates
 from astropy.coordinates import ICRS, Galactic, FK4, FK5  # Low-level frames
 from astropy.coordinates import Angle, Latitude, Longitude  # Angles
 import astropy.units as u
-import healpy as hp
-from healpy import pixelfunc as hppf
+#import healpy as hp
+#from healpy import pixelfunc as hppf
 #sys.path.append("/disk/gamma/cta/store/takhsm/FermiMVA/AllSky")
 #sys.path.append("/home/takhsm/FermiMVA/python")
 ROOT.gROOT.SetBatch()
 from array import array
 import math
 from math import cos, sin, tan, acos, asin, atan, radians, degrees
-#from pMETandMJD import *
+from pMETandMJD import *
 from pAnalysisConfig import *
 from pFindHEALPix import *
+import commands
 
 
-def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, fwmStart, fwmStop, aFileToI, aCoordsPix_array, aAreaPix_array):
+def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array):
     """Look over spacecraft files and make a histogram of (solid angle [sr] * time interval [sec]) on MET vs. Zenith angle vs. Cos(Inclination)"""
+    fmwStart = ConvertMetToFMW(metStart)
+    fmwStop = ConvertMetToFMW(metStop)
+    print "Fermi Mission Week:", fmwStart, "-", fmwStop
+
     cmd = "ls {0}".format(pathFileScAll)
     ret = commands.getoutput(cmd)
     aPathFileScAll = ret.split("\n")
     for iFileSc in range(len(aPathFileScAll)):
         strPathFileSc = aPathFileScAll[iFileSc]
-        fmwFile = int(strPathFileSc[-18:-15])
+        fmwFile = int(strPathFileSc[-27:-24])
         # Make file list
         if fmwFile>=int(fmwStart-1) and fmwFile<=int(fmwStop+1) :
             aFileToI.append(aPathFileScAll[iFileSc])
