@@ -26,12 +26,12 @@ def find_galoff_healpxs(nhpside=16, threshold_flux50=0, path_catalogue_excl='/nf
     ar_pix_incl = []
     for ipix in range(NPIX):
         theta, phi = hppf.pix2ang(nhpside, ipix)
-        radec_rad = [pi/2.-theta, phi]
+        radec_rad = [phi, pi/2.-theta] #[pi/2.-theta, phi]
         radec_deg = [degrees(radec_rad[0]), degrees(radec_rad[1])]
         gal_deg = convert_radec_to_galactic(radec_deg)
         if abs(gal_deg[1])>=50 and 90<=gal_deg[0]<270:
             ar_ang_dist = calcAngDist_Catalogue(radec_deg, path_catalogue_excl, threshold_flux50)
-            for di in ar_ang_dict:
+            for di in ar_ang_dist:
                 if di['ANG_DIST']<=MAX_PIX_DEG:
                     break
             else:

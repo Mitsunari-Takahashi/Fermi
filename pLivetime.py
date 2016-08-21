@@ -64,12 +64,18 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
                         angZenith = coordsZenith.separation(coordsPix)
                         degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
                         aHtgLt[iR].Fill(cos(radSCZ), degZenith, (aSTART[iTI]+aSTOP[iTI])/2., tti*aAreaPix_array[iR][jpix])
-            if iTI%(nTI/200)==0:
-                rate = int((aSTOP[iTI]-metStart)/(metStop-metStart)*100.+0.5)
-                if rate>0:
-                    nt = (datetime.datetime.now() - timeStart).seconds * (100.-rate)/rate
-                    meter = "\r[{0}{1}] Wait {2} hr {3} min".format("=" * rate, ' ' * (100-rate), int(nt/3600), (int(nt)%3600)/60+1)
-                else:
-                    meter = "\r[{0}{1}]".format("=" * rate, ' ' * (100-rate))
-                sys.stdout.write(meter)
+            #if iTI%1==0:
+             #   print iTI
+                #rate = int((aSTOP[iTI]-metStart)/(metStop-metStart)*100.+0.5)
+              #  rate = int(iTI/nTI*100.+0.5)
+               # if rate>0:
+                #    nt = (datetime.datetime.now() - timeStart).seconds * (100.-rate)/rate
+                 #   if iTI%2==0:
+                  #      meter = "\r[{0}{1}] Wait {2} hr {3} min".format("=" * rate, ' ' * (100-rate), int(nt/3600), (int(nt)%3600)/60+1)
+                   # else:
+                    #    meter = "\r[{0}{1}]".format("=" * rate, ' ' * (100-rate))
+                #else:
+                 #   meter = "\r[{0}{1}]".format("=" * rate, ' ' * (100-rate))
+                #sys.stdout.write(meter
+                sys.stdout.write("\r{0}".format(iTI))
                 sys.stdout.flush()
