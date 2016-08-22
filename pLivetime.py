@@ -25,10 +25,11 @@ from pFindHEALPix import *
 import commands
 
 
-def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array):
+def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array, origin_time=0):
     """Look over spacecraft files and make a histogram of (solid angle [sr] * time interval [sec]) on MET vs. Zenith angle vs. Cos(Inclination)"""
     fmwStart = ConvertMetToFMW(metStart)
     fmwStop = ConvertMetToFMW(metStop)
+    
     print "Fermi Mission Week:", fmwStart, "-", fmwStop
 
     cmd = "ls {0}".format(pathFileScAll)
@@ -63,7 +64,7 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
                         radSCZ = float(angSCZ.to_string(unit=u.rad, decimal=True))
                         angZenith = coordsZenith.separation(coordsPix)
                         degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
-                        aHtgLt[iR].Fill(cos(radSCZ), degZenith, (aSTART[iTI]+aSTOP[iTI])/2., tti*aAreaPix_array[iR][jpix])
+                        aHtgLt[iR].Fill(cos(radSCZ), degZenith, (aSTART[iTI]+aSTOP[iTI])/2.-origin_time, tti*aAreaPix_array[iR][jpix])
             #if iTI%1==0:
              #   print iTI
                 #rate = int((aSTOP[iTI]-metStart)/(metStop-metStart)*100.+0.5)

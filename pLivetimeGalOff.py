@@ -49,7 +49,7 @@ aAreaPix_array = [[]]
 aStrRegion = ["GalacticOFF"]
 for npix in aHpxOFF[0]:
     aAngPix = hppf.pix2ang(NHPSIDE_OFF, npix)
-    aCoordsPix_array[0].append(SkyCoord(pi/2.-aAngPix[1], aAngPix[0], unit="deg"))
+    aCoordsPix_array[0].append(SkyCoord(pi/2.-aAngPix[1], aAngPix[0], unit="rad"))
     aAreaPix_array[0].append(hppf.nside2pixarea(NHPSIDE_OFF, npix))
     
 # Output objects

@@ -101,7 +101,7 @@ for nameGrb in listNameGrb:
         aAreaPix_array.append([])
         for npix in aHpx_array[iRegion]:
             aAngPix = hppf.pix2ang(NHPSIDE_ON, npix)
-            aCoordsPix_array[-1].append(SkyCoord(pi/2.-aAngPix[1], aAngPix[0], unit="deg"))
+            aCoordsPix_array[-1].append(SkyCoord(pi/2.-aAngPix[1], aAngPix[0], unit="rad"))
             aAreaPix_array[-1].append(hppf.nside2pixarea(NHPSIDE_ON, npix))
     
     # Output objects
@@ -111,7 +111,7 @@ for nameGrb in listNameGrb:
     aHtgLt = []
     for hRegion in range(nOff+1):
         aHtgLt.append(ROOT.TH3D("htgLt_GRB{0}_{1}".format(nameGrb, hRegion), "Livetime [sec sr];Cos(Inclination angle);Zenith angle [deg];Time from the GRB trigger [sec]".format(aStrRegion[hRegion], nameGrb), 40, 0.2, 1.0, 180, 0, 180, max(10, int(tPost-tPro)/54000), tPro, tPost))
-    make_livetime_histogram(aHtgLt, nOff+1,pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array)
+    make_livetime_histogram(aHtgLt, nOff+1,pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array, trigger_time)
     aHtgLt_projYX = []
     fileRoot.cd()
     for jR in range(nOff+1):
