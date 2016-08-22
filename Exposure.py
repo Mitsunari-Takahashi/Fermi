@@ -66,11 +66,13 @@ def main(pathfilelt, pathfileperf, namehtglt2, suffix):
         title_htg_exp2 = title_htg_exp2 + ' (' + suffix + ')'
     htg_exp2 = ROOT.TH3D(name_htg_exp2, title_htg_exp2, NBIN_LT2_X, htg_lt2.GetXaxis().GetBinLowEdge(1), htg_lt2.GetXaxis().GetBinUpEdge(NBIN_LT2_X), NBIN_LT2_Y, htg_lt2.GetYaxis().GetBinLowEdge(1), htg_lt2.GetYaxis().GetBinUpEdge(NBIN_LT2_Y), NBIN_ENERGY, EDGE_ENERGY_LOW, EDGE_ENERGY_UP)
 
-    for iz in range(NBIN_ENERGY):
-        for ix in range(NBIN_LT2_X):
-            acc = htg_acc.GetBinContent(htg_acc.GetXaxis().FindBin(htg_exp2.GetZaxis().GetBinCenter(iz+1)), htg_acc.GetYaxis().FindBin(htg_exp2.GetXaxis().GetBinCenter(ix+1)))
-            for iy in range(NBIN_LT2_Y):
-                htg_exp2.SetBinContent( ix+1, iy+1, iz+1,  htg_lt2.GetBinContent(ix+1, iy+1)*acc )
+    for iz in range(1, NBIN_ENERGY+1):
+        for ix in range(1, NBIN_LT2_X+1):
+            ix_acc = htg_acc.GetXaxis().FindBin(htg_exp2.GetZaxis().GetBinCenter(iz)) #Energy
+            iy_acc = htg_acc.GetYaxis().FindBin(htg_exp2.GetXaxis().GetBinCenter(ix)) #Cos(Inclination)
+            acc = htg_acc.GetBinContent(ix_acc, iy_acc)
+            for iy in range(1, NBIN_LT2_Y+1):
+                htg_exp2.SetBinContent( ix, iy, iz,  htg_lt2.GetBinContent(ix, iy)*acc*htg_exp.GetXaxis().GetBinWidth(ix)/htg_acc.GetYaixs().GetBinWidth(iy_acc)/4./math.pi )
     htg_exp2.Write()
 
 
