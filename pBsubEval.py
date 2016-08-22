@@ -16,9 +16,10 @@ timeTmp = datetime.now()
 strTemp = "{0}{1}{2}{3}{4}".format(timeTmp.year, timeTmp.month, timeTmp.day, timeTmp.hour, timeTmp.minute)
 
 strSuffix = par[1]
-aPathFile = par[2:]
+nStart = int(par[2])
+aPathFile = par[3:]
 
 for (iFile, pathFile) in enumerate(aPathFile):
-    aCmd = ['bsub', '-o' 'logs/{0}evalBDT_{1}_{2}.log'.format(strTemp, strSuffix, iFile), "-J", "evalBDT_{0}_{1}".format(strSuffix, iFile), "-W 1000", "python", "~/eventSelect/scripts/EvalClassifier.py", pathFile, "--weights={0}".format(pathWeight)]
+    aCmd = ['bsub', '-o' 'logs/{0}evalBDT_{1}_{2}.log'.format(strTemp, strSuffix, nStart+iFile), "-J", "evalBDT_{0}_{1}".format(strSuffix, nStart+iFile), "-W 1000", "python", "~/eventSelect/scripts/EvalClassifier.py", pathFile, "--weights={0}".format(pathWeight)]
     print aCmd
     subprocess.call(aCmd)
