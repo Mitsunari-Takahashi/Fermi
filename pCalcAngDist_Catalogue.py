@@ -40,7 +40,7 @@ calcAngDist_Catalogue([RA in deg, DEC in deg], 'Path of your catalogue')
     TBDATA = HDULIST[1].data
     npaPosiDeg = np.array(aPosiDeg)
     VEC_POSI = vecterSkyPosition(aPosiDeg)
-    print "Given sky position vector:", VEC_POSI
+    #print "Given sky position vector:", VEC_POSI
     aDictResults = []
     if nSrc==0:
         nSrc = len(TBDATA['Source_Name'])

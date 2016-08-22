@@ -21,7 +21,6 @@ ROOT.gROOT.SetBatch()
 from array import array
 import math
 from math import cos, sin, tan, acos, asin, atan, radians, degrees
-#from pColor import *
 from pAnalysisConfig import *
 from pFindHEALPix import *
 from pLivetime import *
@@ -30,56 +29,10 @@ from pLivetime import *
 par = sys.argv
 nameFileSuffix = par[1]
 
-# Data
-#if len(par)>4:
-#    pathList = par[4]
-#else:
-#    pathList = "/disk/gamma/cta/store/takhsm/FermiData/catalogue/PublicTableGRBs.xml" #/Users/Mitsunari/FermiAnalysis/catalogue/PublicTableGRBs.xml"
-#fileList = ET.parse(pathList)
-#rtXml = fileList.getroot()
-
-
 # Spacecraft data
 pathFileScAll = "/disk/gamma/cta/store/takhsm/FermiData/spacecraft/FERMI_POINTING_FINAL_???_20?????_20?????_??.fits"
 
 print "===================="
-# Photon data
-#listFileIn = par[5:]
-#print listFileIn
-#listNameGrb = ['160509374']
-
-#for nameFileIn in listFileIn:
-#for nameGrb in listNameGrb:
-    #------ Source data -----
-    #indexGrbName = nameFileIn.rindex('GRB') + 3
-    #indexGrbNameEnd = indexGrbName + 9
-    #nameGrb = nameFileIn[indexGrbName:indexGrbNameEnd]
-    # for grb in rtXml: 
-    #     if grb[0].text==nameGrb: 
-    #         raSrc = float(grb[5].text) 
-    #         decSrc = float(grb[6].text) 
-    #         trigger_time = float(grb[2].text) 
-    #         if float(par[3])>0 and float(par[2])<=0:
-    #             metStart = trigger_time+float(par[2])
-    #             metStop = trigger_time+float(par[3])
-    #             tPro = float(par[2])
-    #             tPost = float(par[3])
-    #         elif float(par[2])>0 and float(par[3])>float(par[2]):
-    #             metStart = float(par[2])
-    #             metStop = float(par[3])
-    #             tPro = metStart - trigger_time
-    #             tPost = metStop - trigger_time
-    #         else:
-    #             print "Time domain is not correct."
-    #         if grb[7].text == "--":
-    #             err_rad = 0.
-    #         else:
-    #             err_rad = float(grb[7].text) 
-    # print ""
-    # print "==============="
-    # print "GRB", nameGrb
-    # print "==============="
-    # print "(", raSrc, ",", decSrc, "), Error radius:", err_rad, "Trigger MET:", trigger_time 
 metStart = float(par[2])
 metStop = float(par[3])
 if len(par)>4:
@@ -90,6 +43,7 @@ print "Time domain:", metStart, "-", metStop
 # ON/OFF regions
 NHPSIDE_OFF = 16
 aHpxOFF = [find_galoff_healpxs(NHPSIDE_OFF, 0, pathCatalogue)]
+print aHpxOFF
 aCoordsPix_array = [[]]
 aAreaPix_array = [[]]
 aStrRegion = ["GalacticOFF"]
