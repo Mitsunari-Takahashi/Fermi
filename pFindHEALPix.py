@@ -41,19 +41,31 @@ def find_galoff_healpxs(nhpside=16, threshold_flux50=0, path_catalogue_excl='/nf
     
 def find_pointon_healpxs(ra_poi, dec_poi, ang_cut, nhpside=512):
     NPIX = hppf.nside2npix(nhpside)
-    MAX_PIX_DEG = degrees(hppf.max_pixrad(nhpside))
+#    MAX_PIX_DEG = degrees(hppf.max_pixrad(nhpside))
     RADEC_POI = [radians(ra_poi), radians(dec_poi)]
-#    print RADEC_POI
     VEC_POI = hppf.ang2vec(pi/2.-RADEC_POI[1], RADEC_POI[0])
     ar_pix_incl = []
+    ang_cut_rad = radians(ang_cut)
     for ipix in range(NPIX):
         vec = hppf.pix2vec(nhpside, ipix)
         ang_dist = get_ang_dist_vectors(VEC_POI, vec)
-        if degrees(ang_dist)<ang_cut:
+        if ang_dist<ang_cut_rad:
             ar_pix_incl.append(ipix)
     return ar_pix_incl
     
 
+# def find_pointon_healpxs(ra_poi, dec_poi, ang_cut, nhpside=512):
+#     NPIX = hppf.nside2npix(nhpside)
+#     coo_poi = SkyCoord(ra_poi, dec_poi, unit="deg")
+#     ar_pix_incl = []
+#     for ipix in range(NPIX):
+#         ang_pix = hppf.pix2ang(nhpside, ipix)
+#         coo_pix = SkyCoord(ang_pix[1], pi/2.-ang_pix[0], unit="deg")
+#         ang_pix2poi = coo_poi.separation(coo_pix)
+#         deg_pix2poi = float(ang_pix2poi.to_string(unit=u.deg, decimal=True))
+#         if degrees(deg_pix2poi)<ang_cut:
+#             ar_pix_incl.append(ipix)
+#     return ar_pix_incl
     
     
     

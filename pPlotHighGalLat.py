@@ -22,6 +22,11 @@ from pAnalysisConfig import *
 import pTransientCatalogue
 from pTarget import *
 from pColor import *
+from pFindHEALPix import *
+import healpy as hp
+from healpy import pixelfunc as hppf
+
+
 par = sys.argv
 print par
 if len(par)<2:
@@ -39,6 +44,12 @@ h3 = ROOT.TH3D('h3', 'High Galactic latitude events', 7, 4.35, 5.75, 8, 0.2, 1.0
 
 bdtR = c_float() 
 
+# Region setup
+NHPSIDE_OFF = 16
+pathCatalogue = "/disk/gamma/cta/store/takhsm/FermiData/catalogue/gll_psch_v09.fit"
+aHpxOFF = find_galoff_healpxs(NHPSIDE_OFF, 0, pathCatalogue)
+
+
 for pathFileData in aPathFileData:
 #    chData.Add(pathFileData)
     fileData = ROOT.TFile(pathFileData, 'READ')
@@ -54,8 +65,8 @@ for pathFileData in aPathFileData:
 
     for iEvt in range(nEvt):
         trData.GetEntry(iEvt)
-#    if (chData.FT1CalB>=50 or chData.FT1CalB<=-50) and chData.FT1CalL>=90 and chData.FT1CalL<270 and chData.FT1CalZenithTheta<90 and chData.Cal1RawEnergySum>=20000 and (chData.TkrNumTracks==0 or (math.log10(max(chData.CalTrackAngle,1E-4)) > (0.529795)*(chData.EvtJointLogEnergy < 3.000000)  + ((1.0)*((0.529795)*(1.0)+(-1.379791)*(math.pow((chData.EvtJointLogEnergy-3.000000)/0.916667,1))+(0.583401)*(math.pow((chData.EvtJointLogEnergy-3.000000)/0.916667,2))+(-0.075555)*(math.pow((chData.EvtJointLogEnergy-3.000000)/0.916667,3))))*(chData.EvtJointLogEnergy >= 3.000000 and chData.EvtJointLogEnergy <= 5.750000) + (-0.398962)*(chData.EvtJointLogEnergy >  5.750000))) and chData.FswGamState==0: #and (chData.GltGemSummary&0x20)==0):
-        if (trData.FT1CalB>=50 or trData.FT1CalB<=-50) and trData.FT1CalZenithTheta<90 and trData.Cal1RawEnergySum>=20000 and (trData.TkrNumTracks==0 or (math.log10(max(trData.CalTrackAngle,1E-4)) > (0.529795)*(trData.EvtJointLogEnergy < 3.000000)  + ((1.0)*((0.529795)*(1.0)+(-1.379791)*(math.pow((trData.EvtJointLogEnergy-3.000000)/0.916667,1))+(0.583401)*(math.pow((trData.EvtJointLogEnergy-3.000000)/0.916667,2))+(-0.075555)*(math.pow((trData.EvtJointLogEnergy-3.000000)/0.916667,3))))*(trData.EvtJointLogEnergy >= 3.000000 and trData.EvtJointLogEnergy <= 5.750000) + (-0.398962)*(trData.EvtJointLogEnergy >  5.750000))) and trData.FswGamState==0: #and (trData.GltGemSummary&0x20)==0):
+        npix = hppf.ang2pix(NHPSIDE_OFF, math.pi/2.-math.radians(trData.FT1CalB), math.radians(trData.FT1CalL))
+        if (npix in aHpxOFF) and trData.FT1CalZenithTheta<90 and trData.Cal1RawEnergySum>=20000 and (trData.TkrNumTracks==0 or (math.log10(max(trData.CalTrackAngle,1E-4)) > (0.529795)*(trData.EvtJointLogEnergy < 3.000000)  + ((1.0)*((0.529795)*(1.0)+(-1.379791)*(math.pow((trData.EvtJointLogEnergy-3.000000)/0.916667,1))+(0.583401)*(math.pow((trData.EvtJointLogEnergy-3.000000)/0.916667,2))+(-0.075555)*(math.pow((trData.EvtJointLogEnergy-3.000000)/0.916667,3))))*(trData.EvtJointLogEnergy >= 3.000000 and trData.EvtJointLogEnergy <= 5.750000) + (-0.398962)*(trData.EvtJointLogEnergy >  5.750000))) and trData.FswGamState==0: #and (trData.GltGemSummary&0x20)==0):
             if trData.Cal1MomZCrossSide840>=0.0 and trData.Cal1MomNumIterations>0 and trData.Cal1TransRms>=10 and trData.Cal1TransRms<70 and trData.Acd2Cal1VetoSigmaHit>0 and trData.Cal1MomZDir>=0.2: #and (trData.WP8CalOnlyBEPCaseE_myBDT+1.)/2.>=0.06:
                 h3.Fill(trData.EvtJointLogEnergy, trData.Cal1MomZDir, -math.log10(1.0-(1.0+bdtR.value)/2.0))
             else:

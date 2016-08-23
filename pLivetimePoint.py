@@ -40,7 +40,7 @@ rtXml = fileList.getroot()
 
 
 # Spacecraft data
-pathFileScAll = "/disk/gamma/cta/store/takhsm/FermiData/spacecraft/FERMI_POINTING_FINAL_???_20?????_20?????_??.fits"
+pathFileScAll = "/disk/gamma/cta/store/takhsm/FermiData/spacecraft/FERMI_POINTING_FINAL_414_20?????_20?????_??.fits"
 
 print "===================="
 # Photon data
@@ -84,10 +84,10 @@ for nameGrb in listNameGrb:
 
     # ON/OFF regions
     nOff = 0;
-    NHPSIDE_ON = 512
-    #NHPSIDE_OFF = 16
-    #aHpxOFF = find_galoff_healpxs(nhpside=NHPSIDE_OFF)
-    aHpx_array = [find_pointon_healpxs(raSrc, decSrc, 3.0, nhpside=NHPSIDE_ON)]
+#    NHPSIDE_ON = 512
+    NHPSIDE_ON = 64
+
+    aHpx_array = [find_pointon_healpxs(raSrc, decSrc, 1.0, nhpside=NHPSIDE_ON)]
     aCoordsRegion = [SkyCoord(raSrc, decSrc, unit="deg")]
     aCoordsPix_array = []
     aAreaPix_array = []
@@ -101,17 +101,17 @@ for nameGrb in listNameGrb:
         aAreaPix_array.append([])
         for npix in aHpx_array[iRegion]:
             aAngPix = hppf.pix2ang(NHPSIDE_ON, npix)
-            aCoordsPix_array[-1].append(SkyCoord(pi/2.-aAngPix[1], aAngPix[0], unit="rad"))
+            aCoordsPix_array[-1].append(SkyCoord(aAngPix[1], pi/2.-aAngPix[0], unit="rad"))
             aAreaPix_array[-1].append(hppf.nside2pixarea(NHPSIDE_ON, npix))
-    
+        print aCoordsPix_array[-1]
     # Output objects
     #fmw = ConvertMetToFMW(trigger_time)
     aFileToI = []
     fileRoot = ROOT.TFile("Livetime_GRB{0}{1}.root".format(nameGrb, nameFileSuffix), "update")
     aHtgLt = []
     for hRegion in range(nOff+1):
-        aHtgLt.append(ROOT.TH3D("htgLt_GRB{0}_{1}".format(nameGrb, hRegion), "Livetime [sec sr];Cos(Inclination angle);Zenith angle [deg];Time from the GRB trigger [sec]".format(aStrRegion[hRegion], nameGrb), 40, 0.2, 1.0, 180, 0, 180, max(10, int(tPost-tPro)/54000), tPro, tPost))
-    make_livetime_histogram(aHtgLt, nOff+1,pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array, trigger_time)
+        aHtgLt.append(ROOT.TH3D("htgLt_GRB{0}_{1}".format(nameGrb, hRegion), "Livetime [sec sr];Cos(Inclination angle);Zenith angle [deg];Time from the GRB trigger [sec]".format(aStrRegion[hRegion], nameGrb), 40, 0.2, 1.0, 180, 0, 180, max(10, int(tPost-tPro)/54000), metStart, metStop))#tPro, tPost))
+    make_livetime_histogram(aHtgLt, nOff+1,pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array)#, trigger_time)
     aHtgLt_projYX = []
     fileRoot.cd()
     for jR in range(nOff+1):
