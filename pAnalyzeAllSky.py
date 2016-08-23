@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import sys
 import ROOT
 from ROOT import TTree
@@ -54,7 +55,7 @@ chainData.AddFriend(chainFriend, "friendTemp=MeritTuple")
 print "Friend: ", chainData.GetListOfFriends().FindObject("friendTemp=MeritTuple").Print()
 print "---------------------"
 
-aliasSelections = yaml.load(open('/afs/slac.stanford.edu/u/gl/mtakahas/eventSelect/config/pass8_event_selections.yaml','r'))
+aliasSelections = yaml.load(open("{0}/config/pass8_event_selections.yaml".format(os.environ.get("EVENTSELECT")),'r'))
 for k,v in aliasSelections.iteritems(): 
     chainData.SetAlias(k,v)
 
