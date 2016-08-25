@@ -40,8 +40,8 @@ from pColor import *
 @click.option('--suffix', '-s', default='')
 def main(pathfilelt, pathfileperf, namehtglt2, suffix):
     file_lt = ROOT.TFile(pathfilelt, 'READ')
-    htg_lt2 = file_lt.Get(namehtglt2)
-    print htg_lt2.GetName(), "is found."
+    htg_lt3 = file_lt.Get(namehtglt2)
+    print htg_lt3.GetName(), "is found."
 
     pathfileexp = pathfilelt.replace('Livetime', 'Exposure')
     file_exp = ROOT.TFile(pathfileexp, 'RECREATE')
@@ -53,27 +53,27 @@ def main(pathfilelt, pathfileperf, namehtglt2, suffix):
 
     print "===================="
     file_exp.cd()
-    name_htg_exp2 = namehtglt2.replace('Lt', 'Exp')
-    title_htg_lt2 = htg_lt.GetTitle()
-    title_htg_exp2 = title_htg_lt2.replace('Livetime', 'Exposure')
-    NBIN_LT2_X = htg_lt2.GetXaxis().GetNbins()
-    NBIN_LT2_Y = htg_lt2.GetYaxis().GetNbins()
-    NBIN_ENERGY = 7
-    EDGE_ENERGY_LOW = 4.35
-    EDGE_ENERGY_UP = 5.75
+    name_htg_exp3 = namehtglt2.replace('Lt', 'Exp')
+    title_htg_lt3 = htg_lt3.GetTitle()
+    title_htg_exp3 = title_htg_lt3.replace('Livetime', 'Exposure')
+    NBIN_LT2_X = htg_lt3.GetXaxis().GetNbins()
+    NBIN_LT2_Y = htg_lt3.GetYaxis().GetNbins()
+    NBIN_ENERGY = htg_lt3.GetZaxis().GetNbins() #7
+    EDGE_ENERGY_LOW =htg_lt3.GetZaxis().GetBinLowEdge(1) # 4.35
+    EDGE_ENERGY_UP = htg_lt3.GetZaxis().GetBinUpEdge(NBIN_ENERGY) #5.75
     if suffix!="":
-        name_htg_exp2 = name_htg_exp2 + '_' + suffix
-        title_htg_exp2 = title_htg_exp2 + ' (' + suffix + ')'
-    htg_exp2 = ROOT.TH3D(name_htg_exp2, title_htg_exp2, NBIN_LT2_X, htg_lt2.GetXaxis().GetBinLowEdge(1), htg_lt2.GetXaxis().GetBinUpEdge(NBIN_LT2_X), NBIN_LT2_Y, htg_lt2.GetYaxis().GetBinLowEdge(1), htg_lt2.GetYaxis().GetBinUpEdge(NBIN_LT2_Y), NBIN_ENERGY, EDGE_ENERGY_LOW, EDGE_ENERGY_UP)
+        name_htg_exp3 = name_htg_exp3 + '_' + suffix
+        title_htg_exp3 = title_htg_exp3 + ' (' + suffix + ')'
+    htg_exp3 = ROOT.TH3D(name_htg_exp3, title_htg_exp3, NBIN_LT2_X, htg_lt3.GetXaxis().GetBinLowEdge(1), htg_lt3.GetXaxis().GetBinUpEdge(NBIN_LT2_X), NBIN_LT2_Y, htg_lt3.GetYaxis().GetBinLowEdge(1), htg_lt3.GetYaxis().GetBinUpEdge(NBIN_LT2_Y), NBIN_ENERGY, EDGE_ENERGY_LOW, EDGE_ENERGY_UP)
 
     for iz in range(1, NBIN_ENERGY+1):
         for ix in range(1, NBIN_LT2_X+1):
-            ix_acc = htg_acc.GetXaxis().FindBin(htg_exp2.GetZaxis().GetBinCenter(iz)) #Energy
-            iy_acc = htg_acc.GetYaxis().FindBin(htg_exp2.GetXaxis().GetBinCenter(ix)) #Cos(Inclination)
+            ix_acc = htg_acc.GetXaxis().FindBin(htg_exp3.GetZaxis().GetBinCenter(iz)) #Energy
+            iy_acc = htg_acc.GetYaxis().FindBin(htg_exp3.GetXaxis().GetBinCenter(ix)) #Cos(Inclination)
             acc = htg_acc.GetBinContent(ix_acc, iy_acc)
             for iy in range(1, NBIN_LT2_Y+1):
-                htg_exp2.SetBinContent( ix, iy, iz,  htg_lt2.GetBinContent(ix, iy)*acc*htg_exp.GetXaxis().GetBinWidth(ix)/htg_acc.GetYaixs().GetBinWidth(iy_acc)/4./math.pi )
-    htg_exp2.Write()
+                htg_exp3.SetBinContent( ix, iy, iz,  htg_lt3.GetBinContent(ix, iy, iz)*acc*htg_exp3.GetXaxis().GetBinWidth(ix)/htg_acc.GetYaxis().GetBinWidth(iy_acc)/4./math.pi )
+    htg_exp3.Write()
 
 
 if __name__ == '__main__':
