@@ -37,10 +37,10 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
     aPathFileScAll = ret.split("\n")
     for iFileSc in range(len(aPathFileScAll)):
         strPathFileSc = aPathFileScAll[iFileSc]
-        fmwFile = int(strPathFileSc[-27:-24])
+        #fmwFile = int(strPathFileSc[-27:-24])
         # Make file list
-        if fmwFile>=int(fmwStart-1) and fmwFile<=int(fmwStop+1) :
-            aFileToI.append(aPathFileScAll[iFileSc])
+        #if fmwFile>=int(fmwStart-1) and fmwFile<=int(fmwStop+1) :
+        aFileToI.append(aPathFileScAll[iFileSc])
     timeStart = datetime.datetime.now() # For progress bar
     for fileToI in aFileToI:
         hdulistSC = fits.open(fileToI)
@@ -60,18 +60,18 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
                 tti = aLIVETIME[iTI]
                 coordsSCZ = SkyCoord(aRA_SCZ[iTI], aDEC_SCZ[iTI], unit="deg")
                 coordsZenith = SkyCoord(aRA_ZENITH[iTI], aDEC_ZENITH[iTI], unit="deg")
-                tplot = (aSTART[iTI]+aSTOP[iTI])/2.-origin_time
+                tplot = aSTART[iTI]-origin_time
                 vecSCX = np.array(hppf.ang2vec(math.pi/2.-math.radians(aDEC_SCX[iTI]), math.radians(aRA_SCX[iTI])))
                 vecSCZ = np.array(hppf.ang2vec(math.pi/2.-math.radians(aDEC_SCZ[iTI]), math.radians(aRA_SCZ[iTI])))
-                vecSCY = np.cross(vecSCZ, vecSCX)
-                aAngSCY = hppf.vec2ang(vecSCY)
-                coordsSCY = SkyCoord(math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), unit="deg")
+                #vecSCY = np.cross(vecSCZ, vecSCX)
+                #aAngSCY = hppf.vec2ang(vecSCY)
+                #coordsSCY = SkyCoord(math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), unit="deg")
                 for iR in range(nRegion):
                     for (jpix, coordsPix) in enumerate(aCoordsPix_array[iR]):
                         angSCZ = coordsSCZ.separation(coordsPix)
                         radSCZ = float(angSCZ.to_string(unit=u.rad, decimal=True))
-                        angSCY = coordsSCY.separation(coordsPix)
-                        radSCY = float(angSCY.to_string(unit=u.rad, decimal=True))
+                        #angSCY = coordsSCY.separation(coordsPix)
+                        #radSCY = float(angSCY.to_string(unit=u.rad, decimal=True))
                         angZenith = coordsZenith.separation(coordsPix)
                         degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
                      #   aHtgLt[iR].Fill(cos(radSCZ), degZenith, (aSTART[iTI]+aSTOP[iTI])/2.-origin_time, tti*aAreaPix_array[iR][jpix])
