@@ -56,7 +56,7 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
         nTI = len(aSTART)
         print "  ", fileToI, "(", nTI, "intervals )"
         for iTI in range(nTI):
-            if aSTART[iTI]>=metStart and aSTOP[iTI]<metStop:
+            if aSTART[iTI]>=metStart and aSTART[iTI]<metStop:
                 tti = aLIVETIME[iTI]
                 coordsSCZ = SkyCoord(aRA_SCZ[iTI], aDEC_SCZ[iTI], unit="deg")
                 coordsZenith = SkyCoord(aRA_ZENITH[iTI], aDEC_ZENITH[iTI], unit="deg")
@@ -76,7 +76,8 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
                         degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
                      #   aHtgLt[iR].Fill(cos(radSCZ), degZenith, (aSTART[iTI]+aSTOP[iTI])/2.-origin_time, tti*aAreaPix_array[iR][jpix])
                         aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti*aAreaPix_array[iR][jpix])
-                print iTI, aSTART[iTI], aRA_SCZ[iTI], aDEC_SCZ[iTI], tbdataSC.field('LAT_MODE')[iTI]#math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), degZenith, math.degrees(radSCY)
+                if iTI%20==0:
+                    print iTI, aSTART[iTI], aRA_SCZ[iTI], aDEC_SCZ[iTI], tbdataSC.field('LAT_MODE')[iTI]#math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), degZenith, math.degrees(radSCY)
             #if iTI%1==0:
              #   print iTI
                 #rate = int((aSTOP[iTI]-metStart)/(metStop-metStart)*100.+0.5)

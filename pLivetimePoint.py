@@ -101,7 +101,7 @@ for nameGrb in listNameGrb:
     # ON/OFF regions
     nOff = 0;
 #    NHPSIDE_ON = 512
-    NHPSIDE_ON = 64
+    NHPSIDE_ON = 32
     ANG_CUT = 5.
     ANG_CUT_RAD = radians(5.)
 

@@ -30,7 +30,8 @@ par = sys.argv
 nameFileSuffix = par[1]
 
 # Spacecraft data
-pathFileScAll = "/disk/gamma/cta/store/takhsm/FermiData/spacecraft/FERMI_POINTING_FINAL_???_20?????_20?????_??.fits"
+#pathFileScAll = "/disk/gamma/cta/store/takhsm/FermiData/spacecraft/FERMI_POINTING_FINAL_???_20?????_20?????_??.fits"
+pathFileScAll = "/disk/gamma/cta/store/takhsm/FermiData/spacecraft/mtakahas-AstroServer-00009-ft2-30s.fits"
 
 print "===================="
 metStart = float(par[2])
