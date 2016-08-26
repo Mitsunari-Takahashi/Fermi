@@ -29,14 +29,15 @@ from pFindGrbInfo import *
 from pLsList import ls_list
 
 @click.command()
-@click.option('--suffix', '-s',default="", help="Suffix for name of output product")
+@click.option('--suffix', '-s',default="", help="Suffix for name of output product. GRB name is added automatically..")
+@click.argument('grbid', type=str)
 @click.argument('evtfiles', type=str)
-@click.argument('datafiles', type=str)
+#@click.argument('datafiles', type=str)
 @click.argument('start', type=float)
 @click.argument('stop', type=float)
 @click.option('--fixpsfenergy', '-e', default=0, help="Set energy in log scale if you will fix the PSF cut on energy.")
 @click.option('--fixpsfincline', '-i', default=0, help="Set cos(inclination angle) if you will fix the PSF cut on inclination.")
-def main(grbid, evtfiles, datafiles, start, stop suffix, fixpsfenergy, fixpsfincline):
+def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
     # ----- Event class setup -----
     cfg = ClassConfig('Both', [10, 3, 1], 1)
     aCutEGB = cfg.aCutEGB
@@ -59,7 +60,7 @@ def main(grbid, evtfiles, datafiles, start, stop suffix, fixpsfenergy, fixpsfinc
     print "===================="
     #nFile = (len(par)-5)/2
     listFileIn = ls_list(evtfiles) #par[6:6+nFile]
-    listFileDat = ls_list(datafiles) #par[6+nFile:6+2*nFile]
+    #listFileDat = ls_list(datafiles) #par[6+nFile:6+2*nFile]
     print listFileIn
 
     aliasSelections = yaml.load(open("{0}/config/pass8_event_selections.yaml".format(os.environ.get("EVENTSELECT")),'r'))
@@ -67,11 +68,12 @@ def main(grbid, evtfiles, datafiles, start, stop suffix, fixpsfenergy, fixpsfinc
     chIn = ROOT.TChain('EVENTS')
     for fileIn in listFileIn:
         chIn.Add(fileIn)
-    strSuffixOut = suffix #par[4]
+    if suffix!="":
+        suffix = "_" + suffix
     aCutPsf = [95, 68]
 
     for nameGrb in listTgtGRB:
-        fileOut = ROOT.TFile('Plot_GRB{0}_{1}.root'.format(nameGrb, strSuffixOut), 'UPDATE')
+        fileOut = ROOT.TFile('Plot_GRB{0}{1}.root'.format(nameGrb, suffix), 'UPDATE')
         dict_grb = find_grb_info(nameGrb, rtXml)
         if float(stop)>0 and float(start)<0:
             metStart = dict_grb["TRIGGER_MET"]+float(start)
@@ -139,7 +141,15 @@ def main(grbid, evtfiles, datafiles, start, stop suffix, fixpsfenergy, fixpsfinc
             grbt = chIn.t - dict_grb["TRIGGER_MET"]
             cdTimeGRB.value = grbt
             vecEvt = np.array([cos(radians(chIn.dec))*cos(radians(chIn.ra)), cos(radians(chIn.dec))*sin(radians(chIn.ra)), sin(radians(chIn.dec))])
-            dictDistCut = { 'PSF95': (htgPerf.getPSF95_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384), chIn.e, chIn.cth) + dict_grb["ERROR_RADIUS"]), 'PSF68': (htgPerf.getPSF68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384), chIn.e, chIn.cth) + dict_grb["ERROR_RADIUS"]) }
+            if fixpsfenergy==0:
+                epsf = chIn.e
+            else:
+                epsf = fixpsfenergy
+            if fixpsfinclin==0:
+                cthpsf = chIn.cth
+            else:
+                cthpsf = fixpsfinclin
+            dictDistCut = { 'PSF95': (htgPerf.getPSF95_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384), epsf, cthpsf) + dict_grb["ERROR_RADIUS"]), 'PSF68': (htgPerf.getPSF68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384), epsf, cthpsf) + dict_grb["ERROR_RADIUS"]) }
             radTheta = acos(np.dot(vecTgt, vecEvt))
             degDist = degrees(radTheta)
             if degDist<dictDistCut['PSF95'] and chIn.t>=metStart and chIn.t<metStop:
