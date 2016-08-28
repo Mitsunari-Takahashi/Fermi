@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 
+import os
 import sys
 import ROOT
-from ROOT import TTree
-from ROOT import TChain
-from ROOT import TH2D
+from ROOT import TTree, TChain, TH1, TH2, TH3
 import numpy as np
 import yaml
 import xml.etree.ElementTree as ET
 import datetime
 from ctypes import *
+import click
 #sys.path.append("/disk/gamma/cta/store/takhsm/FermiMVA/AllSky")
 #sys.path.append("/home/takhsm/FermiMVA/python")
 ROOT.gROOT.SetBatch()
@@ -35,9 +35,9 @@ from pLsList import ls_list
 #@click.argument('datafiles', type=str)
 @click.argument('start', type=float)
 @click.argument('stop', type=float)
-@click.option('--fixpsfenergy', '-e', default=0, help="Set energy in log scale if you will fix the PSF cut on energy.")
-@click.option('--fixpsfincline', '-i', default=0, help="Set cos(inclination angle) if you will fix the PSF cut on inclination.")
-def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
+@click.option('--fixpsfenergy', '-e', type=float, default=0.0, help="Set energy in log scale if you will fix the PSF cut on energy.")
+@click.option('--fixpsfinclin', '-i', type=float, default=0.0, help="Set cos(inclination angle) if you will fix the PSF cut on inclination.")
+def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin):
     # ----- Event class setup -----
     cfg = ClassConfig('Both', [10, 3, 1], 1)
     aCutEGB = cfg.aCutEGB
@@ -45,15 +45,15 @@ def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
     aStrSelect = cfg.aStrSelect
 
     #IRF
-    listPathFilePerf = [['/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S16/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15_P8R2_TRANSIENT100_P8R2_TRANSIENT100_perf.root', '/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S16/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15_P8R2_SOURCE_P8R2_SOURCE_perf.root'], 
-                        ['/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root', '/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R30_perf.root', '/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R10_perf.root']]
+    listPathFilePerf = [['/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S16/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15_P8R2_TRANSIENT100_P8R2_TRANSIENT100_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S16/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15_P8R2_SOURCE_P8R2_SOURCE_perf.root'], 
+                        ['/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R30_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R10_perf.root']]
     htgPerf = CutPerformanceHtg(listPathFilePerf)
 
     # Target
     listTgtGRB = [grbid] #[par[1]]
 
     # Catalogue Data
-    pathList = "/nfs/farm/g/glast/u/mtakahas/data/catalogue/PublicTableGRBs.xml"
+    pathList =     pathList = "/disk/gamma/cta/store/takhsm/FermiData/catalogue/PublicTableGRBs.xml" #"/nfs/farm/g/glast/u/mtakahas/data/catalogue/PublicTableGRBs.xml"
     fileList = ET.parse(pathList)
     rtXml = fileList.getroot()
 
@@ -89,8 +89,9 @@ def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
             metStop = chIn.GetMaximum("t")+1
 
         print 'Analysis time domain: MET', metStart, '-', metStop
-        nEvent = chIn.GetEntries('TIME>={0} && TIME<{1}'.format(metStart, metStop))
-        print "Total number of events in the time domain:", nEvent
+        nEventChain = chIn.GetEntries()
+        nEventTime = chIn.GetEntries('TIME>={0} && TIME<{1}'.format(metStart, metStop))
+        print "Total number of events in the time domain:", nEventTime
         vecTgt = np.array([cos(radians(dict_grb["DEC"]))*cos(radians(dict_grb["RA"])), cos(radians(dict_grb["DEC"]))*sin(radians(dict_grb["RA"])), sin(radians(dict_grb["DEC"]))])
 
     # TTree
@@ -107,13 +108,35 @@ def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
         greOn = []
         mgrZenith = ROOT.TMultiGraph("mgrZenith", "Zenith angle of events around GRB{0}".format(nameGrb))
         greZenith = []
+
+        aHtgEvt = []
+        NBIN_CTH = 40
+        EDGE_CTH_LOW = 0.2
+        EDGE_CTH_UP = 1.0
+        NBIN_ZEN = 180
+        EDGE_ZEN_LOW = 0
+        EDGE_ZEN_UP = 180
+        NBIN_ENE = 28
+        EDGE_ENE_LOW =  4.35
+        EDGE_ENE_UP =  5.75
+        if fixpsfenergy!=0 and fixpsfinclin!=0:
+            str_fix_psf = "(fixed with log_{10}E={0}, cos#theta={1})".format(fixpsfenergy, fixpsfinclin)
+        elif fixpsfenergy!=0:
+            str_fix_psf = "(fixed with log_{10}E={0})".format(fixpsfenergy)
+        elif fixpsfinclin!=0:
+            str_fix_psf = "(fixed with cos#theta={0})".format(fixpsfinclin)
+        else:
+            str_fix_psf = ""
+
         for cutPsf in aCutPsf:
             print 'PSF cut:', cutPsf, '%'
             greOn.append([])
             greZenith.append([])
+            aHtgEvt.append([])
             for pC in range(len(aaStrSelect)):
                 greOn[-1].append([])
                 greZenith[-1].append([])
+                aHtgEvt[-1].append([])
                 for qC in range(len(aaStrSelect[pC])):
                     greOn[-1][-1].append(ROOT.TGraphErrors())
                     greOn[-1][-1][-1].SetName("greOn_{0}_{1}".format(pC, qC))
@@ -123,6 +146,7 @@ def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
                     greZenith[-1][-1][-1].SetName("greZenith_{0}_{1}".format(pC, qC))
                     greZenith[-1][-1][-1].SetTitle("{0}, PSF{1}%".format(aaStrSelect[pC][qC], cutPsf))
                     greZenith[-1][-1][-1].SetMarkerStyle(20+int(cutPsf==68))
+                    aHtgEvt[-1][-1].append(ROOT.TH3D("htgEvt_GRB{0}_{1}_PSF{2}".format(nameGrb, aaStrSelect[pC][qC], cutPsf), "{0} events within PSF{1}{2} from GRB{3} (MET {4} - {5});Cos(Inclination angle);Zenith angle [deg];log_{{10}}Energy [MeV]".format(aaStrSelect[pC][qC], cutPsf, str_fix_psf, nameGrb, metStart, metStop), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, NBIN_ENE, EDGE_ENE_LOW, EDGE_ENE_UP))
                     if pC==0:
                         greOn[-1][-1][-1].SetMarkerColor(13-12*qC)
                         greZenith[-1][-1][-1].SetMarkerColor(13-12*qC)
@@ -133,7 +157,7 @@ def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
                     mgrZenith.Add(greZenith[-1][-1][-1])  
 
         timeStart = datetime.datetime.now()
-        for iEvent in range(nEvent):
+        for iEvent in range(nEventChain):
             cbFlagPSF68.value = 0
             cbFlagPSF95.value = 0
             chIn.GetEntry(iEvent)
@@ -149,9 +173,12 @@ def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
                 cthpsf = chIn.cth
             else:
                 cthpsf = fixpsfinclin
+            
             dictDistCut = { 'PSF95': (htgPerf.getPSF95_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384), epsf, cthpsf) + dict_grb["ERROR_RADIUS"]), 'PSF68': (htgPerf.getPSF68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384), epsf, cthpsf) + dict_grb["ERROR_RADIUS"]) }
             radTheta = acos(np.dot(vecTgt, vecEvt))
             degDist = degrees(radTheta)
+            #if chIn.evid == 6500524:
+             #   print "Distance:", degDist, "PSF95:", dictDistCut['PSF95']
             if degDist<dictDistCut['PSF95'] and chIn.t>=metStart and chIn.t<metStop:
                 print ""
                 print "== ON photon candidate!!! =="
@@ -169,6 +196,15 @@ def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
                         if chIn.z<90:
                             greOn[bPSF68][0][1].SetPoint(greOn[bPSF68][0][1].GetN(), chIn.t-dict_grb["TRIGGER_MET"], pow(10, chIn.e-3))
                         greZenith[bPSF68][0][1].SetPoint(greZenith[bPSF68][0][1].GetN(), chIn.t-dict_grb["TRIGGER_MET"], chIn.z)
+                    if chIn.s >= 4:
+                        aHtgEvt[0][0][0].Fill(chIn.cth, chIn.z, chIn.e)
+                        if bPSF68==1:
+                            aHtgEvt[bPSF68][0][0].Fill(chIn.cth, chIn.z, chIn.e)
+                    if chIn.s >= 128:
+                        aHtgEvt[0][0][1].Fill(chIn.cth, chIn.z, chIn.e)
+                        if bPSF68==1:
+                            aHtgEvt[bPSF68][0][1].Fill(chIn.cth, chIn.z, chIn.e)
+
                 elif chIn.c == 2:
                     if chIn.s == 4096:
                         if chIn.z<90:
@@ -182,6 +218,18 @@ def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
                         if chIn.z<90:
                             greOn[bPSF68][1][2].SetPoint(greOn[bPSF68][1][2].GetN(), chIn.t-dict_grb["TRIGGER_MET"], pow(10, chIn.e-3))
                         greZenith[bPSF68][1][2].SetPoint(greZenith[bPSF68][1][2].GetN(), chIn.t-dict_grb["TRIGGER_MET"], chIn.z)
+                    if chIn.s >= 4096:
+                        aHtgEvt[0][1][0].Fill(chIn.cth, chIn.z, chIn.e)
+                        if bPSF68==1:
+                            aHtgEvt[bPSF68][1][0].Fill(chIn.cth, chIn.z, chIn.e)
+                    if chIn.s >= 8192:
+                        aHtgEvt[0][1][1].Fill(chIn.cth, chIn.z, chIn.e)
+                        if bPSF68==1:
+                            aHtgEvt[bPSF68][1][1].Fill(chIn.cth, chIn.z, chIn.e)
+                    if chIn.s >= 16384:
+                        aHtgEvt[0][1][2].Fill(chIn.cth, chIn.z, chIn.e)
+                        if bPSF68==1:
+                            aHtgEvt[bPSF68][1][2].Fill(chIn.cth, chIn.z, chIn.e)
 
                 print "Run ID:", chIn.run
                 print "Event ID:", chIn.evid
@@ -195,8 +243,8 @@ def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
                 print "Cos( inclination angle ):", chIn.cth
                 print "Zenith angle:", chIn.z, "deg"
             trGRB.Fill()
-            if iEvent%(nEvent/20)==0:
-                rate = int((iEvent*100.)/nEvent+0.5)
+            if iEvent%(nEventChain/20)==0:
+                rate = int((iEvent*100.)/nEventChain+0.5)
                 if rate>0:
                     nt = (datetime.datetime.now() - timeStart).seconds * (100.-rate)/rate
                     meter = "\r[{0}{1}] Wait {2} hr {3} min".format("=" * rate, ' ' * (100-rate), int(nt/3600), (int(nt)%3600)/60+1)
@@ -233,6 +281,10 @@ def main(grbid, evtfiles, start, stop suffix, fixpsfenergy, fixpsfincline):
         cEvent.Write()
         cZenith.Write()
         trGRB.Write()
+        for rD in range(2):
+            for pD in range(len(aaStrSelect)):
+                for qD in range(len(aaStrSelect[pD])):
+                    aHtgEvt[rD][pD][qD].Write()
         print "Finished!"
 
 
