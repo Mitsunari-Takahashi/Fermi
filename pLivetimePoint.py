@@ -132,6 +132,8 @@ for nameGrb in listNameGrb:
     # Output objects
     #fmw = ConvertMetToFMW(trigger_time)
     aFileToI = []
+    if nameFileSuffix!="":
+        nameFileSuffix = "_" + nameFileSuffix
     fileRoot = ROOT.TFile("Livetime_GRB{0}{1}.root".format(nameGrb, nameFileSuffix), "update")
     aHtgLt = []
     NBIN_CTH = 40

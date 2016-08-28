@@ -38,11 +38,21 @@ from pColor import *
 @click.argument('pathfileperf', type=str)
 @click.argument('namehtglt2', type=str)
 @click.option('--suffix', '-s', default='')
-def main(pathfilelt, pathfileperf, namehtglt2, suffix):
+@click.option('--extend3d', '-e', is_flag=True)
+def main(pathfilelt, pathfileperf, namehtglt2, suffix, extend3d):
     file_lt = ROOT.TFile(pathfilelt, 'READ')
     htg_lt3 = file_lt.Get(namehtglt2)
     print htg_lt3.GetName(), "is found."
 
+    if extend3d==True:
+        htg_ext3d = ROOT.TH3D("{0}_ext3d".format(htg_lt3.GetName()), htg_lt3.GetTitle(), htg_lt3.GetNbinsX(), htg_lt3.GetXaxis().GetXmin(), htg_lt3.GetXaxis().GetXmax(), htg_lt3.GetNbinsY(), htg_lt3.GetYaxis().GetXmin(), htg_lt3.GetYaxis().GetXmax(), 7, 4.35, 5.75)
+        for ix in range(1, htg_ext3d.GetNbinsX()+1):
+            for iy in range(1, htg_ext3d.GetNbinsY()+1):
+                cont = htg_lt3.GetBinContent(ix, iy)
+                for iz in range(1, htg_ext3d.GetNbinsZ()+1):
+                    htg_ext3d.SetBinContent(ix, iy, iz, cont)
+        htg_lt3 = htg_ext3d
+       
     pathfileexp = pathfilelt.replace('Livetime', 'Exposure')
     file_exp = ROOT.TFile(pathfileexp, 'RECREATE')
 
