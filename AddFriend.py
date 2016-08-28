@@ -26,7 +26,7 @@ def main(pathfiles, remove):
         print fileMel.GetName(), "is opened."
         trMel = fileMel.Get("MeritTuple")
         print trMel.GetName(), "is found."
-        if remove==True:
+        if remove==True and trMel.GetListOfFriends()!=None:
             trMel.GetListOfFriends().RemoveAll()
         aPathFriend=[]
         for iFr in range(nFriend):
