@@ -73,7 +73,7 @@ for pathFileData in aPathFileData:
                 h3.Fill(trData.EvtJointLogEnergy, trData.Cal1MomZDir, 0.0)
     print "Cumulative event number for plot:", h3.GetEntries(), "events"
 
-fileOut = ROOT.TFile('Plot_HighGalLat_{0}_{1}.root'.format(nameVarBDT, strSuffix), 'UPDATE')
+fileOut = ROOT.TFile('Htg_rejection_GalOff_{0}_{1}.root'.format(nameVarBDT, strSuffix), 'UPDATE')
 fileOut.cd()
 h3.Write()
 
