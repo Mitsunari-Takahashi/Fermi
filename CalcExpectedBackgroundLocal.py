@@ -4,6 +4,7 @@ import sys
 import ROOT
 import click
 import pPoissonianProb
+from math import radians
 ROOT.gROOT.SetBatch()
 #par = sys.argv
 
@@ -45,6 +46,7 @@ def main(evton, evtoff, expon, expoff, evtenergy, evtinclin, evtzenith, htgevton
     fileExpOff = ROOT.TFile(expoff)
     htg3ExpOff = fileExpOff.Get(htgexpoff)
     htg3ExpOff.Rebin3D(N_REBIN_INCLIN, 1, 1)
+    htg3ExpOff.Scale(radians(1)**2) # For recovering a mistake in pLivetimeGalOff.py ! Next time you must remove this statement!
     print htg3ExpOff.GetName(), htg3ExpOff.GetNbinsX(), htg3ExpOff.GetNbinsY(), htg3ExpOff.GetNbinsZ()        
 
     nameFileOut = evtoff.replace("Plot", "ExpectedBKG")
@@ -114,7 +116,7 @@ def main(evton, evtoff, expon, expoff, evtenergy, evtinclin, evtzenith, htgevton
     htgProb = htg1ExBKG_cum.Clone("htgProb_{0}".format(mode))
     htgProb.SetTitle("Poissonian coincidence probability of {0}".format(htg1ExBKG_cum.GetTitle()))
     for ibin in range(htg1ExBKG_cum.GetNbinsX()):
-        print "log10(Energy) >", htg1ExBKG_cum.GetXaxis().GetBinLowEdge(ibin+1)
+        print "log10(Energy) >=", htg1ExBKG_cum.GetXaxis().GetBinLowEdge(ibin+1)
         if htg1ExBKG_cum.GetBinContent(ibin+1)>0:
             prob = pPoissonianProb.calcProb([htg1ExBKG_cum.GetBinContent(ibin+1), NTHRESHOLD])
         else:
