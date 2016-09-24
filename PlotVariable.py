@@ -61,14 +61,24 @@ def main(name, definition, ag, bkg, logy):
     cPlot.Divide(NBIN_ENE, NBIN_CTH)
 
     aHsPlot = []
-
+    aHtgGam = []
     for iE in range(NBIN_ENE):
         aHsPlot.append([])
+        aHtgGam.append([])
+        aHtgHad.append([])
+        aHtgLep.append([])
         for iC in range(NBIN_CTH):
+            aHtgGam[-1].append(h3Gam.ProjectionZ("{0}_projZ_{1}_{2}".format(h3Gam.GetName(), iE+1, iC+1), iE+1, iE+1, iC+1, iC+1))
+            aHtgGam[-1][-1].Scale(1./aHtgGam[-1][-1].Integral())
+            aHtgHad[-1].append(h3Had.ProjectionZ("{0}_projZ_{1}_{2}".format(h3Had.GetName(), iE+1, iC+1), iE+1, iE+1, iC+1, iC+1))
+            aHtgHad[-1][-1].Scale(1./aHtgHad[-1][-1].Integral())
+            aHtgLep[-1].append(h3Lep.ProjectionZ("{0}_projZ_{1}_{2}".format(h3Lep.GetName(), iE+1, iC+1), iE+1, iE+1, iC+1, iC+1))
+            aHtgLep[-1][-1].Scale(1./aHtgLep[-1][-1].Integral())
             aHsPlot[-1].append(ROOT.THStack("hs{0}_{1}_{2}".format(name, iE, iC), "{0}<=McLogEnergy<{1} and {2}<=-McZDir<{3}".format(h3Gam.GetXaxis().GetBinLowEdge(iE+1), h3Gam.GetXaxis().GetBinUpEdge(iE+1), h3Gam.GetYaxis().GetBinLowEdge(iC+1), h3Gam.GetYaxis().GetBinUpEdge(iC+1))))
-            aHsPlot[-1][-1].Add(h3Gam.ProjectionZ("{0}_Z".format(h3Gam.GetName()), iE+1, iE+1, iC+1, iC+1))
-            aHsPlot[-1][-1].Add(h3Had.ProjectionZ("{0}_Z".format(h3Had.GetName()), iE+1, iE+1, iC+1, iC+1))
-            aHsPlot[-1][-1].Add(h3Lep.ProjectionZ("{0}_Z".format(h3Lep.GetName()), iE+1, iE+1, iC+1, iC+1))
+            
+            aHsPlot[-1][-1].Add(aHtgGam[-1][-1])
+            aHsPlot[-1][-1].Add(aHtgHad[-1][-1])
+            aHsPlot[-1][-1].Add(aHtgLep[-1][-1])
             cPlot.cd(iE*iC+1)
             aHsPlot[-1][-1].Draw("nostack")
             if logy==True:
