@@ -44,6 +44,7 @@ def main(distcut, rasrc, decsrc, start, stop, datafiles, suffix):
                 if degDist < distcut:
                     htgOut.Fill(trMer.EvtJointLogEnergy)
         print htgOut.GetEntries(), 'events have been filled.'
+    fileOut.cd()
     htgOut.Write()
     print "=========="
     for ixbin in range(1, htgOut.GetNbinsX()+1):

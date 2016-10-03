@@ -19,8 +19,12 @@ def main(pathfilein, nametr, nrunid, nevtid):
     print trIn.GetName(), 'is found.'
     for iEvt in range(trIn.GetEntries()):
         trIn.GetEntry(iEvt)
-        if trIn.RUN_ID==nrunid and trIn.EVENT_ID==nevtid:
-            trIn.Show(iEvt)
+        if nametr == "MeritTuple":
+            if trIn.EvtRun==nrunid and trIn.EvtEventId==nevtid:
+                trIn.Show(iEvt)
+        else:
+            if trIn.RUN_ID==nrunid and trIn.EVENT_ID==nevtid:
+                trIn.Show(iEvt)
 
 
 if __name__ == '__main__':
