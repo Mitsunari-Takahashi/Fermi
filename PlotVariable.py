@@ -2,6 +2,7 @@
 
 import ROOT
 import sys
+import math
 import click
 import subprocess
 from pLsList import ls_list
@@ -14,8 +15,30 @@ ROOT.gROOT.SetBatch()
 @click.option('--ag', '-g', type=str, default='/nfs/farm/g/glast/u/mtakahas/data/MC/AG200909_62_2016Jun.root', help="Path of AG event file")
 @click.option('--bkg', '-b', type=str, default='/nfs/farm/g/glast/u/mtakahas/data/MC/BKG200909_62MCE2e4_Combined.root', help="Path of BKG event file")
 @click.option('--logy', '-l', is_flag=True, help="Plot y-axis in logarithmic scale")
+@click.option('--nbine', '-e', type=int, default=7, help="Number of energy bin")
+@click.option('--nbincth', '-c', type=int, default=4, help="Number of cos(theta) bin")
 
-def main(name, definition, ag, bkg, logy):
+def main(name, definition, ag, bkg, nbine, nbincth, logy):
+    NBIN_ENE = nbine
+    LOWEDGE_ENE = 4.35
+    UPEDGE_ENE = 5.75
+    NBIN_CTH = nbincth
+    LOWEDGE_CTH = 0.2
+    UPEDGE_CTH = 1.0
+    NBIN_VAR = 100
+    ncx = 1
+    ncy = 1
+    if NBIN_ENE==1 or NBIN_CTH==1:
+        ncy = int(math.sqrt(NBIN_ENE*NBIN_CTH))
+        ncx = int(math.ceil(NBIN_CTH/ncy))
+    else:
+        ncy = NBIN_CTH
+        ncx = NBIN_ENE
+    cPlot = ROOT.TCanvas(name, definition, int(ncx*160), int(ncy*160))
+    cPlot.Divide(ncx, ncy)
+#    c = ROOT.TCanvas(name, definition, int(ncx*160), int(ncy*160))
+#    cPlot.Divide(ncx, ncy)
+
     fileAG = ROOT.TFile(ag, "update")
     print fileAG.GetName(), "is opened."
     trAG = fileAG.Get("MeritTuple")
@@ -35,57 +58,89 @@ def main(name, definition, ag, bkg, logy):
     maxBKG = trBKG.GetMaximum(strCutBase+strCutCalOnly)
     minCommon = min(minAG, minBKG)
     maxCommon = max(maxAG, maxBKG)
-    NBIN_ENE = 7
-    LOWEDGE_ENE = 4.35
-    UPEDGE_ENE = 5.75
-    NBIN_CTH = 4
-    LOWEDGE_CTH = 0.2
-    UPEDGE_CTH = 1.0
-    NBIN_VAR = 100
+
+    fileOut = ROOT.TFile("PlotVariables.root", "UPDATE")
+    fileOut.cd()
 
     h3Gam = ROOT.TH3F("h3Gam_"+name, "Gammas", NBIN_ENE, LOWEDGE_ENE, UPEDGE_ENE, NBIN_CTH, LOWEDGE_CTH, UPEDGE_CTH, NBIN_VAR, minCommon, maxCommon)
     h3Gam.SetLineColor(ROOT.kBlue)
+    h3Gam.SetFillColor(ROOT.kBlue)
+    h3Gam.Write()
     h3Had = ROOT.TH3F("h3Had_"+name, "Hadrons", NBIN_ENE, LOWEDGE_ENE, UPEDGE_ENE, NBIN_CTH, LOWEDGE_CTH, UPEDGE_CTH, NBIN_VAR, minCommon, maxCommon)
     h3Had.SetLineColor(ROOT.kRed)
+    h3Had.SetFillColor(ROOT.kRed)
+    h3Had.Write()
     h3Lep = ROOT.TH3F("h3Lep_"+name, "Leptons", NBIN_ENE, LOWEDGE_ENE, UPEDGE_ENE, NBIN_CTH, LOWEDGE_CTH, UPEDGE_CTH, NBIN_VAR, minCommon, maxCommon)
     h3Lep.SetLineColor(ROOT.kMagenta)
+    h3Lep.SetFillColor(ROOT.kMagenta)
+    h3Lep.Write()
 
-    trAG.Draw(name+":-McZDir:McLogEnergy>>"+h3Gam.GetName(), strCutBase+" && "+strCutCalOnly, "goff")
+    trAG.Draw(definition+":-McZDir:McLogEnergy>>"+h3Gam.GetName(), strCutBase+" && "+strCutCalOnly, "goff")
     print h3Gam.GetEntries(), "events filled into", h3Gam.GetName()
-    trBKG.Draw(name+":-McZDir:McLogEnergy>>"+h3Had.GetName(), strCutBase+" && "+strCutCalOnly+" && "+strCutHad, "goff")
+    trBKG.Draw(definition+":-McZDir:McLogEnergy>>"+h3Had.GetName(), strCutBase+" && "+strCutCalOnly+" && "+strCutHad, "goff")
     print h3Had.GetEntries(), "events filled into", h3Had.GetName()
-    trBKG.Draw(name+":-McZDir:McLogEnergy>>"+h3Lep.GetName(), strCutBase+" && "+strCutCalOnly+" && "+strCutLep, "goff")
+    trBKG.Draw(definition+":-McZDir:McLogEnergy>>"+h3Lep.GetName(), strCutBase+" && "+strCutCalOnly+" && "+strCutLep, "goff")
     print h3Lep.GetEntries(), "events filled into", h3Lep.GetName()
-
-    cPlot = ROOT.TCanvas(name, definition, NBIN_ENE*150, NBIN_CTH*150)
-    cPlot.Divide(NBIN_ENE, NBIN_CTH)
-
+    
     aHsPlot = []
     aHtgGam = []
+    aHtgHad = []
+    aHtgLep = []
+    ipad = 0
+    entoropy_had = 1
+    entoropy_lep = 1
     for iE in range(NBIN_ENE):
+        print "Energy bin No.", iE+1, " McLogEnergy:", h3Gam.GetXaxis().GetBinLowEdge(iE+1), " - ", h3Gam.GetXaxis().GetBinUpEdge(iE+1)
         aHsPlot.append([])
         aHtgGam.append([])
         aHtgHad.append([])
         aHtgLep.append([])
         for iC in range(NBIN_CTH):
+            print "  Inclination bin No.", iC+1, "-McZDir:", h3Gam.GetYaxis().GetBinLowEdge(iC+1), " - ", h3Gam.GetYaxis().GetBinUpEdge(iC+1)
+            aHsPlot[-1].append(ROOT.THStack("hs{0}_{1}_{2}".format(name, iE+1, iC+1), "{0}<=McLogEnergy<{1} and {2}<=-McZDir<{3}".format(h3Gam.GetXaxis().GetBinLowEdge(iE+1), h3Gam.GetXaxis().GetBinUpEdge(iE+1), h3Gam.GetYaxis().GetBinLowEdge(iC+1), h3Gam.GetYaxis().GetBinUpEdge(iC+1))))
             aHtgGam[-1].append(h3Gam.ProjectionZ("{0}_projZ_{1}_{2}".format(h3Gam.GetName(), iE+1, iC+1), iE+1, iE+1, iC+1, iC+1))
-            aHtgGam[-1][-1].Scale(1./aHtgGam[-1][-1].Integral())
+            if aHtgGam[-1][-1].Integral()>0:
+                aHtgGam[-1][-1].Scale(1./aHtgGam[-1][-1].Integral())
+                aHsPlot[-1][-1].Add(aHtgGam[-1][-1])
             aHtgHad[-1].append(h3Had.ProjectionZ("{0}_projZ_{1}_{2}".format(h3Had.GetName(), iE+1, iC+1), iE+1, iE+1, iC+1, iC+1))
-            aHtgHad[-1][-1].Scale(1./aHtgHad[-1][-1].Integral())
+            if aHtgHad[-1][-1].Integral()>0:
+                aHtgHad[-1][-1].Scale(1./aHtgHad[-1][-1].Integral())
+                aHsPlot[-1][-1].Add(aHtgHad[-1][-1])
             aHtgLep[-1].append(h3Lep.ProjectionZ("{0}_projZ_{1}_{2}".format(h3Lep.GetName(), iE+1, iC+1), iE+1, iE+1, iC+1, iC+1))
-            aHtgLep[-1][-1].Scale(1./aHtgLep[-1][-1].Integral())
-            aHsPlot[-1].append(ROOT.THStack("hs{0}_{1}_{2}".format(name, iE, iC), "{0}<=McLogEnergy<{1} and {2}<=-McZDir<{3}".format(h3Gam.GetXaxis().GetBinLowEdge(iE+1), h3Gam.GetXaxis().GetBinUpEdge(iE+1), h3Gam.GetYaxis().GetBinLowEdge(iC+1), h3Gam.GetYaxis().GetBinUpEdge(iC+1))))
-            
-            aHsPlot[-1][-1].Add(aHtgGam[-1][-1])
-            aHsPlot[-1][-1].Add(aHtgHad[-1][-1])
-            aHsPlot[-1][-1].Add(aHtgLep[-1][-1])
-            cPlot.cd(iE*iC+1)
-            aHsPlot[-1][-1].Draw("nostack")
-            if logy==True:
-                cPlot.cd(iE*iC+1).SetLogy()
+            if aHtgLep[-1][-1].Integral()>0:
+                aHtgLep[-1][-1].Scale(1./aHtgLep[-1][-1].Integral())
+                aHsPlot[-1][-1].Add(aHtgLep[-1][-1])
+            # Calculate Minimum Entropy
+            # entropy_had = 1000
+            # entropy_lep = 1000
+            # var_min_ent_had = -1
+            # var_min_ent_lep = -1
+            # for ibvar in range(1, NBIN_VAR+1):
+            #     mevt_gam = aHtgGam[-1][-1].Integral(ibvar, NBIN_VAR)
+            #     mevt_had = aHtgHad[-1][-1].Integral(ibvar, NBIN_VAR)
+            #     mevt_lep = aHtgLep[-1][-1].Integral(ibvar, NBIN_VAR)
+            #     if mevt_had>0:
+            #         frac_had = 1 / (mevt_gam/mevt_had+1)
+            #         entropy_had_temp = - frac_had*math.log(frac_had) - (1.-frac_had)*math.log(1.-frac_had)
+            #         if entropy_had_temp<entropy_had:
+            #             entropy_had = entropy_had_temp
+            #             var_min_ent_had = aHtgHad[-1][-1].GetZaxis().GetBinLowEdge(ibvar)
+            #     if mevt_lep>0:
+            #         frac_lep = 1 / (mevt_gam/mevt_lep+1)
+            #         entropy_lep_temp = - frac_lep*math.log(frac_lep) - (1.-frac_lep)*math.log(1.-frac_lep)
+            #         if entropy_lep_temp<entropy_lep:
+            #             entropy_lep = entropy_lep_temp
+            #             var_min_ent_lep = aHtgLep[-1][-1].GetZaxis().GetBinLowEdge(ibvar)
 
-    fileOut = ROOT.TFile("PlotVariables.root", "UPDATE")
-    fileOut.cd()
+            ipad = ipad + 1
+            cPlot.cd(ipad)
+            aHsPlot[-1][-1].Draw()
+            if logy==True:
+                ROOT.gPad.SetLogy()
+            # latex = ROOT.TLatex()
+            # latex.SetTextSize(0.025)
+            # latex.DrawLatex(.3,.8,"H_{{had}} = {0:1.2f} ({1}={2:1.1f})".format(entropy_had, definition, var_min_ent_had))
+            # latex.DrawLatex(.3,.7,"H_{{lep}} = {0:1.2f} ({1}={2:1.1f})".format(entropy_lep, definition, var_min_ent_lep))
     cPlot.Write()
 
 if __name__ == '__main__':

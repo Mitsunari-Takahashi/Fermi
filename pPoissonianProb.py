@@ -16,13 +16,13 @@ pPoissonianProb.calcProb([<lambda>, <threshold>])
 """
     lamb = float(tp[0])
     thre = float(tp[1])
-    maxi = thre*100.
+    maxi = thre*10000.
 #    fPoi = ROOT.TF1("fPoi", "TMath::Poisson(x, [0])", 0, maxi)
-    fPoiI = ROOT.TF1("fPoi", "TMath::PoissonI(x, [0])", 0, maxi)
-#    fPoi.SetParameter(0, lamb)
-    fPoiI.SetParameter(0, lamb)
+    fPoi = ROOT.TF1("fPoi", "TMath::PoissonI(x, [0])", 0, maxi)
+    fPoi.SetParameter(0, lamb)
 #    return [fPoi.Integral(thre, maxi)/fPoi.Integral(0, maxi), fPoiI.Integral(thre, maxi)/fPoiI.Integral(0, maxi)]
-    return fPoiI.Integral(thre, maxi)/fPoiI.Integral(0, maxi)
+#    return fPoiI.Integral(thre, maxi)/fPoiI.Integral(0, maxi)
+    return 1.0 - fPoi.Integral(0, thre)
 
 
 
