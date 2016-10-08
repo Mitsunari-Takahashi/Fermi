@@ -33,8 +33,8 @@ def main(datafiles, suffix):
     NBIN_CTE = 200
     LOWEDGE_CTE = 0
     UPEDGE_CTE = 200
-    hRaw = ROOT.TH2F('hRaw', 'Raw number of events;log_{{10}}WP8CalOnlyEnergy;Cal1MomZDir', NBIN_ENE, LOWEDGE_ENE, UPEDGE_ENE, NBIN_CTH, LOWEDGE_CTH, UPEDGE_CTH)
-    hCalOnly = ROOT.TH2F('hCalOnly', 'Number of CalOnly events;log_{{10}}WP8CalOnlyEnergy;Cal1MomZDir', NBIN_ENE, LOWEDGE_ENE, UPEDGE_ENE, NBIN_CTH, LOWEDGE_CTH, UPEDGE_CTH)
+    hRaw = ROOT.TH2F('hRaw', 'Raw number of events;log_{10}WP8CalOnlyEnergy;Cal1MomZDir', NBIN_ENE, LOWEDGE_ENE, UPEDGE_ENE, NBIN_CTH, LOWEDGE_CTH, UPEDGE_CTH)
+    hCalOnly = ROOT.TH2F('hCalOnly', 'Number of CalOnly events;log_{10}WP8CalOnlyEnergy;Cal1MomZDir', NBIN_ENE, LOWEDGE_ENE, UPEDGE_ENE, NBIN_CTH, LOWEDGE_CTH, UPEDGE_CTH)
     hRaw_CalTwrEdge = ROOT.TH2F('hRaw_CalTwrEdge', 'Raw number of events;CalTwrEdge;Cal1MomZDir', NBIN_CTE, LOWEDGE_CTE, UPEDGE_CTE, NBIN_CTH, LOWEDGE_CTH, UPEDGE_CTH)
     hCalOnly_CalTwrEdge = ROOT.TH2F('hCalOnly_CalTwrEdge', 'Number of CalOnly events;CalTwrEdge;Cal1MomZDir', NBIN_CTE, LOWEDGE_CTE, UPEDGE_CTE, NBIN_CTH, LOWEDGE_CTH, UPEDGE_CTH)
 #    hRaw_CalLATEdge = ROOT.TH2F('hRaw_CalLATEdge', 'Raw number of events;CalLATEdge;Cal1MomZDir', NBIN_CTE, LOWEDGE_CTE, UPEDGE_CTE, NBIN_CTH, LOWEDGE_CTH, UPEDGE_CTH)
@@ -57,11 +57,13 @@ def main(datafiles, suffix):
     hCalOnly.Write()
     hFraction = hCalOnly.Clone("hFraction")
     hFraction.SetTitle("Fraction of CalOnly events")
+    hFraction.Divide(hRaw)
     hFraction.Write()
     hRaw_CalTwrEdge.Write()
     hCalOnly_CalTwrEdge.Write()
     hFraction_CalTwrEdge = hCalOnly_CalTwrEdge.Clone("hFraction_CalTwrEdge")
     hFraction_CalTwrEdge.SetTitle("Fraction of CalOnly events")
+    hFraction_CalTwrEdge.Divide(hRaw_CalTwrEdge)
     hFraction_CalTwrEdge.Write()
 
 if __name__ == '__main__':
