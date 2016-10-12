@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import sys
 import numpy
 from math import log10
@@ -10,7 +11,13 @@ ROOT.gROOT.SetBatch()
 
 par = sys.argv
 print par
-aPathFiles = par[1:]
+strForce = par[1]
+if strForce=='True':
+    print "Overwriting is allowed."
+else:
+    print "Overwriting is NOT allowed."
+
+aPathFiles = par[2:]
 
 #newVar0 = array('f',[0.0])
 newVar1 = array('f',[0.0])
@@ -39,6 +46,9 @@ for pathFile in aPathFiles:
     print trDat.GetName(), "has", nEvt, "events."
     pathFileFr = pathFile[0:-5] + "_newVariables.root"
 #    pathFileFr.replace(".root", "_newVariables.root")
+    if strForce=='False' and os.path.isfile(pathFileFr)==True:
+        print pathFileFr, 'already exits.'
+        break
     if pathFileFr == pathFile:
         print pathFileFr
         sys.exit(-1)
