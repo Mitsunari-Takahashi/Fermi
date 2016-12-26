@@ -178,7 +178,7 @@ class TruePointSource(TrueSource):
                     arr_map[-1].append(hppf.UNSEEN)
             #print arr_map[-1]
             nparr_map = np.array(arr_map[-1])
-            hp.visufunc.cartview(nparr_map, iEne, tp_rotate, unit='photons cm^-2 s^-1 / {0} sr'.format(sa_pix), lonra=[-THRESHOLD_ANGDIST, THRESHOLD_ANGDIST], latra=[-THRESHOLD_ANGDIST, THRESHOLD_ANGDIST], title='{0} ({1:.3f} - {2:.3f} GeV)'.format(self.NAME, pow(10, arr_map_energy[-1][0]-3), pow(10, arr_map_energy[-1][1]-3)), min=0)#, flip='astro')
+            hp.visufunc.cartview(nparr_map, iEne, tp_rotate, unit='cm^-2 s^-1 / {0:.1E} sr'.format(sa_pix), lonra=[-THRESHOLD_ANGDIST, THRESHOLD_ANGDIST], latra=[-THRESHOLD_ANGDIST, THRESHOLD_ANGDIST], title='{0} ({1:.3f} - {2:.3f} GeV)'.format(self.NAME, pow(10, arr_map_energy[-1][0]-3), pow(10, arr_map_energy[-1][1]-3)), min=0)#, flip='astro')
             #plt.show()
             plt.savefig("{0}_NSIDE{1}_{2}-{3}.png".format(self.NAME, NHPSIDE, int(100*arr_map_energy[-1][0]+0.5), int(100*arr_map_energy[-1][1]+0.5)))
             #hp.fitsfunc.write_map("{0}_NSIDE{1}_{2}-{3}.fits".format(self.NAME, NHPSIDE, int(100*arr_map_energy[-1][0]+0.5), int(100*arr_map_energy[-1][1]+0.5)), nparr_map)
