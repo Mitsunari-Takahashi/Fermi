@@ -56,9 +56,12 @@ class TrueSource:
         self.dict_map = {} # Key is NSIDE
         self.dict_map_energy = {} # Key is NSIDE
         self.htg_sed_model = htg_sed.Clone('{0}_modeled'.format(htg_sed.GetName()))
+        self.htg_sederrSq_model = self.htg_sed_model.Clone('{0}_errSq'.format(self.htg_sed_model.GetName()))
         for hbin in range(1, self.htg_sed_model.GetNbinsX()+1):
             self.htg_sed_model.SetBinContent(hbin, 0)
             self.htg_sed_model.SetBinError(hbin, 0)
+            self.htg_sederrSq_model.SetBinContent(hbin, 0)
+            self.htg_sederrSq_model.SetBinError(hbin, 0)
 
 
 class TruePointSource(TrueSource):
@@ -118,7 +121,7 @@ class TruePointSource(TrueSource):
 
         HTG1_LT = HTG2_LIVETIME.ProjectionX("{0}_projTheta".format(HTG2_LIVETIME.GetName()), 1, HTG2_LIVETIME.GetYaxis().FindBin(self.ZENITH_CUT)-1)
         htg2_model = ROOT.TH2D("htg2_model_{0}".format(NHPSIDE), "Model of {0} (NSIDE={1})".format(self.NAME, NHPSIDE), NPIX, 0, NPIX, self.NBIN_ENERGY, self.EDGE_ENERGY_LOW, self.EDGE_ENERGY_UP)
-        htg2_model_errSq = ROOT.TH2D("htg2_model_errSq_{0}".format(NHPSIDE), "Square of flux error of {0} (NSIDE={1})".format(self.NAME, NHPSIDE), NPIX, 0, NPIX, self.NBIN_ENERGY, self.EDGE_ENERGY_LOW, self.EDGE_ENERGY_UP)
+#        htg2_model_errSq = ROOT.TH2D("htg2_model_errSq_{0}".format(NHPSIDE), "Square of flux error of {0} (NSIDE={1})".format(self.NAME, NHPSIDE), NPIX, 0, NPIX, self.NBIN_ENERGY, self.EDGE_ENERGY_LOW, self.EDGE_ENERGY_UP)
         if self.HTG_SED.GetNbinsX()!=self.NBIN_ENERGY:
             print "Number of energy bins is not matched between {0} and {1}.".format(self.HTG_SED.GetName(), htg2_model.GetName())
         # PSF
@@ -138,22 +141,26 @@ class TruePointSource(TrueSource):
                 print '    Exposure:', scale_exp, 'cm^2 s'
                 nphoton = flux_true_itgl*scale_exp
                 nphotonerr = fluxerr_true_itgl*scale_exp
-                htg2_model.Fill(iEne, nphoton)
-                htg2_model_errSq.Fill(iEne, nphotonerr**2)
+                self.htg_sed_model.Fill(self.htg_sed_model.GetBinCenter(iEne), nphoton)
+                #htg2_model_errSq.Fill(iEne, nphotonerr**2)
+                self.htg_sederrSq_model.Fill(self.htg_sed_model.GetBinCenter(iEne), nphotonerr**2)
                 print '    Number of photons:', nphoton, '+/-', nphotonerr
-                if nphoton>0:
+                kxbin = TP_HTG_KING[0].GetXaxis().FindBin(self.HTG_SED.GetXaxis().GetBinCenter(iEne))
+                kybin = TP_HTG_KING[0].GetYaxis().FindBin(HTG1_LT.GetBinCenter(iTh))
+                if nphoton>0 and kxbin>0 and kybin>0:
                     for ipar in range(3): # Setting the parameters of King function
                         # PSF
-                        par_value = TP_HTG_KING[ipar].GetBinContent(TP_HTG_KING[ipar].GetXaxis().FindBin(self.HTG_SED.GetXaxis().GetBinCenter(iEne)), TP_HTG_KING[ipar].GetYaxis().FindBin(HTG1_LT.GetBinCenter(iTh)))
+                        par_value = TP_HTG_KING[ipar].GetBinContent(kxbin, kybin)
                         print '    Parameter No.{0}:'.format(ipar), par_value
                         fc_King_annulus.FixParameter(ipar, par_value)
                         fc_King.FixParameter(ipar, par_value)
                     factor_norm = 1.0/fc_King_annulus.Integral(0, pi)
                     print '    Normalization factor:', factor_norm
                     for ipix in set_pix_roi:
-                        scale_psf = fc_King.Eval(dict_angdist[ipix])*hppf.nside2pixarea(NHPSIDE)
+                        scale_psf = fc_King.Eval(dict_angdist[ipix])
                         htg2_model.Fill(ipix+0.5, htg2_model.GetYaxis().GetBinCenter(iEne), nphoton*scale_psf*factor_norm*sa_pix)
-            htg2_model.SetBinError(iE, math.sqrt(htg2_model_errSq.GetBinError(iE)))
+            self.htg_sed_model.SetBinError(iEne, math.sqrt(self.htg_sederrSq_model.GetBinContent(iEne)))
+            print '  Observable:', self.htg_sed_model.GetBinContent(iEne), '+/-', self.htg_sed_model.GetBinError(iEne), 'photons'
             print ''
 
         print 'Making map...'
@@ -171,10 +178,12 @@ class TruePointSource(TrueSource):
                     arr_map[-1].append(hppf.UNSEEN)
             #print arr_map[-1]
             nparr_map = np.array(arr_map[-1])
-            hp.visufunc.cartview(nparr_map, iEne, tp_rotate, unit='photons cm^-2 s^-1', lonra=[-THRESHOLD_ANGDIST, THRESHOLD_ANGDIST], latra=[-THRESHOLD_ANGDIST, THRESHOLD_ANGDIST], title='{0} ({1:.3f} - {2:.3f} GeV)'.format(self.NAME, pow(10, arr_map_energy[-1][0]-3), pow(10, arr_map_energy[-1][1]-3)), min=0)#, flip='astro')
+            hp.visufunc.cartview(nparr_map, iEne, tp_rotate, unit='photons cm^-2 s^-1 / {0} sr'.format(sa_pix), lonra=[-THRESHOLD_ANGDIST, THRESHOLD_ANGDIST], latra=[-THRESHOLD_ANGDIST, THRESHOLD_ANGDIST], title='{0} ({1:.3f} - {2:.3f} GeV)'.format(self.NAME, pow(10, arr_map_energy[-1][0]-3), pow(10, arr_map_energy[-1][1]-3)), min=0)#, flip='astro')
             #plt.show()
             plt.savefig("{0}_NSIDE{1}_{2}-{3}.png".format(self.NAME, NHPSIDE, int(100*arr_map_energy[-1][0]+0.5), int(100*arr_map_energy[-1][1]+0.5)))
-            hp.fitsfunc.write_map("{0}_NSIDE{1}_{2}-{3}.fits".format(self.NAME, NHPSIDE, int(100*arr_map_energy[-1][0]+0.5), int(100*arr_map_energy[-1][1]+0.5)), nparr_map)
+            #hp.fitsfunc.write_map("{0}_NSIDE{1}_{2}-{3}.fits".format(self.NAME, NHPSIDE, int(100*arr_map_energy[-1][0]+0.5), int(100*arr_map_energy[-1][1]+0.5)), nparr_map)
+            htg1_model_px = htg2_model.ProjectionY('{0}_px{1}'.format(htg2_model.GetName(), iEne), 1, htg2_model.GetXaxis().GetNbins())
+            print '  ', htg1_model_px.GetBinContent(iEne), 'photons'
             
         self.dict_htg2_model[NHPSIDE] = htg2_model
         self.dict_arr_map[NHPSIDE] = arr_map
@@ -185,6 +194,7 @@ class TruePointSource(TrueSource):
         file_out = ROOT.TFile(path_file_out, 'UPDATE')
         file_out.cd()
         self.HTG_SED.Write()
+        self.htg_sed_model.Write()
         for model in self.dict_htg2_model.values():
             model.Write()
 
@@ -198,7 +208,7 @@ class TruePointSource(TrueSource):
 @click.option('--acceptance', type=str, default='/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28binx_Cth40bins_CalOnly_R100_perf.root')
 @click.argument('livetime', type=str)
 @click.option('--suffix', type=str, default='')
-@click.option('--nside', '-n', type=int, default='')
+@click.option('--nside', '-n', type=int, default=256)
 def main(name, sed, ra, dec, king, acceptance, livetime, suffix, nside):
     if math.log(nside,2)!=int(math.log(nside,2)) or nside>2**30:
         raise click.BadParameter('nside must be a power of 2, less than 2**30!!!')
@@ -231,7 +241,7 @@ def main(name, sed, ra, dec, king, acceptance, livetime, suffix, nside):
     src_true = TruePointSource(name, HTG_SED, ra, dec)
     src_model = src_true.model(TP_KING, HTG_LT, HTG_ACC, nside, THRESHOLD_ROI)
 
-    if suffix=='':
+    if suffix!='':
         suffix = "_" + suffix
     src_true.write('ModelingPointSource{0}.root'.format(suffix))
 
