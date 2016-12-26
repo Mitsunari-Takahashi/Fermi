@@ -63,36 +63,20 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
                 tplot = aSTART[iTI]-origin_time
                 vecSCX = np.array(hppf.ang2vec(math.pi/2.-math.radians(aDEC_SCX[iTI]), math.radians(aRA_SCX[iTI])))
                 vecSCZ = np.array(hppf.ang2vec(math.pi/2.-math.radians(aDEC_SCZ[iTI]), math.radians(aRA_SCZ[iTI])))
-                #vecSCY = np.cross(vecSCZ, vecSCX)
-                #aAngSCY = hppf.vec2ang(vecSCY)
-                #coordsSCY = SkyCoord(math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), unit="deg")
                 for iR in range(nRegion):
-                    for (jpix, coordsPix) in enumerate(aCoordsPix_array[iR]):
-                        angSCZ = coordsSCZ.separation(coordsPix)
+                    if aAreaPix_array[iR]==0:
+                        angSCZ = coordsSCZ.separation(aCoordsPix_array[iR])
                         radSCZ = float(angSCZ.to_string(unit=u.rad, decimal=True))
-                        #angSCY = coordsSCY.separation(coordsPix)
-                        #radSCY = float(angSCY.to_string(unit=u.rad, decimal=True))
                         angZenith = coordsZenith.separation(coordsPix)
                         degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
-                     #   aHtgLt[iR].Fill(cos(radSCZ), degZenith, (aSTART[iTI]+aSTOP[iTI])/2.-origin_time, tti*aAreaPix_array[iR][jpix])
-                        aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti*aAreaPix_array[iR][jpix])
+                        aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti)
+                    else:                        
+                        for (jpix, coordsPix) in enumerate(aCoordsPix_array[iR]):
+                            angSCZ = coordsSCZ.separation(coordsPix)
+                            radSCZ = float(angSCZ.to_string(unit=u.rad, decimal=True))
+                            angZenith = coordsZenith.separation(coordsPix)
+                            degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
+                            aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti*aAreaPix_array[iR][jpix])
                 if iTI%20==0:
                     print iTI, aSTART[iTI], aRA_SCZ[iTI], aDEC_SCZ[iTI], tbdataSC.field('LAT_MODE')[iTI]#math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), degZenith, math.degrees(radSCY)
-            #if iTI%1==0:
-             #   print iTI
-                #rate = int((aSTOP[iTI]-metStart)/(metStop-metStart)*100.+0.5)
-              #  rate = int(iTI/nTI*100.+0.5)
-               # if rate>0:
-                #    nt = (datetime.datetime.now() - timeStart).seconds * (100.-rate)/rate
-                 #   if iTI%2==0:
-                  #      meter = "\r[{0}{1}] Wait {2} hr {3} min".format("=" * rate, ' ' * (100-rate), int(nt/3600), (int(nt)%3600)/60+1)
-                   # else:
-                    #    meter = "\r[{0}{1}]".format("=" * rate, ' ' * (100-rate))
-                #else:
-                 #   meter = "\r[{0}{1}]".format("=" * rate, ' ' * (100-rate))
-                #sys.stdout.write(meter
-                #sys.stdout.write("\r{0}".format(tplot))
-                #sys.stdout.write("coordsPix: {0}\n".format(coordsPix))
-                #sys.stdout.write("angSCZ: {0}\n".format(angSCZ))
-                #sys.stdout.write("angZenith: {0}\n\n".format(angZenith))
                 sys.stdout.flush()
