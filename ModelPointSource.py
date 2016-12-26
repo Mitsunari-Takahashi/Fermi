@@ -55,6 +55,10 @@ class TrueSource:
         self.dict_htg2_model = {} # Key is NSIDE
         self.dict_map = {} # Key is NSIDE
         self.dict_map_energy = {} # Key is NSIDE
+        self.htg_sed_model = htg_sed.Clone('{0}_modeled'.format(htg_sed.GetName()))
+        for hbin in range(1, self.htg_sed_model.GetNbinsX()+1):
+            self.htg_sed_model.SetBinContent(hbin, 0)
+            self.htg_sed_model.SetBinError(hbin, 0)
 
 
 class TruePointSource(TrueSource):
@@ -114,6 +118,7 @@ class TruePointSource(TrueSource):
 
         HTG1_LT = HTG2_LIVETIME.ProjectionX("{0}_projTheta".format(HTG2_LIVETIME.GetName()), 1, HTG2_LIVETIME.GetYaxis().FindBin(self.ZENITH_CUT)-1)
         htg2_model = ROOT.TH2D("htg2_model_{0}".format(NHPSIDE), "Model of {0} (NSIDE={1})".format(self.NAME, NHPSIDE), NPIX, 0, NPIX, self.NBIN_ENERGY, self.EDGE_ENERGY_LOW, self.EDGE_ENERGY_UP)
+        htg2_model_errSq = ROOT.TH2D("htg2_model_errSq_{0}".format(NHPSIDE), "Square of flux error of {0} (NSIDE={1})".format(self.NAME, NHPSIDE), NPIX, 0, NPIX, self.NBIN_ENERGY, self.EDGE_ENERGY_LOW, self.EDGE_ENERGY_UP)
         if self.HTG_SED.GetNbinsX()!=self.NBIN_ENERGY:
             print "Number of energy bins is not matched between {0} and {1}.".format(self.HTG_SED.GetName(), htg2_model.GetName())
         # PSF
@@ -122,15 +127,21 @@ class TruePointSource(TrueSource):
 
         for iEne in range(1, self.HTG_SED.GetNbinsX()+1):
             print 'Energy:', self.HTG_SED.GetXaxis().GetBinLowEdge(iEne), '-', self.HTG_SED.GetXaxis().GetBinUpEdge(iEne)
-            flux_true_diff = self.HTG_SED.GetBinContent(iEne)
-            print '  Flux:', flux_true_diff
+            flux_true_itgl = self.HTG_SED.GetBinContent(iEne)
+            fluxerr_true_itgl = self.HTG_SED.GetBinError(iEne)
+            print '  Flux:', flux_true_itgl, '+/-', fluxerr_true_itgl, '[photons cm^-2 s^-1]'
             for iTh in range(1, HTG1_LT.GetNbinsX()+1):
                 print '  cos(Inclination angle):', HTG1_LT.GetXaxis().GetBinLowEdge(iTh), '-', HTG1_LT.GetXaxis().GetBinUpEdge(iTh)
                 scale_aeff = HTG2_ACCEPTANCE.GetBinContent(HTG2_ACCEPTANCE.GetXaxis().FindBin(self.HTG_SED.GetXaxis().GetBinCenter(iEne)), HTG2_ACCEPTANCE.GetYaxis().FindBin(HTG1_LT.GetXaxis().GetBinCenter(iTh))) / (2*math.pi*HTG2_ACCEPTANCE.GetYaxis().GetBinWidth(HTG2_ACCEPTANCE.GetYaxis().FindBin(HTG1_LT.GetXaxis().GetBinCenter(iTh)))) # Effective area [m^2]
                 print '    Effective area:', scale_aeff, 'm^2'
                 scale_exp = scale_aeff * 100.**2 * HTG1_LT.GetBinContent(iTh) # Integrated exposure value for a certain energy and inclination angle [cm^2 s]
                 print '    Exposure:', scale_exp, 'cm^2 s'
-                if scale_exp>0:
+                nphoton = flux_true_itgl*scale_exp
+                nphotonerr = fluxerr_true_itgl*scale_exp
+                htg2_model.Fill(iEne, nphoton)
+                htg2_model_errSq.Fill(iEne, nphotonerr**2)
+                print '    Number of photons:', nphoton, '+/-', nphotonerr
+                if nphoton>0:
                     for ipar in range(3): # Setting the parameters of King function
                         # PSF
                         par_value = TP_HTG_KING[ipar].GetBinContent(TP_HTG_KING[ipar].GetXaxis().FindBin(self.HTG_SED.GetXaxis().GetBinCenter(iEne)), TP_HTG_KING[ipar].GetYaxis().FindBin(HTG1_LT.GetBinCenter(iTh)))
@@ -141,7 +152,8 @@ class TruePointSource(TrueSource):
                     print '    Normalization factor:', factor_norm
                     for ipix in set_pix_roi:
                         scale_psf = fc_King.Eval(dict_angdist[ipix])*hppf.nside2pixarea(NHPSIDE)
-                        htg2_model.Fill(ipix+0.5, htg2_model.GetYaxis().GetBinCenter(iEne), flux_true_diff*scale_psf*scale_exp*factor_norm*sa_pix)
+                        htg2_model.Fill(ipix+0.5, htg2_model.GetYaxis().GetBinCenter(iEne), nphoton*scale_psf*factor_norm*sa_pix)
+            htg2_model.SetBinError(iE, math.sqrt(htg2_model_errSq.GetBinError(iE)))
             print ''
 
         print 'Making map...'
@@ -210,7 +222,7 @@ def main(name, sed, ra, dec, king, acceptance, livetime, suffix, nside):
     print HTG_ACC.GetName(), 'has been found.'
 
     FILE_LT = ROOT.TFile(livetime, 'READ')
-    HTG_LT = FILE_LT.Get('htgLt_GRB160509374_0_yx') #TBD
+    HTG_LT = FILE_LT.Get('htgLt_0_yx') #TBD
     print HTG_LT.GetName(), 'has been found.'
 
 #    NSIDE_healpy = 128
