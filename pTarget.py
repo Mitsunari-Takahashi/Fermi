@@ -19,7 +19,7 @@ class Target:
         self.energyPlot = ePlotRegion
         self.saOn = [1.,1.]
         self.saOff = [1.,1.]
-        self.factorOn = 1.5
+        self.factorOn = 1.0 #1.5
         self.ulOn = 4.5
         self.zCut = config.zCut
         self.tStart = tStart
@@ -505,6 +505,9 @@ class PointSource(Target):
                         if not (self.rOffMax[ict][icl][-1]<=self.radius and self.rOffMin[ict][icl][-1]<self.rOffMax[ict][icl][-1] and self.rOnMax[ict][icl][-1]<=self.rOffMin[ict][icl][-1] and self.rOnMax[ict][icl][-1]>0):
                             print "Bad region setup!!"
                             sys.exit(1)
+                    print 'ON region:0.0 -', self.rOnMax[ict][icl][-1], 'deg'
+                    print 'OFF region:', self.rOnMin[ict][icl][-1], '-', self.rOffMax[ict][icl][-1], 'deg'
+                    print 'cf. PSF68:', self.perf.getPSF68(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0), 'deg', 'PSF95:', self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0), 'deg'
                     self.saOn[ict][icl].append( 2.0 * math.pi * ( cos(radians(0.0)) - cos(radians(self.rOnMax[ict][icl][-1])) ) )
                     self.saOff[ict][icl].append( 2.0 * math.pi * ( cos(radians(self.rOffMin[ict][icl][-1])) - cos(radians(self.rOffMax[ict][icl][-1])) ) )
             
