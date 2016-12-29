@@ -8,12 +8,17 @@ import numpy as np
 import datetime
 import ROOT
 from ROOT import gROOT, gDirectory, gPad, gSystem, gStyle, kTRUE, kFALSE
+import healpy as hp
+from healpy import pixelfunc as hppf
 # Original modules
 from pAnalysisConfig import *
 import pCandleCatalogue
 import pTransientCatalogue
 from pTarget import *
+from pHealplot import Healcube
 from pColor import *
+
+
 par = sys.argv
 print par
 if len(par)<2:
@@ -78,6 +83,22 @@ limb = EarthLimb("EarthLimb", config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=
 aInnerGal = [ InnerGalaxy("InnerGalaxyR41", 41, config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=erplot)]
 for obj in pCandleCatalogue.aObjectDict:
     aTgt.append(PointSource(obj["Name"], obj["RA"], obj["DEC"], obj["L"], obj["B"], obj["Z"], rAppa, rOffMax, rOffMin, rOnMax, cfg, er, erplot, htgPerf))
+
+#HEALPix plot
+NHPSIDE = 64
+NHPPIX = hppf.nside2npix(NHPSIDE)
+print 'HEALPix resolution:', degrees(hppf.nside2resol(NHPSIDE)), 'deg'
+li_hp_count_equ = []
+#li_hp_count_tel = []
+for sE in range(erplot.nBin):
+    li_hp_count_equ.append([])
+    for liCategory in listPathFilePerf:
+        li_hp_count_equ[-1].append([])
+        #li_hp_count_tel[-1].append([])
+        for perfClass in liCategory:
+            li_hp_count_equ[-1][-1].append(np.zeros(NHPPIX))
+           #li_hp_count_tel[-1][-1].append(np.zeros(NHPPIX))
+
 print ""
 print "================"
 print "Filling events."
@@ -96,6 +117,11 @@ for iEve in range(ch.GetEntries()):
         cls = 2
     elif ch.s==4 or ch.s==4096:
         cls = 1
+    energybin = erplot.findBin(ch.e)
+    if energybin>=0 and energybin<erplot.nBin:
+        for clsPlus in range(cls-int(ch.c==1 and cls==3)):
+            li_hp_count_equ[energybin][ch.c-1][clsPlus][hppf.ang2pix(NHPSIDE, math.pi/2.-math.radians(ch.dec), math.radians(ch.ra))]=+1
+           #li_hp_count_tel[ch.c-1][clsPlus][hppf.ang2pix(NHPSIDE, pi/2.-math.radians(ch.dec), math.radians(ch.ra))]=+1
     ridge.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth)
     limb.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth)
     for ingal in aInnerGal:
@@ -144,7 +170,7 @@ fileOut.mkdir(ridge.name)
 fileOut.cd(ridge.name)
 ridge.calc()
 fileOut.cd(ridge.name)
-ridge.draw()
+ridge.draw(li_hp_count_equ)
 ridge.writeObjects()
 print "*", limb.name
 fileOut.cd()
@@ -170,7 +196,7 @@ for tgt in aTgt:
     fileOut.cd(tgt.name)
     tgt.calc()
     fileOut.cd(tgt.name)
-    tgt.draw()
+    tgt.draw(li_hp_count_equ)
     tgt.writeObjects()
 for trs in aTrs:
     print "*", trs.name
