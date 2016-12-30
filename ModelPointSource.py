@@ -28,8 +28,12 @@ import matplotlib.pyplot as plt
 
 
 class TrueSource: 
-    def __init__(self, name_src, spatial_type="Point-like", htg_sed=""):
+    def __init__(self, name_src, path_file_out, spatial_type="Point-like", htg_sed=""):
         self.NAME = name_src
+        self.PATH_OUT = path_file_out
+        self.FILE_OUT= ROOT.TFile(self.PATH_OUT, 'UPDATE')
+        self.FILE_OUT.cd()
+
         self.SPATIAL_TYPE = spatial_type
         #self.NBIN_ZENITH = 28
         #self.EDGE_ZENITH_LOW = 4.35
@@ -71,8 +75,8 @@ class TrueSource:
 
 
 class TruePointSource(TrueSource):
-    def __init__(self, name_src, htg_sed, ra, dec):
-        TrueSource.__init__(self, name_src, "Point-like", htg_sed)
+    def __init__(self, name_src, path_file_out, htg_sed, ra, dec):
+        TrueSource.__init__(self, name_src, path_file_out, "Point-like", htg_sed)
         self.RA = ra
         self.DEC = dec
         self.RA_RAD = radians(self.RA)
@@ -81,7 +85,7 @@ class TruePointSource(TrueSource):
         self.dict_arr_map_energy = {}
 
 
-    def model(self, TP_HTG_KING, HTG2_LIVETIME, HTG2_ACCEPTANCE, NHPSIDE=256, THRESHOLD_ANGDIST=15, tpl_path_perf=('/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R30_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R10_perf.root')):
+    def model(self, TP_HTG_KING, HTG2_LIVETIME, HTG2_ACCEPTANCE, NHPSIDE=256, THRESHOLD_ANGDIST=15, tpl_path_perf=('/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root', '/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R30_perf.root', '/nfs/farm/g/glast/u/mtakahas/v20r09p09_G1haB1/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R10_perf.root')):
         """Model the point source with the PSF of King function. Energy dispersion is ignored currently.
         """
         PIX_TRUE = hppf.ang2pix(NHPSIDE, pi/2.-self.DEC_RAD, self.RA_RAD) # #Pixel the true position of the source locates in
@@ -159,17 +163,21 @@ class TruePointSource(TrueSource):
                         htg2_model.Fill(ipix+0.5, htg2_model.GetYaxis().GetBinCenter(iEne), nphoton*scale_psf*factor_norm*sa_pix)
                         for cla in self.TPL_STR_CLASS:
                             deg_psf68 = dct_htg_psf68[cla].GetBinContent(dct_htg_psf68[cla].FindBin(self.HTG_SED.GetBinCenter(iEne)))
-                            if radians(deg_psf68)<dict_angdist[ipix]:
-                                dct_htg2_model_on[cla].SetBinContent(ipix, 1)
+                            if radians(min(4.5, 1.5*deg_psf68))>dict_angdist[ipix]:
+                                dct_htg2_model_on[cla].SetBinContent(ipix, iEne, 1)
                             else:
-                                dct_htg2_model_on[cla].SetBinContent(ipix, 0)
+                                dct_htg2_model_on[cla].SetBinContent(ipix, iEne, 0)
             self.htg_sed_model.SetBinError(iEne, math.sqrt(self.htg_sederrSq_model.GetBinContent(iEne)))
             print '  Observable:', self.htg_sed_model.GetBinContent(iEne), '+/-', self.htg_sed_model.GetBinError(iEne), 'photons'
             print ''
 
         for cla in self.TPL_STR_CLASS:
-            dct_htg2_model_on[cla] = ct_htg2_model_on[cla].Multiply(htg2_model)
-            self.dct_htg_sed_model_on[cla] = dct_htg2_model_on[cla].ProjectionX('{0}_on_{1}'.format(self.htg_sed_model.GetName(), cla))
+            print cla
+            print dct_htg2_model_on[cla].Integral()
+            dct_htg2_model_on[cla].Multiply(htg2_model)
+            print dct_htg2_model_on[cla].Integral()
+            self.dct_htg_sed_model_on[cla] = dct_htg2_model_on[cla].ProjectionY('{0}_on_{1}'.format(self.htg_sed_model.GetName(), cla))
+            print 'ON photon number:', self.dct_htg_sed_model_on[cla].Integral()
 
         print 'Making map...'
         arr_map = []
@@ -193,6 +201,14 @@ class TruePointSource(TrueSource):
             htg1_model_px = htg2_model.ProjectionY('{0}_px{1}'.format(htg2_model.GetName(), iEne), 1, htg2_model.GetXaxis().GetNbins())
             print '  ', htg1_model_px.GetBinContent(iEne), 'photons'
             
+        self.FILE_OUT.cd()
+        self.HTG_SED.Write()
+        self.htg_sed_model.Write()
+        for model in self.dict_htg2_model.values():
+            model.Write()
+        for sed_on in self.dct_htg_sed_model_on.values():
+            sed_on.Write()
+
         self.dict_htg2_model[NHPSIDE] = htg2_model
         self.dict_arr_map[NHPSIDE] = arr_map
         self.dict_arr_map_energy[NHPSIDE] = arr_map_energy
@@ -205,8 +221,10 @@ class TruePointSource(TrueSource):
         self.htg_sed_model.Write()
         for model in self.dict_htg2_model.values():
             model.Write()
-        for cla in self.TPL_STR_CLASS:
-            self.dct_htg_sed_model_on[cla].Write()
+        print self.dct_htg_sed_model_on
+        for sed_on in self.dct_htg_sed_model_on.values():
+            print sed_on
+            sed_on.Write()
 
 
 @click.command()
@@ -248,12 +266,12 @@ def main(name, sed, ra, dec, king, acceptance, livetime, suffix, nside):
 #    NSIDE_healpy = 128
     THRESHOLD_ROI = 15
 
-    src_true = TruePointSource(name, HTG_SED, ra, dec)
-    src_model = src_true.model(TP_KING, HTG_LT, HTG_ACC, nside, THRESHOLD_ROI)
-
     if suffix!='':
         suffix = "_" + suffix
-    src_true.write('ModelingPointSource{0}.root'.format(suffix))
+
+    src_true = TruePointSource(name, 'ModelingPointSource_{0}{1}.root'.format(name, suffix), HTG_SED, ra, dec)
+    src_model = src_true.model(TP_KING, HTG_LT, HTG_ACC, nside, THRESHOLD_ROI)
+#    src_true.write('ModelingPointSource{0}.root'.format(suffix))
 
 
 if __name__ == '__main__':
