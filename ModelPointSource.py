@@ -48,11 +48,13 @@ class TrueSource:
                 htg_sed.SetBinContent(hbin, li_flux[hbin])
                 htg_sed.SetBinError(hbin, li_flux_err[hbin])
             htg_sed.Rebin(2)
+        self.TPL_STR_CLASS = ('CalOnlyR100', 'CalOnlyR30', 'CalOnlyR10')
         self.HTG_SED = htg_sed # [ photons / cm^2 / sec ]
         self.NBIN_ENERGY = htg_sed.GetXaxis().GetNbins()
         self.EDGE_ENERGY_LOW = htg_sed.GetXaxis().GetXmin()
         self.EDGE_ENERGY_UP = htg_sed.GetXaxis().GetXmax()
         self.dict_htg2_model = {} # Key is NSIDE
+        self.dict_htg2_on = {} # Key is NSIDE
         self.dict_map = {} # Key is NSIDE
         self.dict_map_energy = {} # Key is NSIDE
         self.htg_sed_model = htg_sed.Clone('{0}_modeled'.format(htg_sed.GetName()))
@@ -62,6 +64,10 @@ class TrueSource:
             self.htg_sed_model.SetBinError(hbin, 0)
             self.htg_sederrSq_model.SetBinContent(hbin, 0)
             self.htg_sederrSq_model.SetBinError(hbin, 0)
+        self.dct_htg_sed_model_on = {}
+        #for clas in self.TPL_STR_CLASS:
+         #   self.dct_htg_sed_model_on[clas] = self.htg_sed_model.Clone('{0}_on_{1}'.format(self.htg_sed_model.GetName(), clas))
+            #self.htg_sederrSq_model_on = self.htg_sederrSq_model.Clone('{0}_on_{1}'.format(self.htg_sederrSq_model.GetName(), clas))
 
 
 class TruePointSource(TrueSource):
@@ -75,7 +81,7 @@ class TruePointSource(TrueSource):
         self.dict_arr_map_energy = {}
 
 
-    def model(self, TP_HTG_KING, HTG2_LIVETIME, HTG2_ACCEPTANCE, NHPSIDE=256, THRESHOLD_ANGDIST=15):
+    def model(self, TP_HTG_KING, HTG2_LIVETIME, HTG2_ACCEPTANCE, NHPSIDE=256, THRESHOLD_ANGDIST=15, tpl_path_perf=('/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R30_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R10_perf.root')):
         """Model the point source with the PSF of King function. Energy dispersion is ignored currently.
         """
         PIX_TRUE = hppf.ang2pix(NHPSIDE, pi/2.-self.DEC_RAD, self.RA_RAD) # #Pixel the true position of the source locates in
@@ -92,36 +98,28 @@ class TruePointSource(TrueSource):
         # ROI
         set_pix_roi = set([])
         dict_angdist = {}
-#        li_lon = [self.RA_RAD-pi, self.RA_RAD-pi] #Min, Max
-#        li_lat = [self.DEC_RAD, self.DEC_RAD] #Min, Max
         for ipix in range(NPIX):
             tp_pix = hppf.pix2ang(NHPSIDE, ipix)
-            #coo_pix = SkyCoord(tp_pix[1], pi/2.-tp_pix[0], unit="rad")
-            #ang_pix2src = coo_src.separation(coo_pix) # Angular distance between the souece and the pixel center
             dict_angdist[ipix] = hp.rotator.angdist(tp_pix, TP_DIR_TRUE) #float(ang_pix2src.to_string(unit=u.rad, decimal=True)) # Angular distance between the source and each pixel in radians
             if dict_angdist[ipix] < THRESHOLD_ANGDIST_RADIANS:
                 set_pix_roi.add(ipix)
-                # arr_ang_pix = hppf.pix2ang(NHPSIDE, ipix) #Theta, Phi
-                # lat_pix = pi/2.-arr_ang_pix[0] #Theta -> Lat
-                # lon_pix = arr_ang_pix[1]-pi #Theta -> Lat
-                # if lat_pix<li_lat[0]:
-                #     li_lat[0] = lat_pix
-                # if lat_pix>li_lat[1]:
-                #     li_lat[1] = lat_pix
-                # if lon_pix<li_lon[0]:
-                #     li_lon[0] = lon_pix
-                # if lon_pix>li_lon[1]:
-                #     li_lon[1] = lon_pix
 
         print 'ROI pixels:', set_pix_roi
-        # li_lon_deg = (degrees(li_lon[0]), degrees(li_lon[1]))
-        # li_lat_deg = (degrees(li_lat[0]), degrees(li_lat[1]))
-        # print 'Longitude range:', li_lon_deg, '[deg]'
-        # print 'Latitude range:', li_lat_deg, '[deg]'
 
         HTG1_LT = HTG2_LIVETIME.ProjectionX("{0}_projTheta".format(HTG2_LIVETIME.GetName()), 1, HTG2_LIVETIME.GetYaxis().FindBin(self.ZENITH_CUT)-1)
         htg2_model = ROOT.TH2D("htg2_model_{0}".format(NHPSIDE), "Model of {0} (NSIDE={1})".format(self.NAME, NHPSIDE), NPIX, 0, NPIX, self.NBIN_ENERGY, self.EDGE_ENERGY_LOW, self.EDGE_ENERGY_UP)
-#        htg2_model_errSq = ROOT.TH2D("htg2_model_errSq_{0}".format(NHPSIDE), "Square of flux error of {0} (NSIDE={1})".format(self.NAME, NHPSIDE), NPIX, 0, NPIX, self.NBIN_ENERGY, self.EDGE_ENERGY_LOW, self.EDGE_ENERGY_UP)
+
+        # Preparation of ON region setup
+        dct_htg2_model_on = {}
+        dct_path_perf = {}
+        dct_file_perf = {}
+        dct_htg_psf68 = {}
+        for (icla,cla) in enumerate(self.TPL_STR_CLASS):
+            dct_htg2_model_on[cla] = htg2_model.Clone('{0}_ON_{1}'.format(htg2_model.GetName(), cla))
+            dct_path_perf[cla] = tpl_path_perf[icla]
+            dct_file_perf[cla] = ROOT.TFile(dct_path_perf[cla], 'READ')
+            dct_htg_psf68[cla] = dct_file_perf[cla].Get('psf_q68_hist')
+
         if self.HTG_SED.GetNbinsX()!=self.NBIN_ENERGY:
             print "Number of energy bins is not matched between {0} and {1}.".format(self.HTG_SED.GetName(), htg2_model.GetName())
         # PSF
@@ -159,9 +157,19 @@ class TruePointSource(TrueSource):
                     for ipix in set_pix_roi:
                         scale_psf = fc_King.Eval(dict_angdist[ipix])
                         htg2_model.Fill(ipix+0.5, htg2_model.GetYaxis().GetBinCenter(iEne), nphoton*scale_psf*factor_norm*sa_pix)
+                        for cla in self.TPL_STR_CLASS:
+                            deg_psf68 = dct_htg_psf68[cla].GetBinContent(dct_htg_psf68[cla].FindBin(self.HTG_SED.GetBinCenter(iEne)))
+                            if radians(deg_psf68)<dict_angdist[ipix]:
+                                dct_htg2_model_on[cla].SetBinContent(ipix, 1)
+                            else:
+                                dct_htg2_model_on[cla].SetBinContent(ipix, 0)
             self.htg_sed_model.SetBinError(iEne, math.sqrt(self.htg_sederrSq_model.GetBinContent(iEne)))
             print '  Observable:', self.htg_sed_model.GetBinContent(iEne), '+/-', self.htg_sed_model.GetBinError(iEne), 'photons'
             print ''
+
+        for cla in self.TPL_STR_CLASS:
+            dct_htg2_model_on[cla] = ct_htg2_model_on[cla].Multiply(htg2_model)
+            self.dct_htg_sed_model_on[cla] = dct_htg2_model_on[cla].ProjectionX('{0}_on_{1}'.format(self.htg_sed_model.GetName(), cla))
 
         print 'Making map...'
         arr_map = []
@@ -197,6 +205,8 @@ class TruePointSource(TrueSource):
         self.htg_sed_model.Write()
         for model in self.dict_htg2_model.values():
             model.Write()
+        for cla in self.TPL_STR_CLASS:
+            self.dct_htg_sed_model_on[cla].Write()
 
 
 @click.command()
