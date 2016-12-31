@@ -15,7 +15,7 @@ from pAnalysisConfig import *
 import pCandleCatalogue
 import pTransientCatalogue
 from pTarget import *
-from pHealplot import Healcube
+from pHealplot import Healcube, Setdistance
 from pColor import *
 
 
@@ -62,6 +62,7 @@ listPathFilePerf = [
 cfg = ClassConfig('Both', [10, 3, 1])
 er = EnergyLogRegion(7, 4.35, 0.2)
 erplot = er #EnergyLogRegion(4, 4.75, 0.25)
+cthr = EnergyLogRegion(10, 0.0, 0.1)
 aaStrSelect = cfg.aaStrSelect
 aStrSelect = cfg.aStrSelect
 
@@ -88,16 +89,17 @@ for obj in pCandleCatalogue.aObjectDict:
 NHPSIDE = 64
 NHPPIX = hppf.nside2npix(NHPSIDE)
 print 'HEALPix resolution:', degrees(hppf.nside2resol(NHPSIDE)), 'deg'
-li_hp_count_equ = []
+lstt_hp_htg = []
 #li_hp_count_tel = []
-for sE in range(erplot.nBin):
-    li_hp_count_equ.append([])
-    for liCategory in listPathFilePerf:
-        li_hp_count_equ[-1].append([])
-        #li_hp_count_tel[-1].append([])
-        for perfClass in liCategory:
-            li_hp_count_equ[-1][-1].append(np.zeros(NHPPIX))
-           #li_hp_count_tel[-1][-1].append(np.zeros(NHPPIX))
+for (icat, cat) in enumerate(aStrSelect):
+    lstt_hp_htg.append([])
+    #li_hp_count_tel.append([])
+    for (icla, cla) in enumerate(aaStrSelect[icat]):
+        lstt_hp_htg[-1].append(ROOT.TH3D('htg3D_{0}'.format(cla), cla, erplot.nBin, erplot.edgeLow, erplot.edgeUp, cthr.nBin, cthr.edgeLow, cthr.edgeUp, NHPPIX, 0, NHPPIX))
+       #li_hp_count_tel[-1].append(np.zeros(NHPPIX))
+
+# Smearing
+Setdistance(NHPSIDE)
 
 print ""
 print "================"
@@ -118,9 +120,9 @@ for iEve in range(ch.GetEntries()):
     elif ch.s==4 or ch.s==4096:
         cls = 1
     energybin = erplot.findBin(ch.e)
-    if energybin>=0 and energybin<erplot.nBin:
+    if ch.z<90 and energybin>=0 and energybin<erplot.nBin:
         for clsPlus in range(cls-int(ch.c==1 and cls==3)):
-            li_hp_count_equ[energybin][ch.c-1][clsPlus][hppf.ang2pix(NHPSIDE, math.pi/2.-math.radians(ch.dec), math.radians(ch.ra))]=+1
+            lstt_hp_htg[ch.c-1][clsPlus].Fill(ch.e, ch.cth, hppf.ang2pix(NHPSIDE, math.pi/2.-math.radians(ch.dec), math.radians(ch.ra))+0.5)
            #li_hp_count_tel[ch.c-1][clsPlus][hppf.ang2pix(NHPSIDE, pi/2.-math.radians(ch.dec), math.radians(ch.ra))]=+1
     ridge.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth)
     limb.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth)
@@ -170,8 +172,11 @@ fileOut.mkdir(ridge.name)
 fileOut.cd(ridge.name)
 ridge.calc()
 fileOut.cd(ridge.name)
-ridge.draw(li_hp_count_equ)
+ridge.draw(lstt_hp_htg)
 ridge.writeObjects()
+for lstcat in lstt_hp_htg:
+    for htgcla in lstcat:
+        htgcla.Write()
 print "*", limb.name
 fileOut.cd()
 fileOut.mkdir(limb.name)
@@ -196,7 +201,7 @@ for tgt in aTgt:
     fileOut.cd(tgt.name)
     tgt.calc()
     fileOut.cd(tgt.name)
-    tgt.draw(li_hp_count_equ)
+    tgt.draw(lstt_hp_htg)
     tgt.writeObjects()
 for trs in aTrs:
     print "*", trs.name
