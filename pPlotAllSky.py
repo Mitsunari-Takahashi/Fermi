@@ -15,7 +15,7 @@ from pAnalysisConfig import *
 import pCandleCatalogue
 import pTransientCatalogue
 from pTarget import *
-from pHealplot import Healcube
+from pHealplot import Healcube, Setdistance, Smear
 from pColor import *
 
 
@@ -34,7 +34,7 @@ ROOT.gStyle.SetPadTickY(True)
 ROOT.gStyle.SetPalette(53)
 
 psfCalOnly = 3.0
-listFileTr = par[2:]
+listFileTr = par[3:]
 print listFileTr
 ch = ROOT.TChain("EVENTS")
 for nameFileTr in listFileTr:
@@ -62,6 +62,7 @@ listPathFilePerf = [
 cfg = ClassConfig('Both', [10, 3, 1])
 er = EnergyLogRegion(7, 4.35, 0.2)
 erplot = er #EnergyLogRegion(4, 4.75, 0.25)
+cthr = EnergyLogRegion(10, 0.0, 0.1)
 aaStrSelect = cfg.aaStrSelect
 aStrSelect = cfg.aStrSelect
 
@@ -73,6 +74,13 @@ rAppa=20#rOffMax[1]
 rOnMax=[0.45, psfCalOnly]
 rOffMin=[2.*rOnMax[0], 2.*rOnMax[1]]
 
+# For HEALPix plots
+NHPSIDE = int(par[2]) #8
+NHPPIX = hppf.nside2npix(NHPSIDE)
+print 'HEALPix plots: ', NHPPIX, 'pixels'
+print 'HEALPix resolution:', degrees(hppf.nside2resol(NHPSIDE)), 'deg'
+
+# Target objects
 aTgt = []
 aTrs = []
 print "Target list: "
@@ -82,22 +90,23 @@ limb = EarthLimb("EarthLimb", config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=
 #aInnerGal = [InnerGalaxy("InnerGalaxyR16", 16, config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=erplot), InnerGalaxy("InnerGalaxyR41", 41, config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=erplot)]
 aInnerGal = [ InnerGalaxy("InnerGalaxyR41", 41, config=cfg, perf=htgPerf, eRegion=er, ePlotRegion=erplot)]
 for obj in pCandleCatalogue.aObjectDict:
-    aTgt.append(PointSource(obj["Name"], obj["RA"], obj["DEC"], obj["L"], obj["B"], obj["Z"], rAppa, rOffMax, rOffMin, rOnMax, cfg, er, erplot, htgPerf))
+    aTgt.append(PointSource(obj["Name"], obj["RA"], obj["DEC"], obj["L"], obj["B"], obj["Z"], rAppa, rOffMax, rOffMin, rOnMax, cfg, er, erplot, htgPerf, nhpside=NHPSIDE))
 
-#HEALPix plot
-NHPSIDE = 64
-NHPPIX = hppf.nside2npix(NHPSIDE)
-print 'HEALPix resolution:', degrees(hppf.nside2resol(NHPSIDE)), 'deg'
-li_hp_count_equ = []
+lstt_hp_htg = []
 #li_hp_count_tel = []
-for sE in range(erplot.nBin):
-    li_hp_count_equ.append([])
-    for liCategory in listPathFilePerf:
-        li_hp_count_equ[-1].append([])
-        #li_hp_count_tel[-1].append([])
-        for perfClass in liCategory:
-            li_hp_count_equ[-1][-1].append(np.zeros(NHPPIX))
-           #li_hp_count_tel[-1][-1].append(np.zeros(NHPPIX))
+#for (icat, cat) in enumerate(aStrSelect):
+#    lstt_hp_htg.append([])
+    #li_hp_count_tel.append([])
+#    for (icla, cla) in enumerate(aaStrSelect[icat]):
+#        lstt_hp_htg[-1].append(ROOT.TH3D('htg3D_{0}'.format(cla), cla, erplot.nBin, erplot.edgeLow, erplot.edgeUp, cthr.nBin, cthr.edgeLow, cthr.edgeUp, NHPPIX, 0, NHPPIX))
+       #li_hp_count_tel[-1].append(np.zeros(NHPPIX))
+
+# Preparation of smearing
+# print ""
+# print "======================================="
+# print "Pixel distance table is being produced."
+# print "======================================="
+# nparr_dist = Setdistance(NHPSIDE)
 
 print ""
 print "================"
@@ -118,9 +127,9 @@ for iEve in range(ch.GetEntries()):
     elif ch.s==4 or ch.s==4096:
         cls = 1
     energybin = erplot.findBin(ch.e)
-    if energybin>=0 and energybin<erplot.nBin:
-        for clsPlus in range(cls-int(ch.c==1 and cls==3)):
-            li_hp_count_equ[energybin][ch.c-1][clsPlus][hppf.ang2pix(NHPSIDE, math.pi/2.-math.radians(ch.dec), math.radians(ch.ra))]=+1
+#    if ch.z<90 and energybin>=0 and energybin<erplot.nBin:
+#        for clsPlus in range(cls-int(ch.c==1 and cls==3)):
+#            lstt_hp_htg[ch.c-1][clsPlus].Fill(ch.e, ch.cth, hppf.ang2pix(NHPSIDE, math.pi/2.-math.radians(ch.dec), math.radians(ch.ra))+0.5)
            #li_hp_count_tel[ch.c-1][clsPlus][hppf.ang2pix(NHPSIDE, pi/2.-math.radians(ch.dec), math.radians(ch.ra))]=+1
     ridge.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth)
     limb.fill(ch.ra, ch.dec, ch.l, ch.b, ch.e, ch.c, cls, ch.z, ch.t, ch.cth)
@@ -160,18 +169,36 @@ for iEve in range(ch.GetEntries()):
         sys.stdout.flush()
 print ""
 
-print "================"
+# print "========================"
+# print "Smearing of all sky map."
+# print "========================"
+# lst_hp_htgCalOnly_smr = []
+# #for lstcat in lstt_hp_htg:
+# #    lstt_hp_htg_smr.append([])
+# for htgcla in lstt_hp_htg[1]:
+#     fileOut.cd()
+#     htgcla.Write()
+#     print htgcla.GetName(), 'is being smeared...'
+#     lst_hp_htgCalOnly_smr.append(Smear(htgcla, nparr_dist, '/disk/gamma/cta/store/takhsm/FermiMVA/Dispersion/AG_dispersion.root', er, cthr))
+#     fileOut.cd()
+#     lst_hp_htgCalOnly_smr[-1].Write()
+# lstt_hp_htg_plot = [lstt_hp_htg[0], lst_hp_htgCalOnly_smr]
+
+print "========================"
 print "Making plots."
-print "================"
+print "========================"
 
 print "*", ridge.name
 fileOut.cd()
 fileOut.mkdir(ridge.name)
 fileOut.cd(ridge.name)
 ridge.calc()
+lstt_healcube = ridge.makeHealCube()
 fileOut.cd(ridge.name)
-ridge.draw(li_hp_count_equ)
+ridge.draw()#lstt_hp_htg)#lstt_hp_htg_plot)
+ridge.drawHealPlot()#lstt_hp_htg)#lstt_hp_htg_plot)
 ridge.writeObjects()
+
 print "*", limb.name
 fileOut.cd()
 fileOut.mkdir(limb.name)
@@ -195,8 +222,13 @@ for tgt in aTgt:
     fileOut.mkdir(tgt.name)
     fileOut.cd(tgt.name)
     tgt.calc()
+#    lst_hp_htgCalOnly_smr = tgt.smear(lstt_hp_htg[1])
+    tgt.setPixelDistanceTable(10)
+    tgt.setHealCube(lstt_healcube)
+    tgt.smear()
     fileOut.cd(tgt.name)
-    tgt.draw(li_hp_count_equ)
+    tgt.draw()#[lstt_hp_htg[0], lst_hp_htgCalOnly_smr])#lstt_hp_htg_plot)
+    tgt.drawHealPlot()
     tgt.writeObjects()
 for trs in aTrs:
     print "*", trs.name
