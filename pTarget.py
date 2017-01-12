@@ -21,7 +21,7 @@ from pHealplot import Healcube
 
 
 class Target:
-    def __init__(self, strName, config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), tStart=252460800.0, tEnd=504921604.0, nhpside=64):
+    def __init__(self, strName, config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), tStart=252460800.0, tEnd=504921604.0, nhpside=64, bFillHealCube=True):
         self.name = strName
         self.aaClass = config.aaStrSelect
         self.aClass = config.aStrSelect
@@ -30,6 +30,8 @@ class Target:
         self.npix_valid = self.NPIX
         self.tpl_pix_valid = tuple(range(self.npix_valid))
         self.HEALPLOT_MOLLWEIDE = False
+        self.bFillHealCube = bFillHealCube
+        self.bHealCubeSmeared = False
         self.loncntr = 0.0
         self.latcntr = 0.0
         self.coord = 'E'
@@ -38,8 +40,9 @@ class Target:
         self.costhetaPlot = EnergyLogRegion(10, 0.0, 0.1)
         self.saOn = [1.,1.]
         self.saOff = [1.,1.]
-        self.factorOn = 1.5
-        self.ulOn = 4.5
+        self.factorOn = 1 #1.5
+        self.factorOff = 1.2
+        self.ulOn = 15 #4.5
         self.zCut = config.zCut
         self.tStart = tStart
         self.tEnd = tEnd
@@ -55,6 +58,9 @@ class Target:
         self.npaaTIME = []
         self.npaaEVENT_CLASS = []
         self.npaaEVENT_TYPE = []
+        # numpy for HEALPix
+        self.lstt_narr_hp = []
+
         for aCat in self.aaClass:
             self.npaaENERGY.append([])
             self.npaaRA.append([])
@@ -66,6 +72,7 @@ class Target:
             self.npaaTIME.append([])
             self.npaaEVENT_CLASS.append([])
             self.npaaEVENT_TYPE.append([])
+            self.lstt_narr_hp.append([])
             for aCla in aCat:
                 self.npaaENERGY[-1].append(np.empty(0, dtype=np.float))
                 self.npaaRA[-1].append(np.empty(0, dtype=np.float))
@@ -77,6 +84,7 @@ class Target:
                 self.npaaTIME[-1].append(np.empty(0, dtype=np.double))
                 self.npaaEVENT_CLASS[-1].append(np.empty(0, dtype=np.int32))
                 self.npaaEVENT_TYPE[-1].append(np.empty(0, dtype=np.int32))
+                self.lstt_narr_hp[-1].append(np.zeros((self.energyPlot.nBin, self.costhetaPlot.nBin, self.NPIX)))
 
         self.trObj = ROOT.TTree('trFriend{0}'.format(self.name), 'Friend tree for {0}'.format(self.name))
         self.flagOn = np.zeros(1, dtype=bool)
@@ -206,18 +214,17 @@ class Target:
         self.aaHtgLCCountOff = aaHtgLCCountOff
 
         # Histograms for HEALPix plots
-        self.lstt_hp_htg = []
-#       self.lstt_npar_hp = []
-        for (icat, lstcat) in enumerate(self.aaClass):
-            self.lstt_hp_htg.append([])
-           #self.lstt_npar_hp.append([])
-            for (icla, cla) in enumerate(lstcat):
-                npar_xaxis = array('d', self.energyPlot.aBin)
-                npar_yaxis = array('d', self.costhetaPlot.aBin)
-                npar_zaxis = array('d', range(self.NPIX+1))
+#         self.lstt_hp_htg = []
+# #       self.lstt_npar_hp = []
+#         for (icat, lstcat) in enumerate(self.aaClass):
+#             self.lstt_hp_htg.append([])
+#            #self.lstt_npar_hp.append([])
+#             for (icla, cla) in enumerate(lstcat):
+#                 npar_xaxis = array('d', self.energyPlot.aBin)
+#                 npar_yaxis = array('d', self.costhetaPlot.aBin)
+#                 npar_zaxis = array('d', range(self.NPIX+1))
                 #self.lstt_hp_htg[-1].append(ROOT.TH3I('htg3D_{0}_{1}'.format(self.name, cla), '{0} {1}'.format(cla, self.name), int(self.energyPlot.nBin), float(self.energyPlot.edgeLow), float(self.energyPlot.edgeUp), int(self.costhetaPlot.nBin), float(self.costhetaPlot.edgeLow), float(self.costhetaPlot.edgeUp), int(self.NPIX), 0, float(self.NPIX)))
-                self.lstt_hp_htg[-1].append(ROOT.TH3I('htg3D_{0}_{1}'.format(self.name, cla), '{0} {1}'.format(cla, self.name), int(self.energyPlot.nBin), npar_xaxis, int(self.costhetaPlot.nBin), npar_yaxis, int(self.NPIX), npar_zaxis))
-                #self.lstt_npar_hp[-1].append()
+                #self.lstt_hp_htg[-1].append(ROOT.TH3I('htg3D_{0}_{1}'.format(self.name, cla), '{0} {1}'.format(cla, self.name), int(self.energyPlot.nBin), npar_xaxis, int(self.costhetaPlot.nBin), npar_yaxis, int(self.NPIX), npar_zaxis))
 
 
     def calc(self):
@@ -395,10 +402,10 @@ class Target:
 
     def writeObjects(self):
         self.trObj.Write("", ROOT.TObject.kOverwrite)
-        for aaHtg in self.lstt_hp_htg:
-            for aHtg in aaHtg:
-                for htg in aHtg:
-                    htg.Write("", ROOT.TObject.kOverwrite)
+        # for aaHtg in self.lstt_hp_htg:
+        #     for aHtg in aaHtg:
+        #         for htg in aHtg:
+        #             htg.Write("", ROOT.TObject.kOverwrite)
         for aHtg in self.aaHtgNumOn:
             for htg in aHtg:
                 htg.Write("", ROOT.TObject.kOverwrite)                    
@@ -509,7 +516,7 @@ class Target:
             self.lstt_narr_hp.append([])
             for (icla, cla) in enumerate(lstcat):
                 print cla
-                path_np_map = 'HEALPixMap_{0}_{1}_NSIDE{2}.npy'.format(self.name, cla, self.NSIDE)
+                path_np_map = 'numpy/HEALPixMap_{0}_{1}_NSIDE{2}.npy'.format(self.name, cla, self.NSIDE)
                 if os.path.exists(path_np_map):
                     self.lstt_narr_hp[-1].append(np.load(path_np_map))
                     print 'NumPy array file has been loaded.'
@@ -538,8 +545,14 @@ class Target:
 
 
     def setHealCube(self, lstt_cube):
-        self.lstt_narr_hp = lstt_cube
-        print "HEALPix cube has been set."
+        """Set lstt_cube as NumPy array for HEALPix plots.
+"""
+        if len(lstt_cube[-1][-1][0][0]) == self.NPIX:
+            self.lstt_narr_hp = lstt_cube
+            print "HEALPix cube has been set."
+        else:
+            self.lstt_narr_hp = None
+            print 'Number of pixels {0} does not match with {1}!!!'.format(len(lstt_cube[-1][-1][0][0]), self.NPIX)
 
 
     def smear(self, path_king='/disk/gamma/cta/store/takhsm/FermiMVA/Dispersion/AG_dispersion.root'):
@@ -565,12 +578,14 @@ class Target:
             #htg3D = self.lstt_hp_htg[1][icla]
             #lst_hp_htgCalOnly_smr.append(htg3D.Clone('{0}_smeared'.format(htg3D.GetName())))
             lst_narr_CalOnly_smr.append(np.zeros((self.energyPlot.nBin, self.costhetaPlot.nBin, self.NPIX)))
+            path_file_monitor = 'MonitorSmearing/{0}_{1}_NSIDE{2}.csv'.format(self.name, cla, self.NSIDE)
+            file_monitor = open(path_file_monitor, 'w')
             for ienr in range(self.energyPlot.nBin):
                 print '  {0}th energy bin'.format(ienr)
                 kxbin = TP_HTG_KING[0].GetXaxis().FindBin(self.energyPlot.getBinCenter(ienr))
-                for icth in range( htg3D.GetYaxis().GetNbins()):
+                for icth in range(self.costhetaPlot.nBin): #htg3D.GetYaxis().GetNbins()):
                     print '    {0}th cos(theta) bin'.format(icth)
-                    kybin = TP_HTG_KING[0].GetYaxis().FindBin(htg3D.GetYaxis().GetBinCenter(icth))
+                    kybin = TP_HTG_KING[0].GetYaxis().FindBin(self.costhetaPlot.getBinCenter(icth)) #htg3D.GetYaxis().GetBinCenter(icth))
                     if kxbin>0 and kybin>0:
                         for ipar in range(3): # Setting the parameters of King function
                             # PSF
@@ -585,48 +600,66 @@ class Target:
                             cnt = self.lstt_narr_hp[1][icla][ienr][icth][ipix]#htg3D.GetBinContent(ienr, icth, ipix+1)
                             if cnt>0:
                             #sys.stdout.write('.')
+                                cnt_filled = 0.
+                                cnt_filled_sum = 0.
                                 for (j, jpix) in enumerate(self.tpl_pix_valid):
                                     angdist = self.NARR_PIXS_ANGDIST[i+1][j]
-                                    lst_narr_CalOnly_smr[icla][ienr][icth][jpix] += cnt*fc_King.Eval(angdist)*factor_norm*sa_pix
+                                    cnt_filled = cnt*fc_King.Eval(angdist)*factor_norm*sa_pix
+                                    lst_narr_CalOnly_smr[icla][ienr][icth][jpix] += cnt_filled
+                                    cnt_filled_sum += cnt_filled
+                                tpl_pixang = hppf.pix2ang(int(self.NSIDE), int(ipix))
+                                str_cnt_monitor = """{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}
+""".format(ienr, icth, ipix, degrees(tpl_pixang[1])-self.raCntr, degrees(math.pi/2.-tpl_pixang[0])-self.decCntr, cnt, cnt_filled_sum, (cnt_filled_sum-cnt)/cnt)
+                                file_monitor.write(str_cnt_monitor)
+                        #integral_before = self.lstt_narr_hp[1][icla][ienr][icth].sum()
+                        #integral_after = lst_narr_CalOnly_smr[icla][ienr][icth].sum()
+                        #print '      Integral: {0} => {1} ({2} %)'.format(integral_before, integral_after, (integral_after-integral_before)/integral_before*100.)
+            file_monitor.close()
+                                
 
         self.lstt_narr_hp[1] = lst_narr_CalOnly_smr
         print self.lstt_narr_hp[1]
+        self.bHealCubeSmeared = True
         return lst_narr_CalOnly_smr
         
 
     def drawHealPlot(self):
         """Draw and save HEALPix plots.
 """
-        if not self.lstt_hp_htg==None:
+        if not self.lstt_narr_hp==None:
             print "Making HEALPix plots..."
             for (icat,lstcat) in enumerate(self.aaClass):
                 for (icla, cla) in enumerate(lstcat):
                     print " ", cla
-                    spcube = self.lstt_hp_htg[icat][icla]
+                    if self.bHealCubeSmeared==True and icat==1:
+                        str_smeared = '_smeared'
+                    else:
+                        str_smeared = ''
+                    spcube = self.lstt_narr_hp[icat][icla]
                     cube = np.sum(spcube, axis=1) # Energy vs. cosTheta vs. pixel =>  Energy vs. Pixel
                     for ienr in range(self.energyPlot.nBin+1):
                         if ienr is self.energyPlot.nBin:
                             enrlow = self.energyPlot.getBin(0)[0]
                             enrup = self.energyPlot.getBin(self.energyPlot.nBin-1)[1]
-                            hpmap = np.sum(cube[ienr], axis=0) # Energy vs. Pixel => Pixel
+                            hpmap = np.sum(cube, axis=0) # Energy vs. Pixel => Pixel
                         else:
                             enrlow = self.energyPlot.getBin(ienr)[0]
                             enrup = self.energyPlot.getBin(ienr)[1]
                             hpmap = cube[ienr] # Energy vs. Pixel => Pixel
                         print "    {0:.1f} - {1:.1f} GeV".format(10**(enrlow-3), 10**(enrup-3))
-                        if mollweide==False:
+                        if self.HEALPLOT_MOLLWEIDE==False:
                             hp.visufunc.cartview(hpmap, rot=(self.loncntr, self.latcntr, 0), coord=self.coord, lonra=[-self.radius, self.radius], latra=[-self.radius, self.radius], min=0, flip='astro', title="{0} {1} ({2:.1f} - {3:.1f} GeV)".format(cla, self.name, 10**(enrlow-3), 10**(enrup-3)), unit='counts')
                         else:
                             hp.visufunc.mollview(hpmap, rot=(self.loncntr, self.latcntr, 0), coord=self.coord, min=0, flip='astro', title="{0} {1} ({2:.1f} - {3:.1f} GeV)".format(cla, self.name, 10**(enrlow-3), 10**(enrup-3)), unit='counts')
-                        plt.savefig("png/{0}_{1}_NSIDE{2}_E{3}-{4}.png".format(self.name, cla, self.NSIDE, int(100*enrlow+0.5), int(100*enrup+0.5)))
+                        plt.savefig("png/{0}_{1}_NSIDE{2}_E{3}-{4}{5}.png".format(self.name, cla, self.NSIDE, int(100*enrlow+0.5), int(100*enrup+0.5), str_smeared))
                         plt.close()
         else:
             print "Making HEALPix plots is skipped because no map arrays."
                             
 
 class PointSource(Target):
-    def __init__(self, strName, raTgt, decTgt, glTgt, gbTgt, zRedshift=0, rAppa=12., rOffMax=[1.7, 12.], rOffMin=[1., 8.], rOnMax=[0.45, 4.0], config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"], tStart=252460800.0, tEnd=504921604.0, nhpside=64):
-        Target.__init__(self, strName, config, eRegion, ePlotRegion, tStart, tEnd, nhpside)
+    def __init__(self, strName, raTgt, decTgt, glTgt, gbTgt, zRedshift=0, rAppa=12., rOffMax=[1.7, 12.], rOffMin=[1., 8.], rOnMax=[0.45, 4.0], config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"], tStart=252460800.0, tEnd=504921604.0, nhpside=64, bFillHealCube=False):
+        Target.__init__(self, strName, config, eRegion, ePlotRegion, tStart, tEnd, nhpside, bFillHealCube)
         #self.name = strName
         self.perf = perf
         self.glCntr = glTgt
@@ -665,12 +698,15 @@ class PointSource(Target):
                 for ie in range(self.energySet.nBin):
                     if ict==0:
                         self.rOffMax[ict][icl].append(self.radius)
-                        self.rOffMin[ict][icl].append(self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0))
-                        self.rOnMax[ict][icl].append(min(self.ulOn, self.perf.getPSF68(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0)*self.factorOn))
+#                        self.rOffMin[ict][icl].append(self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0))
+                        self.rOffMin[ict][icl].append(min(self.ulOn, self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0))*self.factorOff)
+#                        self.rOnMax[ict][icl].append(min(self.ulOn, self.perf.getPSF68(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0)*self.factorOn))
+                        self.rOnMax[ict][icl].append(min(self.ulOn, self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0)*self.factorOn))
                     elif ict==1:
                         self.rOffMax[ict][icl].append(self.radius)
-                        self.rOffMin[ict][icl].append(self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0))
-                        self.rOnMax[ict][icl].append(min(self.ulOn, self.perf.getPSF68(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0)*self.factorOn))
+                        self.rOffMin[ict][icl].append(min(self.ulOn, self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0))*self.factorOff)
+#                        self.rOnMax[ict][icl].append(min(self.ulOn, self.perf.getPSF68(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0)*self.factorOn))
+                        self.rOnMax[ict][icl].append(min(self.ulOn, self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0)*self.factorOn))
                         if not (self.rOffMax[ict][icl][-1]<=self.radius and self.rOffMin[ict][icl][-1]<self.rOffMax[ict][icl][-1] and self.rOnMax[ict][icl][-1]<=self.rOffMin[ict][icl][-1] and self.rOnMax[ict][icl][-1]>0):
                             print "Bad region setup!!"
                             sys.exit(1)
@@ -733,7 +769,7 @@ class PointSource(Target):
                     #aaaGrpMap[-1][-1][-1].SetTitle("{0} map around {1} in {2:.1f} - {3:.1f} GeV".format(self.aaClass[iS][jS], self.name, 10**(self.energyPlot.getBin(iE)[0]-3), 10**(self.energyPlot.getBin(iE)[1]-3)))
                     aaaGrpMap[-1][-1][-1].SetMaxRadial(self.radius)
                     aaaGrpMap[-1][-1][-1].SetMarkerColor(pColor.akColor(iE))
-                    aaaGrpMap[-1][-1][-1].SetMarkerStyle(7)
+                    aaaGrpMap[-1][-1][-1].SetMarkerStyle(6)
                     if abs(self.decCntr)<60:
                         xLowMap = math.floor(-hwMap/cos(abs(radians(self.decCntr))))
                         xUpMap = math.ceil(hwMap/cos(abs(radians(self.decCntr))))
@@ -808,6 +844,7 @@ class PointSource(Target):
         self.flagOff[0] = kFALSE
         binE = self.energySet.findBin(eEvent)
         plotE = self.energyPlot.findBin(eEvent)
+        plotCth = self.costhetaPlot.findBin(cthEvent)
         raRad = math.radians(raEvent)
         decRad = math.radians(decEvent)
         glRad = math.radians(glEvent)
@@ -828,7 +865,9 @@ class PointSource(Target):
                     radPhi = -radPhi +  2.*math.pi
 
                 for clEventPlus in range(clEvent-int(ctEvent==1 and clEvent==3)):
-                    self.lstt_hp_htg[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent, hppf.ang2pix(self.NSIDE, math.pi/2.-math.radians(decEvent), math.radians(raEvent))+0.5)
+                    #self.lstt_hp_htg[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent, hppf.ang2pix(self.NSIDE, math.pi/2.-math.radians(decEvent), math.radians(raEvent))+0.5)
+                    if self.bFillHealCube is True:
+                        self.lstt_narr_hp[ctEvent-1][clEventPlus][plotE][plotCth][hppf.ang2pix(self.NSIDE, math.pi/2.-math.radians(decEvent), math.radians(raEvent))]+=1
                     self.aaaHtgTheta[ctEvent-1][clEventPlus][plotE].Fill(math.degrees(radTheta)**2)
                     self.aaaGrpMap[ctEvent-1][clEventPlus][plotE].SetPoint(self.aaaGrpMap[ctEvent-1][clEventPlus][plotE].GetN(), radPhi, math.degrees(radTheta))
                     if abs(self.decCntr)<60:
@@ -939,10 +978,16 @@ class PointSource(Target):
     def setPixelDistanceTable(self, deg_margin):
         """Set a table of distance between HEALPix pixels of nside and a tuple of valid pixels.
 """
-        PATH_NPFILE = 'PixelsAngularDistance_{0}_NSIDE{1}.npy'.format(self.name, self.NSIDE)
+        PATH_NPFILE = 'numpy/PixelsAngularDistance_{0}_NSIDE{1}_MARGIN{2}deg.npy'.format(self.name, self.NSIDE, int(deg_margin))
         if os.path.exists(PATH_NPFILE):
             self.NARR_PIXS_ANGDIST = np.load(PATH_NPFILE)
             print 'NumPy array file has been loaded.'
+            lst_pix_valid = []
+            for npix in self.NARR_PIXS_ANGDIST[0]:
+                lst_pix_valid.append(int(npix+0.5))
+            self.tpl_pix_valid = tuple(lst_pix_valid)
+            self.npix_valid = len(self.tpl_pix_valid)
+            print self.npix_valid, 'pixels are considered.'            
 
         else:
             print 'Creating a table of pixel distance...'
@@ -966,6 +1011,8 @@ class PointSource(Target):
             for (h, hpix) in enumerate(self.tpl_pix_valid):
                 narr_dist[0][h] = hpix
             for (j, jpix) in enumerate(self.tpl_pix_valid):
+                sys.stdout.write('.')
+                sys.stdout.flush()
                 for (k, kpix) in enumerate(self.tpl_pix_valid):
                     narr_dist[j+1][k] = hp.rotator.angdist(hppf.pix2ang(self.NSIDE, jpix), hppf.pix2ang(self.NSIDE, kpix))
             self.NARR_PIXS_ANGDIST = narr_dist
@@ -1141,7 +1188,7 @@ class PointSource(Target):
             aHstaTheta.append(ROOT.THStack("hsTheta%s_%s" % (self.name, tE), "#theta^2 plot of {0} in {1:.1f} - {2:.1f} GeV;#theta[#circ]^2;[counts]".format(self.name, 10**(self.energyPlot.getBin(tE)[0]-3), 10**(self.energyPlot.getBin(tE)[1]-3))))
             for iaaH in range(len(self.aaaHtgTheta)):
                 for iaH in range(len(self.aaaHtgTheta[iaaH])):
-                    self.aaaHtgTheta[iaaH][iaH][tE].Rebin(40)
+                    self.aaaHtgTheta[iaaH][iaH][tE].Rebin(20)
                     aHstaTheta[-1].Add(self.aaaHtgTheta[iaaH][iaH][tE])
                     if tE==0:
                         legTheta.AddEntry(self.aaaHtgTheta[iaaH][iaH][tE], self.aaClass[iaaH][iaH], 'l')
@@ -1419,8 +1466,8 @@ class EarthLimb(Target):
 
 
 class GalacticRidge(Target):
-    def __init__(self, strName, bOffMin=[50., 50.], lOffMin=[90., 90.], lOffMax=[-90., -90.], bOnMax=[1.5, 3.0], lOnMin=[-50., -51.5], lOnMax=[40., 41.5], config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"], tStart=252460800.0, tEnd=504921604.0):
-        Target.__init__(self, strName, config, eRegion, ePlotRegion, tStart, tEnd)
+    def __init__(self, strName, bOffMin=[50., 50.], lOffMin=[90., 90.], lOffMax=[-90., -90.], bOnMax=[1.5, 3.0], lOnMin=[-50., -51.5], lOnMax=[40., 41.5], config = ClassConfig(), eRegion=EnergyLogRegion(3,4.75,0.25), ePlotRegion=EnergyLogRegion(3, 4.75, 0.25), perf=["/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R100_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R30_perf.root", "/home/takhsm/FermiMVA/S10/S10V200909_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15/v20r9p9_S10_020rawe30zdir020nbep006WWOtrkWbkWOmczWOrw_15_WP8CalOnlyLogEnergy_CalOnly_R10_perf.root"], tStart=252460800.0, tEnd=504921604.0, nhpside=64, bFillHealCube=True):
+        Target.__init__(self, strName, config, eRegion, ePlotRegion, tStart, tEnd, nhpside, bFillHealCube)
         self.perf = perf
         self.HEALPLOT_MOLLWEIDE = True
         self.loncntr = 0.0
@@ -1533,6 +1580,7 @@ class GalacticRidge(Target):
         clEvent = int(clEvent)
         binE = self.energySet.findBin(eEvent)
         plotE = self.energyPlot.findBin(eEvent)
+        plotCth = self.costhetaPlot.findBin(cthEvent)
         lEventCor = lEvent
         raEventCor = raEvent
         if binE>=0 and binE<self.energySet.nBin and tEvent>=self.tStart and tEvent<= self.tEnd:
@@ -1550,6 +1598,8 @@ class GalacticRidge(Target):
             if zEvent<zCut:
             #if binE>=0 and zEvent<zCut:
                 for clEventPlus in range(clEvent-int(ctEvent==1 and clEvent==3)):
+                    if self.bFillHealCube is True:
+                        self.lstt_narr_hp[ctEvent-1][clEventPlus][plotE][plotCth][hppf.ang2pix(self.NSIDE, math.pi/2.-math.radians(decEvent), math.radians(raEvent))]+=1
                     self.aaaHtgMapAllSky[ctEvent-1][clEventPlus][plotE].Fill(-lEventCor, bEvent)
                     self.aaaHtgMapAllCel[ctEvent-1][clEventPlus][plotE].Fill(-raEventCor, decEvent)
                     self.aaaHtgLatitude[ctEvent-1][clEventPlus][plotE].Fill(sin(radians(bEvent)))
@@ -1603,13 +1653,13 @@ class GalacticRidge(Target):
 
     def draw(self):
         Target.draw(self)
-        if not self.lstt_hp_htg==None:
-            for (icat,lstcat) in enumerate(self.aaClass):
-                for (icla, cla) in enumerate(lstcat):
-                    htg3D = self.lstt_hp_htg[icat][icla]
-                    hpcube = Healcube('AllSky', cla, htg3D, lon_cntr=0, lat_cntr=0, char_coord=('E','G'))
-                    hpcube.setmap()
-                    hpcube.draw(mollweide=True)
+        # if not self.lstt_narr_hp==None:
+        #     for (icat,lstcat) in enumerate(self.aaClass):
+        #         for (icla, cla) in enumerate(lstcat):
+        #             htg3D = self.lstt_hp_htg[icat][icla]
+        #             hpcube = Healcube('AllSky', cla, htg3D, lon_cntr=0, lat_cntr=0, char_coord=('E','G'))
+        #             hpcube.setmap()
+        #             hpcube.draw(mollweide=True)
 
 #         if not lstt_hp_htg==None:
 #             for binE in range(self.energyPlot.nBin):
