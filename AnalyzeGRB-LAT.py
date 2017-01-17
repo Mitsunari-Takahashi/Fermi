@@ -16,7 +16,7 @@ import click
 ROOT.gROOT.SetBatch()
 from array import array
 import math
-from math import cos, sin, tan, acos, asin, atan, radians, degrees
+from math import cos, sin, tan, acos, asin, atan, radians, degrees, log10
 from pColor import *
 
 ROOT.gStyle.SetPadGridX(True)
@@ -137,15 +137,28 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
         else:
             str_fix_psf = ""
 
+        aHtgInterval = []
+        EDGE_ITV_LOW = 0
+        EDGE_ITV_UP = 7
+        NBIN_ITV = 100*(EDGE_ITV_UP-EDGE_ITV_LOW)
+        EDGE_MET_LOW = metStart
+        EDGE_MET_UP = metStop
+        NBIN_MET = int((EDGE_MET_UP-EDGE_MET_LOW)/(365.25/12.*86400))
+        metPrevious = []
+
         for cutPsf in aCutPsf:
             print 'PSF cut:', cutPsf, '%'
             greOn.append([])
             greZenith.append([])
             aHtgEvt.append([])
+            aHtgInterval.append([])
+            metPrevious.append([])
             for pC in range(len(aaStrSelect)):
                 greOn[-1].append([])
                 greZenith[-1].append([])
                 aHtgEvt[-1].append([])
+                aHtgInterval[-1].append([])
+                metPrevious[-1].append([])
                 for qC in range(len(aaStrSelect[pC])):
                     greOn[-1][-1].append(ROOT.TGraphErrors())
                     greOn[-1][-1][-1].SetName("greOn_{0}_{1}".format(pC, qC))
@@ -156,6 +169,8 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
                     greZenith[-1][-1][-1].SetTitle("{0}, PSF{1}%".format(aaStrSelect[pC][qC], cutPsf))
                     greZenith[-1][-1][-1].SetMarkerStyle(20+int(cutPsf==68))
                     aHtgEvt[-1][-1].append(ROOT.TH3D("htgEvt_GRB{0}_{1}_PSF{2}".format(nameGrb, aaStrSelect[pC][qC], cutPsf), "{0} events within PSF{1}{2} from GRB{3} (MET {4} - {5});Cos(Inclination angle);Zenith angle [deg];log_{{10}}Energy [MeV]".format(aaStrSelect[pC][qC], cutPsf, str_fix_psf, nameGrb, metStart, metStop), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, NBIN_ENE, EDGE_ENE_LOW, EDGE_ENE_UP))
+                    aHtgInterval[-1][-1].append(ROOT.TH2D("htgInterval_GRB{0}_{1}_PSF{2}".format(nameGrb, aaStrSelect[pC][qC], cutPsf), "{0} event intervals (waiting time) within PSF{1}{2} from GRB{3} (MET {4} - {5});MET [s];log_{{10}}(Waiting time [s])".format(aaStrSelect[pC][qC], cutPsf, str_fix_psf, nameGrb, metStart, metStop), NBIN_MET, EDGE_MET_LOW, EDGE_MET_UP, NBIN_ITV, EDGE_ITV_LOW, EDGE_ITV_UP))
+                    metPrevious[-1][-1].append(0.)
                     if pC==0:
                         greOn[-1][-1][-1].SetMarkerColor(13-12*qC)
                         greZenith[-1][-1][-1].SetMarkerColor(13-12*qC)
@@ -208,12 +223,20 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
                         greZenith[bPSF68][0][1].SetPoint(greZenith[bPSF68][0][1].GetN(), chIn.t-dict_grb["TRIGGER_MET"], chIn.z)
                     if chIn.s >= 4:
                         aHtgEvt[0][0][0].Fill(chIn.cth, chIn.z, chIn.e)
+                        aHtgInterval[0][0][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][0][0])))
+                        metPrevious[0][0][0] = chIn.t
                         if bPSF68==1:
                             aHtgEvt[bPSF68][0][0].Fill(chIn.cth, chIn.z, chIn.e)
+                            aHtgInterval[bPSF68][0][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][0][0])))
+                            metPrevious[bPSF68][0][0] = chIn.t
                     if chIn.s >= 128:
                         aHtgEvt[0][0][1].Fill(chIn.cth, chIn.z, chIn.e)
+                        aHtgInterval[0][0][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][0][1])))
+                        metPrevious[0][0][1] = chIn.t
                         if bPSF68==1:
                             aHtgEvt[bPSF68][0][1].Fill(chIn.cth, chIn.z, chIn.e)
+                            aHtgInterval[bPSF68][0][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][0][1])))
+                            metPrevious[bPSF68][0][1] = chIn.t
 
                 elif chIn.c == 2:
                     if chIn.s == 4096:
@@ -230,16 +253,28 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
                         greZenith[bPSF68][1][2].SetPoint(greZenith[bPSF68][1][2].GetN(), chIn.t-dict_grb["TRIGGER_MET"], chIn.z)
                     if chIn.s >= 4096:
                         aHtgEvt[0][1][0].Fill(chIn.cth, chIn.z, chIn.e)
+                        aHtgInterval[0][1][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][1][0])))
+                        metPrevious[0][1][0] = chIn.t
                         if bPSF68==1:
                             aHtgEvt[bPSF68][1][0].Fill(chIn.cth, chIn.z, chIn.e)
+                            aHtgInterval[bPSF68][1][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][1][0])))
+                            metPrevious[bPSF68][1][0] = chIn.t
                     if chIn.s >= 8192:
                         aHtgEvt[0][1][1].Fill(chIn.cth, chIn.z, chIn.e)
+                        aHtgInterval[0][1][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][1][1])))
+                        metPrevious[0][1][1] = chIn.t
                         if bPSF68==1:
                             aHtgEvt[bPSF68][1][1].Fill(chIn.cth, chIn.z, chIn.e)
+                            aHtgInterval[bPSF68][1][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][1][1])))
+                            metPrevious[bPSF68][1][1] = chIn.t
                     if chIn.s >= 16384:
                         aHtgEvt[0][1][2].Fill(chIn.cth, chIn.z, chIn.e)
+                        aHtgInterval[0][1][2].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][1][2])))
+                        metPrevious[0][1][2] = chIn.t
                         if bPSF68==1:
                             aHtgEvt[bPSF68][1][2].Fill(chIn.cth, chIn.z, chIn.e)
+                            aHtgInterval[bPSF68][1][2].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][1][2])))
+                            metPrevious[bPSF68][1][2] = chIn.t
 
                 print "Run ID:", chIn.run
                 print "Event ID:", chIn.evid
@@ -296,6 +331,7 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
             for pD in range(len(aaStrSelect)):
                 for qD in range(len(aaStrSelect[pD])):
                     aHtgEvt[rD][pD][qD].Write()
+                    aHtgInterval[rD][pD][qD].Write()
         print "Finished!"
 
 
