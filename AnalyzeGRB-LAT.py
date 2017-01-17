@@ -7,6 +7,7 @@ from ROOT import TTree, TChain, TH1, TH2, TH3
 import numpy as np
 import yaml
 import xml.etree.ElementTree as ET
+#import pandas
 import datetime
 from ctypes import *
 import click
@@ -37,7 +38,8 @@ from pLsList import ls_list
 @click.argument('stop', type=float)
 @click.option('--fixpsfenergy', '-e', type=float, default=0.0, help="Set energy in log scale if you will fix the PSF cut on energy.")
 @click.option('--fixpsfinclin', '-i', type=float, default=0.0, help="Set cos(inclination angle) if you will fix the PSF cut on inclination.")
-def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin):
+@click.option('--exclude', type=(float, float), default=(float(sys.maxsize),0.0), help="This time domain is excluded from the data which is analyzed. Assign the start and stop in MET.")
+def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclude):
     # ----- Event class setup -----
     cfg = ClassConfig('Both', [10, 3, 1], 1)
     aCutEGB = cfg.aCutEGB
@@ -46,9 +48,13 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin):
 
     #IRF
     listPathFilePerf = [['/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S16/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15_P8R2_TRANSIENT100_P8R2_TRANSIENT100_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S16/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15_P8R2_SOURCE_P8R2_SOURCE_perf.root'], 
-                        ['/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R30_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R10_perf.root']]
+                        ['/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R100_perf.root', 
+                         '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R30_perf.root', 
+                         '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R10_perf.root']]
+#                        ['/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R30_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R10_perf.root']]
     htgPerf = CutPerformanceHtg(listPathFilePerf)
 
+    trCatalogue = ROOT.TTree("trGRB", "GBM burst catalogue")
     # Target
     listTgtGRB = [grbid] #[par[1]]
 
@@ -89,8 +95,10 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin):
             metStop = chIn.GetMaximum("t")+1
 
         print 'Analysis time domain: MET', metStart, '-', metStop
+        if not (exclude[0]==sys.maxsize and exclude[1]==0):
+            print 'Excluded time domain: MET', exclude[0], '-', exclude[1]
         nEventChain = chIn.GetEntries()
-        nEventTime = chIn.GetEntries('TIME>={0} && TIME<{1}'.format(metStart, metStop))
+        nEventTime = chIn.GetEntries('TIME>={0} && TIME<{1} && (TIME<{2} || TIME>={3})'.format(metStart, metStop, exclude[0], exclude[1]))
         print "Total number of events in the time domain:", nEventTime
         vecTgt = np.array([cos(radians(dict_grb["DEC"]))*cos(radians(dict_grb["RA"])), cos(radians(dict_grb["DEC"]))*sin(radians(dict_grb["RA"])), sin(radians(dict_grb["DEC"]))])
 
@@ -108,6 +116,7 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin):
         greOn = []
         mgrZenith = ROOT.TMultiGraph("mgrZenith", "Zenith angle of events around GRB{0}".format(nameGrb))
         greZenith = []
+        htgRADEC = ROOT.TH2D("htgRADEC", "DEC vs. RA of flagged events", 360, 0, 360, 180, -90, 90)
 
         aHtgEvt = []
         NBIN_CTH = 40
@@ -179,7 +188,8 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin):
             degDist = degrees(radTheta)
             #if chIn.evid == 6500524:
              #   print "Distance:", degDist, "PSF95:", dictDistCut['PSF95']
-            if degDist<dictDistCut['PSF95'] and chIn.t>=metStart and chIn.t<metStop:
+            if degDist<dictDistCut['PSF95'] and chIn.t>=metStart and chIn.t<metStop and (chIn.t<exclude[0] or chIn.t>=exclude[1]):
+                htgRADEC.Fill(chIn.ra, chIn.dec)
                 print ""
                 print "== ON photon candidate!!! =="
                 cbFlagPSF95.value = 1
@@ -278,6 +288,7 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin):
         legZenith.Draw("same")
         print ""
         fileOut.cd()
+        htgRADEC.Write()
         cEvent.Write()
         cZenith.Write()
         trGRB.Write()
