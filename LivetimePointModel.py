@@ -36,11 +36,12 @@ import click
 @click.option('--start', type=float, default=239557417.)
 @click.option('--stop', type=float, default=501033396.)
 @click.option('--torigin', type=float, default=0.)
-@click.option('--incline', type=float, default=0.)
+@click.option('--inclin', type=float, default=0.)
 @click.option('--energy', type=float, default=0.)
+@click.option('--errrad', type=float, default=0.)
 @click.option('--suffix', type=str, default='')
 @click.option('--truepoint', is_flag=True)
-def main(name, ra, dec, perf, inclin, energy, livetime, suffix, start, stop, torigin, truepoint):
+def main(name, ra, dec, perf, inclin, energy, suffix, start, stop, torigin, truepoint, errrad):
 
     # Spacecraft data
     pathFileScAll = "/disk/gamma/cta/store/takhsm/FermiData/spacecraft/mtakahas-AstroServer-00011-ft2-30s.fits"
@@ -75,6 +76,7 @@ def main(name, ra, dec, perf, inclin, energy, livetime, suffix, start, stop, tor
     aAreaPix_array = []
     aAreaPix_sum = []
     aStrRegion = []
+    str_lit_unit = []
     for (iRegion, coordsRegion) in enumerate(aCoordsRegion):
         if iRegion==0:
             aStrRegion.append("ON")
@@ -84,6 +86,8 @@ def main(name, ra, dec, perf, inclin, energy, livetime, suffix, start, stop, tor
             aCoordsPix_array.append(coordsRegion)
             aAreaPix_array.append(0)
             print aCoordsPix_array[-1]
+            str_lit_unit.append('sec')
+            aAreaPix_sum.append(0)
         else:
             aCoordsPix_array.append([])
             aAreaPix_array.append([])
@@ -92,15 +96,16 @@ def main(name, ra, dec, perf, inclin, energy, livetime, suffix, start, stop, tor
                 aCoordsPix_array[-1].append(SkyCoord(aAngPix[1], pi/2.-aAngPix[0], unit="rad"))
                 area_pix = hppf.nside2pixarea(NHPSIDE_ON)
                 aAreaPix_array[-1].append(area_pix)
-            aAreaPix_sum.append(sum(aAreaPix_array[-1]))
+            str_lit_unit.append('sec sr')
             print aCoordsPix_array[-1]
             print 'Solid angle =', aAreaPix_sum[-1], 'sr'
+            aAreaPix_sum.append(sum(aAreaPix_array[-1]))
 
     # Output objects
     aFileToI = []
     if suffix!="":
         suffix = "_" + suffix
-    if truemodel==True:
+    if truepoint==True:
         suffix = suffix + "_TruePoint"
     
     fileRoot = ROOT.TFile("Livetime_{0}_MET{1}-{2}{3}.root".format(name, int(start), int(stop), suffix), "update")
@@ -115,10 +120,10 @@ def main(name, ra, dec, perf, inclin, energy, livetime, suffix, start, stop, tor
     EDGE_ENE_LOW =  htg2_psf.GetXaxis().GetBinLowEdge(1)
     EDGE_ENE_UP =  htg2_psf.GetXaxis().GetBinUpEdge(htg2_psf.GetNbinsX())
     if torigin==0:
-        torigin = tstart
+        torigin = start
         
     for hRegion in range(nOff+1):
-        aHtgLt.append(ROOT.TH3D("htgLt_{0}".format(name, hRegion), "Livetime [sec sr];Cos(Inclination angle);Zenith angle [deg];Time - {1} [sec]".format(aStrRegion[hRegion], torigin), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, max(10, int(tPost-tPro)/54000), start, stop))#tPro, tPost))
+        aHtgLt.append(ROOT.TH3D("htgLt_{0}".format(hRegion), "Livetime for {0} [{1}];Cos(Inclination angle);Zenith angle [deg];Time - {2} [sec]".format(name, str_lit_unit[hRegion], torigin), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, max(10, int(stop-start)/54000), start, stop))#tPro, tPost))
     make_livetime_histogram(aHtgLt, nOff+1 ,pathFileScAll, start, stop, aFileToI, aCoordsPix_array, aAreaPix_array, torigin)
     aHtgLt_projYX = []
     aHtgLt_scaled = []
@@ -129,24 +134,25 @@ def main(name, ra, dec, perf, inclin, energy, livetime, suffix, start, stop, tor
         aHtgLt[jR].Write()
         aHtgLt_projYX.append(aHtgLt[jR].Project3D("yx"))
         aHtgLt_projYX[jR].Write()
-        aHtgLt_scaled.append(ROOT.TH3D('{0}_scaled'.format(aHtgLt[jR].GetName()), '{0} scaled;{1};{2};log_{{10}}Energy [MeV]'.format(aHtgLt[jR].GetTitle(), aHtgLt_projYX[jR].GetXaxis().GetTitle(), aHtgLt_projYX[jR].GetYaxis().GetTitle()), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, NBIN_ENE, EDGE_ENE_LOW, EDGE_ENE_UP))
-        for iz in range(1, 1+NBIN_ENE):
-            print '  Energy {0} - {1}'.format(aHtgLt_scaled[-1].GetZaxis().GetBinLowEdge(iz), aHtgLt_scaled[-1].GetZaxis().GetBinUpEdge(iz))
-            if FIXED_PSF_ENERGY<=0:
-                nbin_ene_psf = htg2_psf.GetXaxis().FindBin(aHtgLt_scaled[-1].GetZaxis().GetBinCenter(iz))
-            else:
-                nbin_ene_psf = htg2_psf.GetXaxis().FindBin(FIXED_PSF_ENERGY)
-            for ix in range(1, 1+NBIN_CTH):
-                if FIXED_PSF_INCLIN<=0:
-                    nbin_inc_psf = htg2_psf.GetYaxis().FindBin(aHtgLt_scaled[-1].GetXaxis().GetBinCenter(ix))
+        if truepoint==False:
+            aHtgLt_scaled.append(ROOT.TH3D('{0}_scaled'.format(aHtgLt[jR].GetName()), '{0} scaled;{1};{2};log_{{10}}Energy [MeV]'.format(aHtgLt[jR].GetTitle(), aHtgLt_projYX[jR].GetXaxis().GetTitle(), aHtgLt_projYX[jR].GetYaxis().GetTitle()), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, NBIN_ENE, EDGE_ENE_LOW, EDGE_ENE_UP))
+            for iz in range(1, 1+NBIN_ENE):
+                print '  Energy {0} - {1}'.format(aHtgLt_scaled[-1].GetZaxis().GetBinLowEdge(iz), aHtgLt_scaled[-1].GetZaxis().GetBinUpEdge(iz))
+                if FIXED_PSF_ENERGY<=0:
+                    nbin_ene_psf = htg2_psf.GetXaxis().FindBin(aHtgLt_scaled[-1].GetZaxis().GetBinCenter(iz))
                 else:
-                    nbin_inc_psf = htg2_psf.GetYaxis().FindBin(FIXED_PSF_INCLIN)
-                psf_cut_rad = radians(htg2_psf.GetBinContent(nbin_ene_psf, nbin_inc_psf) + err_rad)
-                area_ratio = 2.*pi*(1.0-cos(psf_cut_rad)) / aAreaPix_sum[jR]
-                print '    Inclination {0} - {1} : Scaling factor = {2}'.format(aHtgLt_scaled[-1].GetXaxis().GetBinLowEdge(ix), aHtgLt_scaled[-1].GetXaxis().GetBinUpEdge(ix), area_ratio)
-                for iy in range(1, 1+NBIN_ZEN):
-                    aHtgLt_scaled[-1].SetBinContent(ix, iy, iz, aHtgLt_projYX[jR].GetBinContent(ix, iy)*area_ratio)
-        aHtgLt_scaled[-1].Write()
+                    nbin_ene_psf = htg2_psf.GetXaxis().FindBin(FIXED_PSF_ENERGY)
+                for ix in range(1, 1+NBIN_CTH):
+                    if FIXED_PSF_INCLIN<=0:
+                        nbin_inc_psf = htg2_psf.GetYaxis().FindBin(aHtgLt_scaled[-1].GetXaxis().GetBinCenter(ix))
+                    else:
+                        nbin_inc_psf = htg2_psf.GetYaxis().FindBin(FIXED_PSF_INCLIN)
+                    psf_cut_rad = radians(htg2_psf.GetBinContent(nbin_ene_psf, nbin_inc_psf) + errrad)
+                    area_ratio = 2.*pi*(1.0-cos(psf_cut_rad)) / aAreaPix_sum[jR]
+                    print '    Inclination {0} - {1} : Scaling factor = {2}'.format(aHtgLt_scaled[-1].GetXaxis().GetBinLowEdge(ix), aHtgLt_scaled[-1].GetXaxis().GetBinUpEdge(ix), area_ratio)
+                    for iy in range(1, 1+NBIN_ZEN):
+                        aHtgLt_scaled[-1].SetBinContent(ix, iy, iz, aHtgLt_projYX[jR].GetBinContent(ix, iy)*area_ratio)
+            aHtgLt_scaled[-1].Write()
     print 'Livetime calculation finished.'
 
 
