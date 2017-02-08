@@ -39,11 +39,11 @@ def main(name, definition, ag, bkg, nbine, nbincth, logy):
 #    c = ROOT.TCanvas(name, definition, int(ncx*160), int(ncy*160))
 #    cPlot.Divide(ncx, ncy)
 
-    fileAG = ROOT.TFile(ag, "update")
+    fileAG = ROOT.TFile(ag, "read")
     print fileAG.GetName(), "is opened."
     trAG = fileAG.Get("MeritTuple")
     print trAG.GetName(), "is found."
-    fileBKG = ROOT.TFile(bkg, "update")
+    fileBKG = ROOT.TFile(bkg, "read")
     print fileBKG.GetName(), "is opened."
     trBKG = fileBKG.Get("MeritTuple")
     print trAG.GetName(), "is found."
