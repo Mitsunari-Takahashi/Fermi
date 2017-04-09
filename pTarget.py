@@ -41,8 +41,10 @@ class Target:
         self.saOn = [1.,1.]
         self.saOff = [1.,1.]
         self.factorOn = 1 #1.5
-        self.factorOff = 1.2
-        self.ulOn = 15 #4.5
+        self.factorOff = 1.1
+        self.factorOffMax = 1.4
+        self.ulOn = 12 #4.5
+        self.llOffMax = 5
         self.zCut = config.zCut
         self.tStart = tStart
         self.tEnd = tEnd
@@ -120,7 +122,7 @@ class Target:
             aaHtgEnergyOff.append([])
             aaHtgLCCountOff.append([])
             for jS in range(len(self.aaClass[iS])):
-                aaHtgNumOn[-1].append(ROOT.TH1D("hNumOn%s_%s_%s" % (self.name,iS,jS), "Number of %s ON events of %s;log_{10}Energy[MeV];[counts]" % (self.aaClass[iS][jS], self.name), self.energyPlot.nBin, self.energyPlot.edgeLow, self.energyPlot.edgeUp))
+                aaHtgNumOn[-1].append(ROOT.TH2D("hNumOn%s_%s_%s" % (self.name,iS,jS), "Number of %s ON events of %s [counts];log_{10}Energy[MeV];cos#theta" % (self.aaClass[iS][jS], self.name), self.energyPlot.nBin, self.energyPlot.edgeLow, self.energyPlot.edgeUp, self.costhetaPlot.nBin, self.costhetaPlot.edgeLow, self.costhetaPlot.edgeUp))
                 aaHtgNumOn[-1][-1].SetFillStyle(0)
                 aaHtgNumOn[-1][-1].SetLineWidth(3-iS)
                 aaHtgNumOn[-1][-1].SetLineStyle(2-iS)
@@ -128,7 +130,7 @@ class Target:
                 aaHtgNumOn[-1][-1].SetMarkerStyle(pColor.aakMarkerStyle(iS,jS))
                 aaHtgNumOn[-1][-1].SetMarkerSize(pColor.aakMarkerSize(iS,jS))
                 aaHtgNumOn[-1][-1].SetMarkerColor(pColor.akColor(jS+(1-iS)*jS))
-                aaHtgNumOff[-1].append(ROOT.TH1D("hNumOff%s_%s_%s" % (self.name,iS,jS), "Number of %s OFF events of %s;log_{10}Energy[MeV];[counts]" % (self.aaClass[iS][jS], self.name), self.energyPlot.nBin, self.energyPlot.edgeLow, self.energyPlot.edgeUp))
+                aaHtgNumOff[-1].append(ROOT.TH2D("hNumOff%s_%s_%s" % (self.name,iS,jS), "Number of %s OFF events of %s [counts];log_{10}Energy[MeV];cos#theta" % (self.aaClass[iS][jS], self.name), self.energyPlot.nBin, self.energyPlot.edgeLow, self.energyPlot.edgeUp, self.costhetaPlot.nBin, self.costhetaPlot.edgeLow, self.costhetaPlot.edgeUp))
                 aaHtgNumOff[-1][-1].SetFillStyle(0)
                 aaHtgNumOff[-1][-1].SetLineWidth(3-iS)
                 aaHtgNumOff[-1][-1].SetLineStyle(2-iS)
@@ -136,7 +138,7 @@ class Target:
                 aaHtgNumOff[-1][-1].SetMarkerStyle(pColor.aakMarkerStyle(iS,jS))
                 aaHtgNumOff[-1][-1].SetMarkerSize(pColor.aakMarkerSize(iS,jS))
                 aaHtgNumOff[-1][-1].SetMarkerColor(pColor.akColor(jS+(1-iS)*jS))
-                aaHtgNumSig[-1].append(ROOT.TH1D("hNumSig%s_%s_%s" % (self.name,iS,jS), "Number of %s Signal events of %s;log_{10}Energy[MeV];[counts]" % (self.aaClass[iS][jS], self.name), self.energyPlot.nBin, self.energyPlot.edgeLow, self.energyPlot.edgeUp))
+                aaHtgNumSig[-1].append(ROOT.TH2D("hNumSig%s_%s_%s" % (self.name,iS,jS), "Number of %s Signal events of %s [counts];log_{10}Energy[MeV];cos#theta" % (self.aaClass[iS][jS], self.name), self.energyPlot.nBin, self.energyPlot.edgeLow, self.energyPlot.edgeUp, self.costhetaPlot.nBin, self.costhetaPlot.edgeLow, self.costhetaPlot.edgeUp))
                 aaHtgNumSig[-1][-1].SetFillStyle(0)
                 aaHtgNumSig[-1][-1].SetLineWidth(3-iS)
                 aaHtgNumSig[-1][-1].SetLineStyle(2-iS)
@@ -144,7 +146,7 @@ class Target:
                 aaHtgNumSig[-1][-1].SetMarkerStyle(pColor.aakMarkerStyle(iS,jS))
                 aaHtgNumSig[-1][-1].SetMarkerSize(pColor.aakMarkerSize(iS,jS))
                 aaHtgNumSig[-1][-1].SetMarkerColor(pColor.akColor(jS+(1-iS)*jS))
-                aaHtgNumBkg[-1].append(ROOT.TH1D("hNumBkg%s_%s_%s" % (self.name,iS,jS), "Number of %s Background events of %s;log_{10}Energy[MeV];[counts]" % (self.aaClass[iS][jS], self.name), self.energyPlot.nBin, self.energyPlot.edgeLow, self.energyPlot.edgeUp))
+                aaHtgNumBkg[-1].append(ROOT.TH2D("hNumBkg%s_%s_%s" % (self.name,iS,jS), "Number of %s Background events of %s [counts];log_{10}Energy[MeV];cos#theta" % (self.aaClass[iS][jS], self.name), self.energyPlot.nBin, self.energyPlot.edgeLow, self.energyPlot.edgeUp, self.costhetaPlot.nBin, self.costhetaPlot.edgeLow, self.costhetaPlot.edgeUp))
                 aaHtgNumBkg[-1][-1].SetFillStyle(0)
                 aaHtgNumBkg[-1][-1].SetLineWidth(3-iS)
                 aaHtgNumBkg[-1][-1].SetLineStyle(2-iS)
@@ -249,33 +251,36 @@ class Target:
                 print "----------", self.aaClass[iS][jS], "----------"
                 for iE in range(self.energyPlot.nBin):
                     print self.energyPlot.getBin(iE)
-                    nOn=0
-                    nOff=0
-                    nSig=0
-                    nBkg=0
                     rSB=0
                     sgnf=0
-                    nOn = self.aaHtgNumOn[iS][jS].GetBinContent(iE+1)
-                    nOnErr = self.aaHtgNumOn[iS][jS].GetBinError(iE+1)
-                    print "Number of ON events:", nOn, "+/-", nOnErr
-                    nOff = self.aaHtgNumOff[iS][jS].GetBinContent(iE+1)
-                    nOffErr = self.aaHtgNumOff[iS][jS].GetBinError(iE+1)
+                    for iCth in range(self.costhetaPlot.nBin):
+                        print self.costhetaPlot.getBin(iCth)
+                        nOn=0
+                        nOff=0
+                        nSig=0
+                        nBkg=0
+                        nOn = self.aaHtgNumOn[iS][jS].GetBinContent(iE+1, iCth+1)
+                        nOnErr = self.aaHtgNumOn[iS][jS].GetBinError(iE+1, iCth+1)
+                        print "Number of ON events:", nOn, "+/-", nOnErr
+                        nOff = self.aaHtgNumOff[iS][jS].GetBinContent(iE+1, iCth+1)
+                        nOffErr = self.aaHtgNumOff[iS][jS].GetBinError(iE+1, iCth+1)
                     #if nOff==0:
                     #    nOff = 1
                     #    nOffErr = max(nOffErr, 1)
-                    print "Number of OFF events:", nOff, "+/-", nOffErr
-                    saOn = self.saOn[iS][iS][iE]
-                    saOff = self.saOff[iS][iS][iE]
-                    nSig = nOn - nOff*saOn/saOff
-                    nSigErr = math.sqrt( nOnErr**2 + (saOn/saOff*nOffErr)**2 )
-                    print "Number of Signal events:", nSig, "+/-", nSigErr
-                    self.aaHtgNumSig[iS][jS].SetBinContent(iE+1, nSig)
-                    self.aaHtgNumSig[iS][jS].SetBinError(iE+1, nSigErr)
-                    nBkg = nOff*saOn/saOff
-                    nBkgErr = nOffErr*saOn/saOff
-                    print "Number of Background events:", nBkg, "+/-", nBkgErr
-                    self.aaHtgNumBkg[iS][jS].SetBinContent(iE+1, nBkg)
-                    self.aaHtgNumBkg[iS][jS].SetBinError(iE+1, nBkgErr)
+                        print "Number of OFF events:", nOff, "+/-", nOffErr
+                        saOn = self.saOn[iS][iS][iE]
+                        saOff = self.saOff[iS][iS][iE]
+                        nSig = nOn - nOff*saOn/saOff
+                        nSigErr = math.sqrt( nOnErr**2 + (saOn/saOff*nOffErr)**2 )
+                        print "Number of Signal events:", nSig, "+/-", nSigErr
+                        self.aaHtgNumSig[iS][jS].SetBinContent(iE+1, iCth+1, nSig)
+                        self.aaHtgNumSig[iS][jS].SetBinError(iE+1, iCth+1, nSigErr)
+                        nBkg = nOff*saOn/saOff
+                        nBkgErr = nOffErr*saOn/saOff
+                        print "Number of Background events:", nBkg, "+/-", nBkgErr
+                        self.aaHtgNumBkg[iS][jS].SetBinContent(iE+1, iCth+1, nBkg)
+                        self.aaHtgNumBkg[iS][jS].SetBinError(iE+1, iCth+1, nBkgErr)
+                    # End of roop for cos#theta
                     if not nBkg==0:
                         rSB = nSig/nBkg
                         rSBErr = rSB * math.sqrt((nSigErr/nSig)**2 + (nBkgErr/nBkg)**2)
@@ -309,7 +314,7 @@ class Target:
         hsNumOn = ROOT.THStack("hsNumOn_%s" % self.name, "Number of ON events of %s;log_{10}Energy[MeV];[counts]" % self.name)
         for iaHtg in range(len(self.aaHtgNumOn)):
             for iHtg in range(len(self.aaHtgNumOn[iaHtg])):
-                hsNumOn.Add(self.aaHtgNumOn[iaHtg][iHtg])
+                hsNumOn.Add(self.aaHtgNumOn[iaHtg][iHtg].ProjectionX())
                 legHtg.AddEntry(self.aaHtgNumOn[iaHtg][iHtg], self.aaClass[iaHtg][iHtg], 'lp')
         cNumOn.cd()
         hsNumOn.Draw("nostack E1")
@@ -322,7 +327,7 @@ class Target:
         hsNumOff = ROOT.THStack("hsNumOff_%s" % self.name, "Number of OFF events of %s;log_{10}Energy[MeV];[counts]" % self.name)
         for aHtg in self.aaHtgNumOff:
             for htg in aHtg:
-                hsNumOff.Add(htg)
+                hsNumOff.Add(htg.ProjectionX())
         cNumOff.cd()
         hsNumOff.Draw("nostack E1")
         legHtg.Draw('same')
@@ -333,7 +338,7 @@ class Target:
         hsNumSig = ROOT.THStack("hsNumSig_%s" % self.name, "Excess counts of %s;log_{10}Energy[MeV];[counts]" % self.name)
         for aHtg in self.aaHtgNumSig:
             for htg in aHtg:
-                hsNumSig.Add(htg)
+                hsNumSig.Add(htg.ProjectionX())
         cNumSig.cd()
         hsNumSig.Draw("nostack E1")
         legHtg.Draw('same')
@@ -344,7 +349,7 @@ class Target:
         hsNumBkg = ROOT.THStack("hsNumBkg_%s" % self.name, "Expected background counts of %s;log_{10}Energy[MeV];[counts]" % self.name)
         for aHtg in self.aaHtgNumBkg:
             for htg in aHtg:
-                hsNumBkg.Add(htg)
+                hsNumBkg.Add(htg.ProjectionX())
         cNumBkg.cd()
         hsNumBkg.Draw("nostack E1")
         legHtg.Draw('same')
@@ -697,18 +702,23 @@ class PointSource(Target):
                 self.saOff[ict].append([])
                 for ie in range(self.energySet.nBin):
                     if ict==0:
-                        self.rOffMax[ict][icl].append(self.radius)
+                        #self.rOffMax[ict][icl].append(self.radius)
 #                        self.rOffMin[ict][icl].append(self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0))
                         self.rOffMin[ict][icl].append(min(self.ulOn, self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0))*self.factorOff)
+                        self.rOffMax[ict][icl].append(max(self.llOffMax, self.factorOffMax*self.rOffMin[ict][icl][-1]))
 #                        self.rOnMax[ict][icl].append(min(self.ulOn, self.perf.getPSF68(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0)*self.factorOn))
                         self.rOnMax[ict][icl].append(min(self.ulOn, self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0)*self.factorOn))
                     elif ict==1:
-                        self.rOffMax[ict][icl].append(self.radius)
+                        #self.rOffMax[ict][icl].append(self.radius)
                         self.rOffMin[ict][icl].append(min(self.ulOn, self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0))*self.factorOff)
+                        self.rOffMax[ict][icl].append(max(self.llOffMax, self.factorOffMax*self.rOffMin[ict][icl][-1]))
 #                        self.rOnMax[ict][icl].append(min(self.ulOn, self.perf.getPSF68(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0)*self.factorOn))
                         self.rOnMax[ict][icl].append(min(self.ulOn, self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0)*self.factorOn))
                         if not (self.rOffMax[ict][icl][-1]<=self.radius and self.rOffMin[ict][icl][-1]<self.rOffMax[ict][icl][-1] and self.rOnMax[ict][icl][-1]<=self.rOffMin[ict][icl][-1] and self.rOnMax[ict][icl][-1]>0):
                             print "Bad region setup!!"
+                            print 'ON region:0.0 -', self.rOnMax[ict][icl][-1], 'deg'
+                            print 'OFF region:', self.rOffMin[ict][icl][-1], '-', self.rOffMax[ict][icl][-1], 'deg'
+                            print 'cf. PSF68:', self.perf.getPSF68(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0), 'deg', 'PSF95:', self.perf.getPSF95(ict, icl, self.energySet.aBin[ie]+self.energySet.wBin/2.0), 'deg'
                             sys.exit(1)
                     print 'ON region:0.0 -', self.rOnMax[ict][icl][-1], 'deg'
                     print 'OFF region:', self.rOffMin[ict][icl][-1], '-', self.rOffMax[ict][icl][-1], 'deg'
@@ -886,7 +896,7 @@ class PointSource(Target):
                         else:
                             glEventCor = glEvent
                         self.aaaHtgMap[ctEvent-1][clEventPlus][plotE].Fill(-(glEventCor-self.glCntr), gbEvent)
-                if math.degrees(radTheta) < self.rOffMax[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]:
+                if math.degrees(radTheta) < 30.: #self.rOffMax[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]:
                     # for FITS
                     self.npaaENERGY[ctEvent-1][clEventPlus] = np.append(self.npaaENERGY[ctEvent-1][clEventPlus], eEvent)
                     self.npaaRA[ctEvent-1][clEventPlus] = np.append(self.npaaRA[ctEvent-1][clEventPlus], raEvent)
@@ -910,7 +920,7 @@ class PointSource(Target):
                     if math.degrees(radTheta) < self.rOnMax[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][plotE]:
                         self.flagOn[0] = kTRUE
                         for clEventPlus in range(clEvent-int(ctEvent==1 and clEvent==3)):
-                            self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent)
+                            self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent)
                         self.aaHtgEnergyOn[ctEvent-1][clEventPlus].Fill(eEvent)# (10**(eEvent-3))**2)
                         self.aaHtgLCCountOn[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
                     #self.aaHtgLCCountOn[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1].Fill(tEvent-self.tStart)
@@ -924,7 +934,7 @@ class PointSource(Target):
                     elif math.degrees(radTheta) >= self.rOffMin[ctEvent-1][clEvent-int(ctEvent==1 and clEvent==3)-1][binE]: 
                         self.flagOff[0] = kTRUE
                         for clEventPlus in range(clEvent-int(ctEvent==1 and clEvent==3)):
-                            self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent)
+                            self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent)
                             self.aaHtgEnergyOff[ctEvent-1][clEventPlus].Fill(eEvent)
                             self.aaHtgLCCountOff[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
         self.trObj.Fill()
@@ -1454,12 +1464,12 @@ class EarthLimb(Target):
 
                     if zEvent>=zOnMin and zEvent<zOnMax:
                         self.flagOn[0] = kTRUE
-                        self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent)
+                        self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent)
                         self.aaHtgEnergyOn[ctEvent-1][clEventPlus].Fill(eEvent)
                         self.aaHtgLCCountOn[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
                     elif (zEvent>=zOff1Min and zEvent<zOff1Max) or (zEvent>=zOff2Min and zEvent<zOff2Max):
                         self.flagOff[0] = kTRUE
-                        self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent)
+                        self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent)
                         self.aaHtgEnergyOff[ctEvent-1][clEventPlus].Fill(eEvent)
                         self.aaHtgLCCountOff[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
         self.trObj.Fill()
@@ -1623,12 +1633,12 @@ class GalacticRidge(Target):
 
                     if lEventCor>lOnMin and lEventCor<lOnMax and bEvent>-bOnMax and bEvent<bOnMax:
                         self.flagOn[0] = kTRUE
-                        self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent)
+                        self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent)
                         self.aaHtgEnergyOn[ctEvent-1][clEventPlus].Fill(eEvent)#, (10**(eEvent-3))**2)
                         self.aaHtgLCCountOn[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
                     elif (lEventCor<lOffMax and (bEvent>bOffMin or bEvent<-bOffMin)) or (lEventCor>lOffMin and (bEvent>bOffMin or bEvent<-bOffMin)):
                         self.flagOff[0] = kTRUE
-                        self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent)
+                        self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent)
                         self.aaHtgEnergyOff[ctEvent-1][clEventPlus].Fill(eEvent)#, (10**(eEvent-3))**2)
                         self.aaHtgLCCountOff[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
 #    def __init__(self, strName, bOffMin=[50., 50.], lOffMin=[90., 90.], lOffMax=[-90., -90.], bOnMax=[1.5, 5.5], lOnMin=[-50., -54], lOnMax=[40., 44.], config = ClassConfig(), self.energySet=EnergyLogRegion(3,4.75,0.25)):
@@ -1637,17 +1647,15 @@ class GalacticRidge(Target):
     def calc(self):
         Target.calc(self)
         #fPSF = ROOT.TF1("fPSF", "1. / (2*TMath::Pi())**0.5 / [0] * TMath::Exp(-(x/[0])**2/2.0)")
+        errSig = ROOT.Double()
+        errOff = ROOT.Double()
         for tE in range(self.energyPlot.nBin):
             for kAS in range(len(self.aClass)):
                 for kSS in range(len(self.aaClass[kAS])):
-                    #if kAS==0:
-                    #    degPSF = 0.1
-                    #elif kAS==1:
-                    #    degPSF = max(self.perf.getPSF68(kSS, self.energySet.getBinCenter(tE)), self.perf.getPSF95(kSS, self.energySet.getBinCenter(tE))/2.0)
-                    #fPSF.FixParameter(0, radians(degPSF))
-                    self.aaGrPerformance[tE][kAS].SetPoint(kSS, self.aaHtgNumSig[kAS][kSS].GetBinContent(tE+1), self.aaHtgNumOff[kAS][kSS].GetBinContent(tE+1))
-                    self.aaGrPerformance[tE][kAS].SetPointError(kSS, self.aaHtgNumSig[kAS][kSS].GetBinError(tE+1), self.aaHtgNumOff[kAS][kSS].GetBinError(tE+1))
-        #print self.aaGrPerformance
+                    self.aaGrPerformance[tE][kAS].SetPoint(kSS, self.aaHtgNumSig[kAS][kSS].IntegralAndError(tE+1, tE+1, 1, self.aaHtgNumSig[kAS][kSS].GetNbinsY(), errSig), self.aaHtgNumOff[kAS][kSS].IntegralAndError(tE+1, tE+1, 1, self.aaHtgNumOff[kAS][kSS].GetNbinsY(), errOff))
+                    self.aaGrPerformance[tE][kAS].SetPointError(kSS, errSig, errOff)
+                    #self.aaGrPerformance[tE][kAS].SetPoint(kSS, self.aaHtgNumSig[kAS][kSS].GetBinContent(tE+1), self.aaHtgNumOff[kAS][kSS].GetBinContent(tE+1))
+                    #self.aaGrPerformance[tE][kAS].SetPointError(kSS, self.aaHtgNumSig[kAS][kSS].GetBinError(tE+1), self.aaHtgNumOff[kAS][kSS].GetBinError(tE+1))
         print "Calculation finished."
 
 
@@ -1822,7 +1830,7 @@ class InnerGalaxy(Target):
         self.aaaHtgMap = aaaHtgMap
         print "Construction finished."
 
-    def fill(self, raEvent, decEvent, lEvent, bEvent, eEvent, ctEvent, clEvent, zEvent, tEvent):
+    def fill(self, raEvent, decEvent, lEvent, bEvent, eEvent, ctEvent, clEvent, zEvent, tEvent, cthEvent):
         clEvent = int(clEvent)
         binE = self.energySet.findBin(eEvent)
         plotE = self.energyPlot.findBin(eEvent)
@@ -1841,14 +1849,14 @@ class InnerGalaxy(Target):
                     if pCommon.anglePointsDegToDeg(0., 0., lEvent, bEvent)<rOnMax and (abs(bEvent)>=bMaskMax or abs(lEvent)<lMaskMin):
                         self.flagOn[0] = kTRUE
                         self.aaaHtgMap[ctEvent-1][clEventPlus][plotE].Fill(-lEvent, bEvent)
-                        self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent)
-                        self.aaHtgEnergyOn[ctEvent-1][clEventPlus].Fill(eEvent)#, (10**(eEvent-3))**2)
+                        self.aaHtgNumOn[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent)
+                        self.aaHtgEnergyOn[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent)#, (10**(eEvent-3))**2)
                         self.aaHtgLCCountOn[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
                     elif (lEvent<lOffMax and (bEvent>bOffMin or bEvent<-bOffMin)) or (lEvent>lOffMin and (bEvent>bOffMin or bEvent<-bOffMin)):
                         self.flagOff[0] = kTRUE
                         self.aaaHtgMap[ctEvent-1][clEventPlus][plotE].Fill(-lEvent, bEvent)
-                        self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent)
-                        self.aaHtgEnergyOff[ctEvent-1][clEventPlus].Fill(eEvent)#, (10**(eEvent-3))**2)
+                        self.aaHtgNumOff[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent)
+                        self.aaHtgEnergyOff[ctEvent-1][clEventPlus].Fill(eEvent, cthEvent)#, (10**(eEvent-3))**2)
                         self.aaHtgLCCountOff[ctEvent-1][clEventPlus].Fill(ConvertMetToMjd(tEvent)-ConvertMetToMjd(self.tStart))
         self.trObj.Fill()
 
