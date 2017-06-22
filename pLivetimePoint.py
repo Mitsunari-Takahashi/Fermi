@@ -31,10 +31,10 @@ par = sys.argv
 nameFileSuffix = par[1]
 
 # Data
-if len(par)>6:
-    pathList = par[6]
-else:
-    pathList = "/disk/gamma/cta/store/takhsm/FermiData/catalogue/PublicTableGRBs.xml" #/Users/Mitsunari/FermiAnalysis/catalogue/PublicTableGRBs.xml"
+#if len(par)>6:
+#    pathList = par[6]
+#else:
+pathList = "/disk/gamma/cta/store/takhsm/FermiData/catalogue/PublicTableGRBs.xml" #/Users/Mitsunari/FermiAnalysis/catalogue/PublicTableGRBs.xml"
 fileList = ET.parse(pathList)
 rtXml = fileList.getroot()
 
@@ -47,11 +47,12 @@ print "===================="
 # Photon data
 #listFileIn = par[5:]
 #print listFileIn
-listNameGrb = ['160509374']
+listNameGrb = par[6:] #['130427324']
 
 # PSF histogram
 path_file_perf = '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R100_perf.root' #'/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root'
 file_perf = ROOT.TFile(path_file_perf, 'READ')
+print file_perf.GetName(), 'is opened.'
 htg2_psf = file_perf.Get('psf_cth_q68_hist')
 FIXED_PSF_ENERGY = float(par[4])
 if FIXED_PSF_ENERGY<=0:
@@ -63,6 +64,9 @@ if FIXED_PSF_INCLIN<=0:
     print 'Scaling is variable for inclination'
 else:
     print 'Scaling is fixed for inclination at', FIXED_PSF_INCLIN
+
+METSTARTLAT = 239557417. # 2008-08-04 15:43:36.000 UTC
+METSTOPLAT = 536457605. # 2018Jan02 00:00
 
 #for nameFileIn in listFileIn:
 for nameGrb in listNameGrb:
@@ -91,6 +95,11 @@ for nameGrb in listNameGrb:
                 err_rad = 0.
             else:
                 err_rad = float(grb[7].text) 
+            if metStart<METSTARTLAT:
+                print "Your start time is outside of the histogram range!!!"
+            if metStop>METSTOPLAT:
+                print "Your stop time is outside of the histogram range!!!"
+
     print ""
     print "==============="
     print "GRB", nameGrb
@@ -144,7 +153,7 @@ for nameGrb in listNameGrb:
     EDGE_ENE_LOW =  htg2_psf.GetXaxis().GetBinLowEdge(1)
     EDGE_ENE_UP =  htg2_psf.GetXaxis().GetBinUpEdge(htg2_psf.GetNbinsX())
     for hRegion in range(nOff+1):
-        aHtgLt.append(ROOT.TH3D("htgLt_GRB{0}_{1}".format(nameGrb, hRegion), "Livetime [sec sr];Cos(Inclination angle);Zenith angle [deg];Time from the GRB trigger [sec]".format(aStrRegion[hRegion], nameGrb), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, max(10, int(tPost-tPro)/54000), metStart, metStop))#tPro, tPost))
+        aHtgLt.append(ROOT.TH3D("htgLt_GRB{0}_{1}".format(nameGrb, hRegion), "Livetime [sec sr];Cos(Inclination angle);Zenith angle [deg];Time from the GRB trigger [sec]".format(aStrRegion[hRegion], nameGrb), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, max(10, int(METSTOPLAT-METSTARTLAT)/54000), METSTARTLAT, METSTOPLAT))#tPro, tPost))
     make_livetime_histogram(aHtgLt, nOff+1,pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array, trigger_time)
     aHtgLt_projYX = []
     aHtgLt_scaled = []
