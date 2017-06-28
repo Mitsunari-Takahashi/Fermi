@@ -48,6 +48,19 @@ def PlotPSFandAcceptance(path_perf, emin, emax, path_out):
         pf_acc_cum_divRoi.SetBinError(lx,0)
     pf_acc_cum_divRoi.Write()
 
+    htg_acc_psf = ROOT.TH1D('htg_acc_psf', 'Acceptance weighted by E^{-1} vs. PSF68 cut', 100, 0, 10)
+    for ix in range(1, pf2d_acc.GetNbinsX()+1):
+        for iy in range(1, pf2d_acc.GetNbinsY()+1):
+            htg_acc_psf.Fill(htg_psf.GetBinContent(ix, iy), htg_acc.GetBinContent(ix, iy)*pow(10**htg_acc.GetXaxis().GetBinCenter(ix),-1))
+    htg_acc_psf.Write()
+    htg_acc_psf_cum = htg_acc_psf.GetCumulative()
+    htg_acc_psf_cum.Write()
+    htg_acc_psf_cum_divRoi = htg_acc_psf_cum.Clone('{0}_divRoI'.format(htg_acc_psf_cum.GetName()))
+    htg_acc_psf_cum_divRoi.SetTitle('Weighted acceptance / solid angle')
+    for ibin in range(1, 1+htg_acc_psf_cum_divRoi.GetNbinsX()):
+        htg_acc_psf_cum_divRoi.SetBinContent(ibin, htg_acc_psf_cum.GetBinContent(ibin)/((1-cos(radians(htg_acc_psf_cum_divRoi.GetBinCenter(ibin))))*2.*pi))
+    htg_acc_psf_cum_divRoi.Write()
+
     
 @click.command()
 @click.argument('perf', type=str)
