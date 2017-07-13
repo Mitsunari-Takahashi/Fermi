@@ -25,13 +25,15 @@ from pFindHEALPix import *
 import commands
 
 
-def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array, origin_time=0):
+def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array, origin_time=0, metExStart=0, metExStop=0):
     """Look over spacecraft files and make a histogram of (solid angle [sr] * time interval [sec]) on MET vs. Zenith angle vs. Cos(Inclination)"""
     fmwStart = ConvertMetToFMW(metStart)
     fmwStop = ConvertMetToFMW(metStop)
-    
+    print '=========================================='
+    print 'Going to look MET', metStart, '-', metStop
     print "Fermi Mission Week:", fmwStart, "-", fmwStop
-
+    print '=========================================='
+    print 'MET',metExStart, '-', metExStop, 'is excluded.'
     cmd = "ls {0}".format(pathFileScAll)
     ret = commands.getoutput(cmd)
     aPathFileScAll = ret.split("\n")
@@ -53,10 +55,20 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
         aDEC_SCZ = tbdataSC.field('DEC_SCZ')
         aDEC_SCX = tbdataSC.field('DEC_SCX')
         aLIVETIME = tbdataSC.field('LIVETIME')
+        aDATA_QUAL = tbdataSC.field('DATA_QUAL')
+        aLAT_CONFIG = tbdataSC.field('LAT_CONFIG')
         nTI = len(aSTART)
         print "  ", fileToI, "(", nTI, "intervals )"
+        nTI_included = 0
         for iTI in range(nTI):
-            if aSTART[iTI]>=metStart and aSTART[iTI]<metStop:
+            if ( aSTART[iTI]>=metStart and aSTART[iTI]<metStop ) and ( (metExStart==0 and metExStop==0) or aSTOP[iTI]<metExStart or aSTART[iTI]>=metExStop):
+                nTI_included = nTI_included+1
+                if not aDATA_QUAL[iTI]>0:
+                    print 'Bad time interval', aSTART[iTI], '-', aSTOP[iTI], ':', aDATA_QUAL[iTI]
+                    continue
+                if not aLAT_CONFIG[iTI]==1:
+                    print 'LAT config:', aSTART[iTI], '-', aSTOP[iTI], ':', aLAT_CONFIG[iTI]
+                    continue
                 tti = aLIVETIME[iTI]
                 coordsSCZ = SkyCoord(aRA_SCZ[iTI], aDEC_SCZ[iTI], unit="deg")
                 coordsZenith = SkyCoord(aRA_ZENITH[iTI], aDEC_ZENITH[iTI], unit="deg")
@@ -67,7 +79,7 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
                     if aAreaPix_array[iR]==0:
                         angSCZ = coordsSCZ.separation(aCoordsPix_array[iR])
                         radSCZ = float(angSCZ.to_string(unit=u.rad, decimal=True))
-                        angZenith = coordsZenith.separation(coordsPix)
+                        angZenith = coordsZenith.separation(aCoordsPix_array[iR])
                         degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
                         aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti)
                     else:                        
@@ -78,5 +90,6 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
                             degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
                             aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti*aAreaPix_array[iR][jpix])
                 if iTI%20==0:
-                    print iTI, aSTART[iTI], aRA_SCZ[iTI], aDEC_SCZ[iTI], tbdataSC.field('LAT_MODE')[iTI]#math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), degZenith, math.degrees(radSCY)
+                    print iTI, aSTART[iTI], aRA_SCZ[iTI], aDEC_SCZ[iTI], tbdataSC.field('LAT_MODE')[iTI], aDATA_QUAL[iTI]#math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), degZenith, math.degrees(radSCY)
                 sys.stdout.flush()
+        print nTI_included, 'intervals are included.'

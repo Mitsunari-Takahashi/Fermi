@@ -14,14 +14,11 @@ from astropy.coordinates import Angle, Latitude, Longitude  # Angles
 import astropy.units as u
 import healpy as hp
 from healpy import pixelfunc as hppf
-#import commands
-#sys.path.append("/disk/gamma/cta/store/takhsm/FermiMVA/AllSky")
-#sys.path.append("/home/takhsm/FermiMVA/python")
 ROOT.gROOT.SetBatch()
 from array import array
 import math
 from math import cos, sin, tan, acos, asin, atan, radians, degrees
-#from pColor import *
+import pandas
 from pAnalysisConfig import *
 from pFindHEALPix import *
 from pLivetime import *
@@ -47,10 +44,16 @@ print "===================="
 # Photon data
 #listFileIn = par[5:]
 #print listFileIn
-listNameGrb = par[6:] #['130427324']
+listNameGrb = par[9:] #['130427324']
+print listNameGrb
+#catalogue
+path_catlogue_csv = "/disk/gamma/cta/store/takhsm/FermiData/catalogue/GBM-BusrtCatalogue_20170623.csv"
+csv = pandas.read_csv(path_catlogue_csv)
+num_lines = sum(1 for line in open(path_catlogue_csv))
+rclass  =par[6]
 
 # PSF histogram
-path_file_perf = '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R100_perf.root' #'/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root'
+path_file_perf = '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_{0}_perf.root'.format(rclass) #'/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root'
 file_perf = ROOT.TFile(path_file_perf, 'READ')
 print file_perf.GetName(), 'is opened.'
 htg2_psf = file_perf.Get('psf_cth_q68_hist')
@@ -74,27 +77,43 @@ for nameGrb in listNameGrb:
     #indexGrbName = nameFileIn.rindex('GRB') + 3
     #indexGrbNameEnd = indexGrbName + 9
     #nameGrb = nameFileIn[indexGrbName:indexGrbNameEnd]
-    for grb in rtXml: 
-        if grb[0].text==nameGrb: 
-            raSrc = float(grb[5].text) 
-            decSrc = float(grb[6].text) 
-            trigger_time = float(grb[2].text) 
-            if float(par[3])>0 and float(par[2])<=0:
+
+    for iGrb in range(num_lines-1):
+        if int(nameGrb) == int(csv.ix[iGrb,'name']):
+            raSrc = float(csv.ix[iGrb,'ra'])
+            decSrc = float(csv.ix[iGrb,'dec']) 
+            trigger_time = ConvertMjdToMet(float(csv.ix[iGrb,'trigger_time']))
+            err_rad = float(csv.ix[iGrb,'error_radius'])
+    # for grb in rtXml: 
+    #     if grb[0].text==nameGrb: 
+    #         raSrc = float(grb[5].text) 
+    #         decSrc = float(grb[6].text) 
+    #         trigger_time = float(grb[2].text) 
+            if float(par[3])>0 and float(par[2])<METSTARTLAT and float(par[2])<float(par[3]):
                 metStart = trigger_time+float(par[2])
                 metStop = trigger_time+float(par[3])
                 tPro = float(par[2])
                 tPost = float(par[3])
-            elif float(par[2])>0 and float(par[3])>float(par[2]):
+            elif float(par[2])>=METSTARTLAT and float(par[3])>float(par[2]):
                 metStart = float(par[2])
                 metStop = float(par[3])
                 tPro = metStart - trigger_time
                 tPost = metStop - trigger_time
             else:
                 print "Time domain is not correct."
-            if grb[7].text == "--":
-                err_rad = 0.
+            if float(par[7])==0 and float(par[8])==0:
+                print 'No excluded time.'
+                metExStart = 0
+                metExStop = 0
+            if float(par[7])<METSTARTLAT and float(par[8])<METSTARTLAT:
+                metExStart = trigger_time-float(par[7])
+                metExStop = trigger_time+float(par[8])
+            elif float(par[7])>=METSTARTLAT and float(par[8])<float(par[7]):
+                metExStart = float(par[7])
+                metExStop = float(par[8])
             else:
-                err_rad = float(grb[7].text) 
+                print "Excluded time domain is not correct."
+
             if metStart<METSTARTLAT:
                 print "Your start time is outside of the histogram range!!!"
             if metStop>METSTOPLAT:
@@ -106,6 +125,7 @@ for nameGrb in listNameGrb:
     print "==============="
     print "(", raSrc, ",", decSrc, "), Error radius:", err_rad, "Trigger MET:", trigger_time 
     print "Time domain:", metStart, "-", metStop
+    print "Excluded time:", metExStart, "-", metExStop
 
     # ON/OFF regions
     nOff = 0;
@@ -141,7 +161,7 @@ for nameGrb in listNameGrb:
     aFileToI = []
     if nameFileSuffix!="":
         nameFileSuffix = "_" + nameFileSuffix
-    fileRoot = ROOT.TFile("Livetime_GRB{0}{1}.root".format(nameGrb, nameFileSuffix), "update")
+    fileRoot = ROOT.TFile("Livetime_GRB{0}_T{1}-{2}{3}.root".format(nameGrb, par[2], par[3], nameFileSuffix), "update")
     aHtgLt = []
     NBIN_CTH = 40
     EDGE_CTH_LOW = 0.2
@@ -153,8 +173,8 @@ for nameGrb in listNameGrb:
     EDGE_ENE_LOW =  htg2_psf.GetXaxis().GetBinLowEdge(1)
     EDGE_ENE_UP =  htg2_psf.GetXaxis().GetBinUpEdge(htg2_psf.GetNbinsX())
     for hRegion in range(nOff+1):
-        aHtgLt.append(ROOT.TH3D("htgLt_GRB{0}_{1}".format(nameGrb, hRegion), "Livetime [sec sr];Cos(Inclination angle);Zenith angle [deg];Time from the GRB trigger [sec]".format(aStrRegion[hRegion], nameGrb), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, max(10, int(METSTOPLAT-METSTARTLAT)/54000), METSTARTLAT, METSTOPLAT))#tPro, tPost))
-    make_livetime_histogram(aHtgLt, nOff+1,pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array, trigger_time)
+        aHtgLt.append(ROOT.TH3D("htgLt_{0}".format(hRegion), "Livetime [sec sr];Cos(Inclination angle);Zenith angle [deg];Time from the GRB trigger [sec]".format(aStrRegion[hRegion], nameGrb), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, max(10, int(METSTOPLAT-METSTARTLAT)/54000), METSTARTLAT, METSTOPLAT))#tPro, tPost))
+    make_livetime_histogram(aHtgLt, nOff+1,pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array, trigger_time, metExStart, metExStop)
     aHtgLt_projYX = []
     aHtgLt_scaled = []
     print 'Making output products...'

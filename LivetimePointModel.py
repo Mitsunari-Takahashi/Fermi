@@ -32,16 +32,19 @@ import click
 @click.argument('name', type=str)
 @click.argument('ra', type=float)
 @click.argument('dec', type=float)
+#@click.argument('dec', type=str)
 @click.option('--perf', type=str, default='/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R100_perf.root')
 @click.option('--start', type=float, default=239557417.)
-@click.option('--stop', type=float, default=501033396.)
+@click.option('--stop', type=float, default=536457605.)
+@click.option('--exstart', type=float, default=0)
+@click.option('--exstop', type=float, default=0)
 @click.option('--torigin', type=float, default=0.)
 @click.option('--inclin', type=float, default=0.)
 @click.option('--energy', type=float, default=0.)
 @click.option('--errrad', type=float, default=0.)
 @click.option('--suffix', type=str, default='')
 @click.option('--truepoint', is_flag=True)
-def main(name, ra, dec, perf, inclin, energy, suffix, start, stop, torigin, truepoint, errrad):
+def main(name, ra, dec, perf, inclin, energy, suffix, start, stop, torigin, truepoint, errrad, exstart, exstop):
 
     # Spacecraft data
     pathFileScAll = "/disk/gamma/cta/store/takhsm/FermiData/spacecraft/mtakahas-AstroServer-00011-ft2-30s.fits"
@@ -69,7 +72,6 @@ def main(name, ra, dec, perf, inclin, energy, suffix, start, stop, torigin, true
     NHPSIDE_ON = 32
     ANG_CUT = 5.
     ANG_CUT_RAD = radians(5.)
-
     aHpx_array = [find_pointon_healpxs(ra, dec, ANG_CUT, nhpside=NHPSIDE_ON)]
     aCoordsRegion = [SkyCoord(ra, dec, unit="deg")]
     aCoordsPix_array = []
@@ -98,8 +100,8 @@ def main(name, ra, dec, perf, inclin, energy, suffix, start, stop, torigin, true
                 aAreaPix_array[-1].append(area_pix)
             str_lit_unit.append('sec sr')
             print aCoordsPix_array[-1]
-            print 'Solid angle =', aAreaPix_sum[-1], 'sr'
             aAreaPix_sum.append(sum(aAreaPix_array[-1]))
+            print 'Solid angle =', aAreaPix_sum[-1], 'sr'
 
     # Output objects
     aFileToI = []
@@ -120,11 +122,14 @@ def main(name, ra, dec, perf, inclin, energy, suffix, start, stop, torigin, true
     EDGE_ENE_LOW =  htg2_psf.GetXaxis().GetBinLowEdge(1)
     EDGE_ENE_UP =  htg2_psf.GetXaxis().GetBinUpEdge(htg2_psf.GetNbinsX())
     if torigin==0:
-        torigin = start
+        torigin = start 
+    tmin_htg = 239557417
+    tmax_htg = 536457605
         
     for hRegion in range(nOff+1):
-        aHtgLt.append(ROOT.TH3D("htgLt_{0}".format(hRegion), "Livetime for {0} [{1}];Cos(Inclination angle);Zenith angle [deg];Time - {2} [sec]".format(name, str_lit_unit[hRegion], torigin), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, max(10, int(stop-start)/54000), start, stop))#tPro, tPost))
-    make_livetime_histogram(aHtgLt, nOff+1 ,pathFileScAll, start, stop, aFileToI, aCoordsPix_array, aAreaPix_array, torigin)
+        aHtgLt.append(ROOT.TH3D("htgLt_{0}".format(hRegion), "Livetime for {0} [{1}];Cos(Inclination angle);Zenith angle [deg];Time - {2} [sec]".format(name, str_lit_unit[hRegion], torigin), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, max(10, int(tmax_htg-tmin_htg)/54000), tmin_htg, tmax_htg))#tPro, tPost))
+    # make_livetime_histogram(aHtgLt, nOff+1 ,pathFileScAll, start+torigin, stop+torigin, aFileToI, aCoordsPix_array, aAreaPix_array, torigin) !!!BUG!!!
+    make_livetime_histogram(aHtgLt, nOff+1 ,pathFileScAll, start, stop, aFileToI, aCoordsPix_array, aAreaPix_array, torigin, exstart, exstop)
     aHtgLt_projYX = []
     aHtgLt_scaled = []
     print 'Making output products...'

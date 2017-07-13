@@ -29,6 +29,16 @@ from pAnalysisConfig import *
 from pFindGrbInfo import *
 from pLsList import ls_list
 
+
+def shifttimebox(lst_box, newtime, maxnum=1):
+    if len(lst_box)==maxnum:
+        for iwait in range(maxnum-1):
+            lst_box[iwait] = lst_box[iwait+1]
+        lst_box[maxnum-1] = newtime
+    else:
+        print 'Wrong array length!!!'
+
+
 @click.command()
 @click.option('--suffix', '-s',default="", help="Suffix for name of output product. GRB name is added automatically..")
 @click.argument('grbid', type=str)
@@ -39,9 +49,11 @@ from pLsList import ls_list
 @click.option('--fixpsfenergy', '-e', type=float, default=0.0, help="Set energy in log scale if you will fix the PSF cut on energy.")
 @click.option('--fixpsfinclin', '-i', type=float, default=0.0, help="Set cos(inclination angle) if you will fix the PSF cut on inclination.")
 @click.option('--exclude', type=(float, float), default=(float(sys.maxsize),0.0), help="This time domain is excluded from the data which is analyzed. Assign the start and stop in MET.")
-def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclude):
+@click.option('--thresholdenergywaitingtime', type=float, default=0.0, help="Set energy threshold for waiting time plot in log scale.")
+@click.option('--waitingnumber', '-w', type=int, default=1, help="Set number of consective events you wait.")
+def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclude, thresholdenergywaitingtime, waitingnumber):
     # ----- Event class setup -----
-    cfg = ClassConfig('Both', [10, 3, 1], 1)
+    cfg = ClassConfig('Both', [10, 3, 1, 0.3], 1)
     aCutEGB = cfg.aCutEGB
     aaStrSelect = cfg.aaStrSelect
     aStrSelect = cfg.aStrSelect
@@ -49,8 +61,9 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
     #IRF
     listPathFilePerf = [['/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S16/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15_P8R2_TRANSIENT100_P8R2_TRANSIENT100_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S16/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15/S16V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatTwoZDIR050_15_P8R2_SOURCE_P8R2_SOURCE_perf.root'], 
                         ['/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R100_perf.root', 
-                         '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R30_perf.root', 
-                         '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R10_perf.root']]
+                         '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R030_perf.root', 
+                         '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R010_perf.root',
+                         '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_E28bin_Cth40bins_axisObs_CalOnly_R003_perf.root']]
 #                        ['/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R100_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R30_perf.root', '/disk/gamma/cta/store/takhsm/FermiMVA/MVA/S18/S18V200909_020RAWE20ZDIR020ZCS000wwoTRKwoMCZDIR00woRWcatTwo_15/S18ZDIR020catTwoZDIR060_CalOnly_R10_perf.root']]
     htgPerf = CutPerformanceHtg(listPathFilePerf)
 
@@ -59,7 +72,7 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
     listTgtGRB = [grbid] #[par[1]]
 
     # Catalogue Data
-    pathList =     pathList = "/disk/gamma/cta/store/takhsm/FermiData/catalogue/PublicTableGRBs.xml" #"/nfs/farm/g/glast/u/mtakahas/data/catalogue/PublicTableGRBs.xml"
+    pathList = "/disk/gamma/cta/store/takhsm/FermiData/catalogue/PublicTableGRBs.xml" #"/nfs/farm/g/glast/u/mtakahas/data/catalogue/PublicTableGRBs.xml"
     fileList = ET.parse(pathList)
     rtXml = fileList.getroot()
 
@@ -67,7 +80,7 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
     #nFile = (len(par)-5)/2
     listFileIn = ls_list(evtfiles) #par[6:6+nFile]
     #listFileDat = ls_list(datafiles) #par[6+nFile:6+2*nFile]
-    print listFileIn
+    #print listFileIn
 
     aliasSelections = yaml.load(open("{0}/config/pass8_event_selections.yaml".format(os.environ.get("EVENTSELECT")),'r'))
 
@@ -119,8 +132,8 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
         htgRADEC = ROOT.TH2D("htgRADEC", "DEC vs. RA of flagged events", 360, 0, 360, 180, -90, 90)
 
         aHtgEvt = []
-        NBIN_CTH = 40
-        EDGE_CTH_LOW = 0.2
+        NBIN_CTH = 50
+        EDGE_CTH_LOW = 0.0
         EDGE_CTH_UP = 1.0
         NBIN_ZEN = 180
         EDGE_ZEN_LOW = 0
@@ -139,8 +152,8 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
 
         aHtgInterval = []
         EDGE_ITV_LOW = 0
-        EDGE_ITV_UP = 7
-        NBIN_ITV = 100*(EDGE_ITV_UP-EDGE_ITV_LOW)
+        EDGE_ITV_UP = 10000000 #8
+        NBIN_ITV = 10000 #100*(EDGE_ITV_UP-EDGE_ITV_LOW)
         EDGE_MET_LOW = metStart
         EDGE_MET_UP = metStop
         NBIN_MET = int((EDGE_MET_UP-EDGE_MET_LOW)/(365.25/12.*86400))
@@ -168,9 +181,9 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
                     greZenith[-1][-1][-1].SetName("greZenith_{0}_{1}".format(pC, qC))
                     greZenith[-1][-1][-1].SetTitle("{0}, PSF{1}%".format(aaStrSelect[pC][qC], cutPsf))
                     greZenith[-1][-1][-1].SetMarkerStyle(20+int(cutPsf==68))
-                    aHtgEvt[-1][-1].append(ROOT.TH3D("htgEvt_GRB{0}_{1}_PSF{2}".format(nameGrb, aaStrSelect[pC][qC], cutPsf), "{0} events within PSF{1}{2} from GRB{3} (MET {4} - {5});Cos(Inclination angle);Zenith angle [deg];log_{{10}}Energy [MeV]".format(aaStrSelect[pC][qC], cutPsf, str_fix_psf, nameGrb, metStart, metStop), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, NBIN_ENE, EDGE_ENE_LOW, EDGE_ENE_UP))
-                    aHtgInterval[-1][-1].append(ROOT.TH2D("htgInterval_GRB{0}_{1}_PSF{2}".format(nameGrb, aaStrSelect[pC][qC], cutPsf), "{0} event intervals (waiting time) within PSF{1}{2} from GRB{3} (MET {4} - {5});MET [s];log_{{10}}(Waiting time [s])".format(aaStrSelect[pC][qC], cutPsf, str_fix_psf, nameGrb, metStart, metStop), NBIN_MET, EDGE_MET_LOW, EDGE_MET_UP, NBIN_ITV, EDGE_ITV_LOW, EDGE_ITV_UP))
-                    metPrevious[-1][-1].append(0.)
+                    aHtgEvt[-1][-1].append(ROOT.TH3D("htgEvt_{0}_PSF{1}".format(aaStrSelect[pC][qC], cutPsf), "{0} events within PSF{1}{2} from GRB{3} (MET {4} - {5});Cos(Inclination angle);Zenith angle [deg];log_{{10}}Energy [MeV]".format(aaStrSelect[pC][qC], cutPsf, str_fix_psf, nameGrb, metStart, metStop), NBIN_CTH, EDGE_CTH_LOW, EDGE_CTH_UP, NBIN_ZEN, EDGE_ZEN_LOW, EDGE_ZEN_UP, NBIN_ENE, EDGE_ENE_LOW, EDGE_ENE_UP))
+                    aHtgInterval[-1][-1].append(ROOT.TH2D("htgInterval_{0}_PSF{1}".format(aaStrSelect[pC][qC], cutPsf), "Intervals (waiting time) between consective {6} {0} events above {7:.1f} GeV within PSF{1}{2} from GRB{3} (MET {4} - {5});MET [s];Waiting time [s]".format(aaStrSelect[pC][qC], cutPsf, str_fix_psf, nameGrb, metStart, metStop, waitingnumber+1, 10**(thresholdenergywaitingtime-3)), NBIN_MET, EDGE_MET_LOW, EDGE_MET_UP, NBIN_ITV, EDGE_ITV_LOW, EDGE_ITV_UP))
+                    metPrevious[-1][-1].append([0.]*waitingnumber)
                     if pC==0:
                         greOn[-1][-1][-1].SetMarkerColor(13-12*qC)
                         greZenith[-1][-1][-1].SetMarkerColor(13-12*qC)
@@ -198,7 +211,7 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
             else:
                 cthpsf = fixpsfinclin
             
-            dictDistCut = { 'PSF95': (htgPerf.getPSF95_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384), epsf, cthpsf) + dict_grb["ERROR_RADIUS"]), 'PSF68': (htgPerf.getPSF68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384), epsf, cthpsf) + dict_grb["ERROR_RADIUS"]) }
+            dictDistCut = { 'PSF95': (htgPerf.getPSF95_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384)+3*(chIn.s==32768), epsf, cthpsf) + dict_grb["ERROR_RADIUS"]), 'PSF68': (htgPerf.getPSF68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384)+3*(chIn.s==32768), epsf, cthpsf) + dict_grb["ERROR_RADIUS"]) }
             radTheta = acos(np.dot(vecTgt, vecEvt))
             degDist = degrees(radTheta)
             #if chIn.evid == 6500524:
@@ -223,20 +236,38 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
                         greZenith[bPSF68][0][1].SetPoint(greZenith[bPSF68][0][1].GetN(), chIn.t-dict_grb["TRIGGER_MET"], chIn.z)
                     if chIn.s >= 4:
                         aHtgEvt[0][0][0].Fill(chIn.cth, chIn.z, chIn.e)
-                        aHtgInterval[0][0][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][0][0])))
-                        metPrevious[0][0][0] = chIn.t
+                        if chIn.e>=thresholdenergywaitingtime:
+                            #aHtgInterval[0][0][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][0][0][0])))
+                            if metPrevious[0][0][0][0]>0:
+                                aHtgInterval[0][0][0].Fill(chIn.t, chIn.t-metPrevious[0][0][0][0])
+                            shifttimebox(metPrevious[0][0][0], chIn.t, waitingnumber)
+                        #for iwait in range(waitingnumber-1):
+                        #    metPrevious[0][0][0][iwait] = metPrevious[0][0][0][iwait+1]
+                        #metPrevious[0][0][waitingnumber-1] = chIn.t
                         if bPSF68==1:
                             aHtgEvt[bPSF68][0][0].Fill(chIn.cth, chIn.z, chIn.e)
-                            aHtgInterval[bPSF68][0][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][0][0])))
-                            metPrevious[bPSF68][0][0] = chIn.t
+                            if chIn.e>=thresholdenergywaitingtime:
+                                #aHtgInterval[bPSF68][0][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][0][0][0])))
+                                if metPrevious[bPSF68][0][0][0]>0:
+                                    aHtgInterval[bPSF68][0][0].Fill(chIn.t, chIn.t-metPrevious[bPSF68][0][0][0])
+                                shifttimebox(metPrevious[bPSF68][0][0], chIn.t, waitingnumber)
+                            #metPrevious[bPSF68][0][0] = chIn.t
                     if chIn.s >= 128:
                         aHtgEvt[0][0][1].Fill(chIn.cth, chIn.z, chIn.e)
-                        aHtgInterval[0][0][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][0][1])))
-                        metPrevious[0][0][1] = chIn.t
+                        if chIn.e>=thresholdenergywaitingtime:
+                            #aHtgInterval[0][0][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][0][1][0])))
+                            if metPrevious[0][0][1][0]>0:
+                                aHtgInterval[0][0][1].Fill(chIn.t, chIn.t-metPrevious[0][0][1][0])
+                            shifttimebox(metPrevious[0][0][1], chIn.t, waitingnumber)
+                        #metPrevious[0][0][1] = chIn.t
                         if bPSF68==1:
                             aHtgEvt[bPSF68][0][1].Fill(chIn.cth, chIn.z, chIn.e)
-                            aHtgInterval[bPSF68][0][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][0][1])))
-                            metPrevious[bPSF68][0][1] = chIn.t
+                            if chIn.e>=thresholdenergywaitingtime:
+                                #aHtgInterval[bPSF68][0][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][0][1][0])))
+                                if metPrevious[bPSF68][0][1][0]>0:
+                                    aHtgInterval[bPSF68][0][1].Fill(chIn.t, chIn.t-metPrevious[bPSF68][0][1][0])
+                                shifttimebox(metPrevious[bPSF68][0][1], chIn.t, waitingnumber)
+                            #metPrevious[bPSF68][0][1] = chIn.t
 
                 elif chIn.c == 2:
                     if chIn.s == 4096:
@@ -251,30 +282,71 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
                         if chIn.z<90:
                             greOn[bPSF68][1][2].SetPoint(greOn[bPSF68][1][2].GetN(), chIn.t-dict_grb["TRIGGER_MET"], pow(10, chIn.e-3))
                         greZenith[bPSF68][1][2].SetPoint(greZenith[bPSF68][1][2].GetN(), chIn.t-dict_grb["TRIGGER_MET"], chIn.z)
+                    elif chIn.s == 32768:
+                        if chIn.z<90:
+                            greOn[bPSF68][1][3].SetPoint(greOn[bPSF68][1][3].GetN(), chIn.t-dict_grb["TRIGGER_MET"], pow(10, chIn.e-3))
+                        greZenith[bPSF68][1][3].SetPoint(greZenith[bPSF68][1][3].GetN(), chIn.t-dict_grb["TRIGGER_MET"], chIn.z)
                     if chIn.s >= 4096:
                         aHtgEvt[0][1][0].Fill(chIn.cth, chIn.z, chIn.e)
-                        aHtgInterval[0][1][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][1][0])))
-                        metPrevious[0][1][0] = chIn.t
+                        if chIn.e>=thresholdenergywaitingtime:
+                            #aHtgInterval[0][1][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][1][0][0])))
+                            print chIn.t, chIn.t-metPrevious[0][1][0][0]
+                            if metPrevious[0][1][0][0]>0:
+                                aHtgInterval[0][1][0].Fill(chIn.t, chIn.t-metPrevious[0][1][0][0])
+                            shifttimebox(metPrevious[0][1][0], chIn.t, waitingnumber)
+                        #metPrevious[0][1][0] = chIn.t
                         if bPSF68==1:
                             aHtgEvt[bPSF68][1][0].Fill(chIn.cth, chIn.z, chIn.e)
-                            aHtgInterval[bPSF68][1][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][1][0])))
-                            metPrevious[bPSF68][1][0] = chIn.t
+                            if chIn.e>=thresholdenergywaitingtime:
+                                #aHtgInterval[bPSF68][1][0].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][1][0][0])))
+                                if metPrevious[bPSF68][1][0][0]>0:
+                                    aHtgInterval[bPSF68][1][0].Fill(chIn.t, chIn.t-metPrevious[bPSF68][1][0][0])
+                                shifttimebox(metPrevious[bPSF68][1][0], chIn.t, waitingnumber)
+                            #metPrevious[bPSF68][1][0] = chIn.t
                     if chIn.s >= 8192:
                         aHtgEvt[0][1][1].Fill(chIn.cth, chIn.z, chIn.e)
-                        aHtgInterval[0][1][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][1][1])))
-                        metPrevious[0][1][1] = chIn.t
+                        if chIn.e>=thresholdenergywaitingtime:
+                            #aHtgInterval[0][1][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][1][1][0])))
+                            if metPrevious[0][1][1][0]>0:
+                                aHtgInterval[0][1][1].Fill(chIn.t, chIn.t-metPrevious[0][1][1][0])
+                            shifttimebox(metPrevious[0][1][1], chIn.t, waitingnumber)
+                        #metPrevious[0][1][1] = chIn.t
                         if bPSF68==1:
                             aHtgEvt[bPSF68][1][1].Fill(chIn.cth, chIn.z, chIn.e)
-                            aHtgInterval[bPSF68][1][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][1][1])))
-                            metPrevious[bPSF68][1][1] = chIn.t
+                            if chIn.e>=thresholdenergywaitingtime:
+                                #aHtgInterval[bPSF68][1][1].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][1][1][0])))
+                                if metPrevious[bPSF68][1][1][0]>0:
+                                    aHtgInterval[bPSF68][1][1].Fill(chIn.t, chIn.t-metPrevious[bPSF68][1][1][0])
+                                shifttimebox(metPrevious[bPSF68][1][1], chIn.t, waitingnumber)
+                            #metPrevious[bPSF68][1][1] = chIn.t
                     if chIn.s >= 16384:
                         aHtgEvt[0][1][2].Fill(chIn.cth, chIn.z, chIn.e)
-                        aHtgInterval[0][1][2].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][1][2])))
-                        metPrevious[0][1][2] = chIn.t
+                        if chIn.e>=thresholdenergywaitingtime:
+                            #aHtgInterval[0][1][2].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[0][1][2][0])))
+                            if metPrevious[0][1][2][0]>0:
+                                aHtgInterval[0][1][2].Fill(chIn.t, chIn.t-metPrevious[0][1][2][0])
+                            shifttimebox(metPrevious[0][1][2], chIn.t, waitingnumber)
+                        #metPrevious[0][1][2] = chIn.t
                         if bPSF68==1:
                             aHtgEvt[bPSF68][1][2].Fill(chIn.cth, chIn.z, chIn.e)
-                            aHtgInterval[bPSF68][1][2].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][1][2])))
-                            metPrevious[bPSF68][1][2] = chIn.t
+                            if chIn.e>=thresholdenergywaitingtime:
+                                #aHtgInterval[bPSF68][1][2].Fill(chIn.t, max(0., log10(chIn.t-metPrevious[bPSF68][1][2][0])))
+                                if metPrevious[bPSF68][1][2][0]>0:
+                                    aHtgInterval[bPSF68][1][2].Fill(chIn.t, chIn.t-metPrevious[bPSF68][1][2][0])
+                                shifttimebox(metPrevious[bPSF68][1][2], chIn.t, waitingnumber)
+                            #metPrevious[bPSF68][1][2] = chIn.t
+                    if chIn.s >= 32768:
+                        aHtgEvt[0][1][3].Fill(chIn.cth, chIn.z, chIn.e)
+                        if chIn.e>=thresholdenergywaitingtime:
+                            if metPrevious[0][1][3][0]>0:
+                                aHtgInterval[0][1][3].Fill(chIn.t, chIn.t-metPrevious[0][1][3][0])
+                            shifttimebox(metPrevious[0][1][3], chIn.t, waitingnumber)
+                        if bPSF68==1:
+                            aHtgEvt[bPSF68][1][3].Fill(chIn.cth, chIn.z, chIn.e)
+                            if chIn.e>=thresholdenergywaitingtime:
+                                if metPrevious[bPSF68][1][3][0]>0:
+                                    aHtgInterval[bPSF68][1][3].Fill(chIn.t, chIn.t-metPrevious[bPSF68][1][3][0])
+                                shifttimebox(metPrevious[bPSF68][1][3], chIn.t, waitingnumber)
 
                 print "Run ID:", chIn.run
                 print "Event ID:", chIn.evid
@@ -282,9 +354,9 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
                 print "Event class:", chIn.s
                 print "Time from the trigger:", chIn.t-dict_grb["TRIGGER_MET"], "s"
                 print "Anglular distance:", degDist, "deg"
-                print "PSF68:", htgPerf.getPSF68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384), chIn.e, chIn.cth), "deg"
+                print "PSF68:", htgPerf.getPSF68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384)+3*(chIn.s==32768), chIn.e, chIn.cth), "deg"
                 print "Energy:", pow(10,chIn.e-3), "GeV"
-                print "Edisp68:", 100*htgPerf.getEdisp68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384), chIn.e, chIn.cth), "%"
+                print "Edisp68:", 100*htgPerf.getEdisp68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384)+3*(chIn.s==32768), chIn.e, chIn.cth), "%"
                 print "Cos( inclination angle ):", chIn.cth
                 print "Zenith angle:", chIn.z, "deg"
             trGRB.Fill()
