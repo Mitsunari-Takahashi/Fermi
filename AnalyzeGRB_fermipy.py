@@ -14,6 +14,7 @@ from LikelihoodState import LikelihoodState
 from fermipy.gtutils import BinnedAnalysis, SummedLikelihood
 import BinnedAnalysis as ba
 import pyLikelihood as pyLike
+import ROOT
 
 import numpy as np
 from math import log10, sqrt, ceil, isnan
@@ -34,7 +35,7 @@ def scale_limit(value, limit, norm):
 def zero_for_except(a):
     try:
         if isinstance(a, float) or isinstance(a, int):
-            if isnan(value) is True:
+            if isnan(a) is True:
                 return 0.0
             else:
                 return a
@@ -58,9 +59,9 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
     if tmin is None:
         tmin = T90_START+T90
     if tmax is None:
-        tmax = 100000.
+        tmax = 10000.
     eranges_shifted = []
-    erange_sed_lin = [316.228, 1778.28, 10000.0, 56234.1, 316228.] #[316.228, 1000.0, 3162.28, 10000.0, 56234.1, 316228.]
+    erange_sed_lin = [316.228, 1778.28, 5623.41, 17782.8, 56234.1, 177828.0] #[316.228, 1778.28, 10000.0, 56234.1, 316228.] #[316.228, 1000.0, 3162.28, 10000.0, 56234.1, 316228.]
     erange_sed_shifted_lin = []
     erange_hiend = erange_sed_lin[-2:] #[56234., 316228.]
     erange_hiend_shifted = []
@@ -80,7 +81,7 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
         eranges_shifted = eranges
         erange_hiend_shifted = erange_hiend
         erange_sed_shifted_lin = erange_sed_lin
-    erange_sed_shifted = [log10(x) for x in erange_sed_shifted_lin]
+    erange_sed_shifted = np.array([log10(x) for x in erange_sed_shifted_lin])
     print 'Shifted energy ranges:', eranges_shifted, 'MeV'
     SUFFIX = ''
     if suffix!='':
@@ -166,6 +167,7 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
         for itime in range(NRAN_TIME):
             strtime = 'T{0:0>6}-{1:0>6}s'.format(int(0.5+LST_RAN_TIME[itime][0]), int(0.5+LST_RAN_TIME[itime][1]))
             print '=====', strtime, '====='
+            dct_loglike = {}
             for (ispec, fspec) in enumerate(lst_spec_func):
                 print '-----', fspec, '-----'
                 path_subdir = '{0}/{1}/{2}/{3}'.format(path_outdir, strenergies, strtime, fspec)
@@ -243,8 +245,8 @@ model:
                     gta.print_roi()
                     print ' Fitting finished.'
                 
-                    loglike = fitresult['loglike']
-                    print '** log(likelihood):', loglike
+                    dct_loglike[fspec] = fitresult['loglike']
+                    print '** log(likelihood):', dct_loglike[fspec]
                     src_model = gta.get_src_model('GRB'+NAME_TGT)
                     norm_lims95 = get_parameter_limits(src_model['norm_scan'], src_model['loglike_scan'], 0.95)
                     norm_lims68 = get_parameter_limits(src_model['norm_scan'], src_model['loglike_scan'], 0.68)
@@ -276,24 +278,26 @@ model:
                     print 'SED with adjusted energy bins.'
                     print erange_sed_shifted
                         #gta_cloned = gta.clone(gta.config)
-                    sed_ad  = gta.sed('GRB'+NAME_TGT, prefix='AD', use_local_index=True, make_plots=True, outfile='sed_GRB{0}{1}_ad.fits'.format(NAME_TGT, SUFFIX), loge_bins=erange_sed_shifted)
+                    sed_ad  = gta.sed('GRB'+NAME_TGT, prefix='AD', use_local_index=True, make_plots=True, outfile='sed_GRB{0}{1}_ad.fits'.format(NAME_TGT, SUFFIX), loge_bins=erange_sed_shifted) #[2., 2.5, 3., 3.5, 4., 4.5, 5.]) #erange_sed_shifted)
                     for (je, e_ref) in enumerate(sed_ad['e_ref']):
                         print '** SED', int(0.5+sed_ad['e_min'][je]), '-', int(0.5+sed_ad['e_max'][je]), 'MeV'
+                        print '* TS:', sed_ad['ts'][je]
                         norm_sed_lims95 = get_parameter_limits(sed_ad['norm_scan'][je], sed_ad['dloglike_scan'][je], 0.95)
                         norm_sed_lims68 = get_parameter_limits(sed_ad['norm_scan'][je], sed_ad['dloglike_scan'][je], 0.68)
                         print '* Flux:', sed_ad['flux'][je], '+', sed_ad['flux_err_hi'][je], '-', sed_ad['flux_err_lo'][je], '(UL:', sed_ad['flux_ul95'][je], ')'
-                        print '  95% limits:', sed_ad['ref_flux'][je]*norm_sed_lims95['ll'], '-', sed_ad['ref_flux'][je]*norm_sed_lims95['ul'] #scale_limit(sed_ad['ref_flux'][je], norm_sed_lims95['ll'], norm_sed_lims95['x0']), '-', scale_limit(sed_ad['ref_flux'][je], norm_sed_lims95['ul'], norm_sed_lims95['x0'])
-                        print '  68% limits:', sed_ad['ref_flux'][je]*norm_sed_lims68['ll'], '-', sed_ad['ref_flux'][je]*norm_sed_lims68['ul'] #scale_limit(sed_ad['ref_flux'][je], norm_sed_lims68['ll'], norm_sed_lims95['x0']), '-', scale_limit(sed_ad['ref_flux'][je], norm_sed_lims68['ul'], norm_sed_lims95['x0'])
+                        print '  Max likelihood:', sed_ad['ref_flux'][je]*norm_sed_lims95['x0']
+                        print '  95% limits:', sed_ad['ref_flux'][je]*norm_sed_lims95['ll'], '-', sed_ad['ref_flux'][je]*norm_sed_lims95['ul'] 
+                        print '  68% limits:', sed_ad['ref_flux'][je]*norm_sed_lims68['ll'], '-', sed_ad['ref_flux'][je]*norm_sed_lims68['ul'] 
                         print '* Energy flux:', sed_ad['eflux'][je], '+', sed_ad['eflux_err_hi'][je], '-', sed_ad['eflux_err_lo'][je], '(UL:', sed_ad['eflux_ul95'][je], ')'
-                        print '  95% limits:', sed_ad['ref_eflux'][je]*norm_sed_lims95['ll'], '-', sed_ad['ref_eflux'][je]*norm_sed_lims95['ul'] #scale_limit(sed_ad['ref_eflux'][je], norm_sed_lims95['ll'], norm_sed_lims95['x0']), '-', scale_limit(sed_ad['ref_eflux'][je], norm_sed_lims95['ul'], norm_sed_lims95['x0'])
-                        print '  68% limits:', sed_ad['ref_eflux'][je]*norm_sed_lims68['ll'], '-', sed_ad['ref_eflux'][je]*norm_sed_lims68['ul'] #scale_limit(sed_ad['ref_eflux'][je], norm_sed_lims68['ll'], norm_sed_lims95['x0']), '-', scale_limit(sed_ad['ref_eflux'][je], norm_sed_lims68['ul'], norm_sed_lims95['x0'])
-
+                        print '  Max likelihood:', sed_ad['ref_eflux'][je]*norm_sed_lims95['x0']
+                        print '  95% limits:', sed_ad['ref_eflux'][je]*norm_sed_lims95['ll'], '-', sed_ad['ref_eflux'][je]*norm_sed_lims95['ul']
+                        print '  68% limits:', sed_ad['ref_eflux'][je]*norm_sed_lims68['ll'], '-', sed_ad['ref_eflux'][je]*norm_sed_lims68['ul']
                     #print 'SED with equivalent energy bins.'
                     #sed_eq  = gta.sed('GRB'+NAME_TGT, prefix='EQ', use_local_index=True, make_plots=True, outfile='sed_GRB{0}{1}_eq.fits'.format(NAME_TGT, SUFFIX))
                     #if fspec=='PL':
                     str_lc = """#name:function:start:stop:emin_rest:emax_rest:emin_shifted:emax_shifted:ts:Integral:Integral_err:Integral_ul95:Integral_ll95:Integral_ul68:Integral_ll68:Index1:Index1_err:Index2:Index2_err:BreakValue:BreakValue_err:flux:flux_err:flux_ul95:flux_ll95:flux_ul68:flux_ll68:eflux:eflux_err:eflux_ul95:eflux_ll95:eflux_ul68:eflux_ll68:fluxhe:fluxhe_err:efluxhe:efluxhe_err:flux_hiest_e:flux_hiest_e_err_hi:flux_hiest_e_err_lo:flux_hiest_e_ul:flux_hiest_e_ll:eflux_hiest_e:eflux_hiest_e_err_hi:eflux_hiest_e_err_lo:eflux_hiest_e_ul:eflux_hiest_e_ll:loglike
 {0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18},{19},{20},{21},{22},{23},{24},{25},{26},{27},{28},{29},{30},{31},{32},{33},{34},{35},{36},{37},{38},{39},{40},{41},{42},{43},{44},{45},{46},{47}
-""".format(NAME_TGT, fspec, LST_RAN_TIME[itime][0], LST_RAN_TIME[itime][1], eranges[ieedges][0], eranges[ieedges][1], eedges[0], eedges[1], src_model['ts'], src_model['param_values'][0], src_model['param_errors'][0], src_model['param_values'][0]*norm_lims95['ul']/norm_lims95['x0'], src_model['param_values'][0]*norm_lims95['ll']/norm_lims95['x0'], src_model['param_values'][0]*norm_lims68['ul']/norm_lims68['x0'], src_model['param_values'][0]*norm_lims68['ll']/norm_lims68['x0'], zero_for_except(src_model['param_values'][1]), zero_for_except(src_model['param_errors'][1]), zero_for_except(src_model['param_values'][2]), zero_for_except(src_model['param_errors'][2]), zero_for_except(src_model['param_values'][3]), zero_for_except(src_model['param_errors'][3]), src_model['flux'], src_model['flux_err'], src_model['flux_ul95'], scale_limit(src_model['flux'], norm_lims95['ll'], norm_lims95['x0']), scale_limit(src_model['flux'], norm_lims68['ul'], norm_lims68['x0']), scale_limit(src_model['flux'], norm_lims68['ll'], norm_lims68['x0']), src_model['eflux'], src_model['eflux_err'], src_model['eflux_ul95'], scale_limit(src_model['eflux'], norm_lims95['ll'], norm_lims95['x0']), scale_limit(src_model['eflux'], norm_lims68['ul'], norm_lims68['x0']), scale_limit(src_model['eflux'], norm_lims68['ll'], norm_lims68['x0']), fluxhe, fluxhe_err, efluxhe, efluxhe_err, sed_ad['flux'][-1], sed_ad['flux_err_hi'][-1], sed_ad['flux_err_lo'][-1], sed_ad['flux_ul95'][-1], sed_ad['ref_flux'][-1]*norm_sed_lims68['ul'], sed_ad['eflux'][-1], sed_ad['eflux_err_hi'][-1], sed_ad['eflux_err_lo'][-1], sed_ad['eflux_ul95'][-1], sed_ad['ref_eflux'][-1]*norm_lims68['ul'], loglike)
+""".format(NAME_TGT, fspec, LST_RAN_TIME[itime][0], LST_RAN_TIME[itime][1], eranges[ieedges][0], eranges[ieedges][1], eedges[0], eedges[1], src_model['ts'], src_model['param_values'][0], src_model['param_errors'][0], src_model['param_values'][0]*norm_lims95['ul']/norm_lims95['x0'], src_model['param_values'][0]*norm_lims95['ll']/norm_lims95['x0'], src_model['param_values'][0]*norm_lims68['ul']/norm_lims68['x0'], src_model['param_values'][0]*norm_lims68['ll']/norm_lims68['x0'], zero_for_except(src_model['param_values'][1]), zero_for_except(src_model['param_errors'][1]), zero_for_except(src_model['param_values'][2]), zero_for_except(src_model['param_errors'][2]), zero_for_except(src_model['param_values'][3]), zero_for_except(src_model['param_errors'][3]), src_model['flux'], src_model['flux_err'], src_model['flux_ul95'], scale_limit(src_model['flux'], norm_lims95['ll'], norm_lims95['x0']), scale_limit(src_model['flux'], norm_lims68['ul'], norm_lims68['x0']), scale_limit(src_model['flux'], norm_lims68['ll'], norm_lims68['x0']), src_model['eflux'], src_model['eflux_err'], src_model['eflux_ul95'], scale_limit(src_model['eflux'], norm_lims95['ll'], norm_lims95['x0']), scale_limit(src_model['eflux'], norm_lims68['ul'], norm_lims68['x0']), scale_limit(src_model['eflux'], norm_lims68['ll'], norm_lims68['x0']), fluxhe, fluxhe_err, efluxhe, efluxhe_err, sed_ad['ref_flux'][je]*norm_sed_lims95['x0'], sed_ad['ref_flux'][je]*norm_sed_lims68['ul'], sed_ad['ref_flux'][je]*norm_sed_lims68['ll'], sed_ad['ref_flux'][je]*norm_sed_lims95['ul'], sed_ad['ref_flux'][je]*norm_sed_lims95['ll'], sed_ad['ref_eflux'][je]*norm_sed_lims95['x0'], sed_ad['ref_eflux'][je]*norm_sed_lims68['ul'], sed_ad['ref_eflux'][je]*norm_sed_lims68['ll'], sed_ad['ref_eflux'][je]*norm_sed_lims95['ul'], sed_ad['ref_eflux'][je]*norm_sed_lims95['ll'], dct_loglike[fspec]) #.format(NAME_TGT, fspec, LST_RAN_TIME[itime][0], LST_RAN_TIME[itime][1], eranges[ieedges][0], eranges[ieedges][1], eedges[0], eedges[1], src_model['ts'], src_model['param_values'][0], src_model['param_errors'][0], src_model['param_values'][0]*norm_lims95['ul']/norm_lims95['x0'], src_model['param_values'][0]*norm_lims95['ll']/norm_lims95['x0'], src_model['param_values'][0]*norm_lims68['ul']/norm_lims68['x0'], src_model['param_values'][0]*norm_lims68['ll']/norm_lims68['x0'], zero_for_except(src_model['param_values'][1]), zero_for_except(src_model['param_errors'][1]), zero_for_except(src_model['param_values'][2]), zero_for_except(src_model['param_errors'][2]), zero_for_except(src_model['param_values'][3]), zero_for_except(src_model['param_errors'][3]), src_model['flux'], src_model['flux_err'], src_model['flux_ul95'], scale_limit(src_model['flux'], norm_lims95['ll'], norm_lims95['x0']), scale_limit(src_model['flux'], norm_lims68['ul'], norm_lims68['x0']), scale_limit(src_model['flux'], norm_lims68['ll'], norm_lims68['x0']), src_model['eflux'], src_model['eflux_err'], src_model['eflux_ul95'], scale_limit(src_model['eflux'], norm_lims95['ll'], norm_lims95['x0']), scale_limit(src_model['eflux'], norm_lims68['ul'], norm_lims68['x0']), scale_limit(src_model['eflux'], norm_lims68['ll'], norm_lims68['x0']), fluxhe, fluxhe_err, efluxhe, efluxhe_err, sed_ad['flux'][-1], sed_ad['flux_err_hi'][-1], sed_ad['flux_err_lo'][-1], sed_ad['flux_ul95'][-1], sed_ad['ref_flux'][-1]*norm_sed_lims68['ul'], sed_ad['eflux'][-1], sed_ad['eflux_err_hi'][-1], sed_ad['eflux_err_lo'][-1], sed_ad['eflux_ul95'][-1], sed_ad['ref_eflux'][-1]*norm_lims68['ul'], dct_loglike[fspec])
                 
                     withopt = 'a'
                     if ieedges==0 and ispec==0:
@@ -301,44 +305,50 @@ model:
                     with open("{0}/GRB{1}_{2}_lc_summary.csv".format(path_first, NAME_TGT, strtime), withopt) as text:
                         print str_lc
                         text.write(str_lc)
-                
-                    continue
+                    #continue
+            try:
+                ts_ebreak = 2*(dct_loglike['BPL'] - dct_loglike['PL'])
+                print 'TS of PL fit respect to BPL:', ts_ebreak
+                p_ebreak = ROOT.TMath.Prob(ts_ebreak, 2)
+                print 'p-value of PL fit respect to BPL:', p_ebreak
+            except KeyError:
+                print 'Comparable analysis is not done.'
     
-                print '===== Fitting parameters ====='
-                c = np.load('{0}/fit_model{1}.npy'.format(path_subdir, SUFFIX)).flat[0]
-                np_src = c['sources']['GRB'+NAME_TGT]
-                norm_lims95 = get_parameter_limits(np_src['norm_scan'], np_src['loglike_scan'], 0.95)
-                norm_lims68 = get_parameter_limits(np_src['norm_scan'], np_src['loglike_scan'], 0.68)
-                print '* Integral:', np_src['param_values'][0], '+/-', np_src['param_errors'][0]
-                print '  95% limits:', np_src['param_values'][0]*norm_lims95['ll']/norm_lims95['x0'], '-', np_src['param_values'][0]*norm_lims95['ul']/norm_lims95['x0']
-                print '  68% limits:', np_src['param_values'][0]*norm_lims68['ll']/norm_lims95['x0'], '-', np_src['param_values'][0]*norm_lims68['ul']/norm_lims95['x0']
-                print '* Flux:', np_src['flux'], '+/-', np_src['flux_err']
-                print '  95% limits:', np_src['flux']*norm_lims95['ll']/norm_lims95['x0'], '-', np_src['flux']*norm_lims95['ul']/norm_lims95['x0']
-                print '  68% limits:', np_src['flux']*norm_lims68['ll']/norm_lims95['x0'], '-', np_src['flux']*norm_lims68['ul']/norm_lims95['x0']
-                print '* Energy flux:', np_src['eflux'], '+/-', np_src['eflux_err']
-                print '  95% limits:', np_src['eflux']*norm_lims95['ll']/norm_lims95['x0'], '-', np_src['eflux']*norm_lims95['ul']/norm_lims95['x0']
-                print '  68% limits:', np_src['eflux']*norm_lims68['ll']/norm_lims95['x0'], '-', np_src['eflux']*norm_lims68['ul']/norm_lims95['x0']
-                print '* Index:', np_src['param_values'][1], '+/-', np_src['param_errors'][1]
-                print ''
-                for (ipar, par) in enumerate(np_src['param_names']):
-                    print par, ':', np_src['param_values'][ipar], '+/-', np_src['param_errors'][ipar]
-    #TS map
-                if skipts==False:
-                    model_ts = {'Index' : 2.0, 'SpatialModel' : 'PointSource'}
-                    maps_ts = gta.tsmap('fit_ts',model=model_ts, make_plots=True)
-                    gta.plotter.make_tsmap_plots(maps_ts, roi=gta.roi)                
-    #SED
-                if skipsed==False:
-                    if c['sources']['GRB'+NAME_TGT]['npred']>0:
-                        print 'Going to SED analysis...'
-                        print 'SED with equivalent energy bins.'
-                        sed_eq  = gta.sed('GRB'+NAME_TGT, prefix='EQ', use_local_index=True, make_plots=True, outfile='sed_GRB{0}{1}_eq.fits'.format(NAME_TGT, SUFFIX))
+    #             print '===== Fitting parameters ====='
+    #             c = np.load('{0}/fit_model{1}.npy'.format(path_subdir, SUFFIX)).flat[0]
+    #             np_src = c['sources']['GRB'+NAME_TGT]
+    #             norm_lims95 = get_parameter_limits(np_src['norm_scan'], np_src['loglike_scan'], 0.95)
+    #             norm_lims68 = get_parameter_limits(np_src['norm_scan'], np_src['loglike_scan'], 0.68)
+    #             print '* Integral:', np_src['param_values'][0], '+/-', np_src['param_errors'][0]
+    #             print '  95% limits:', np_src['param_values'][0]*norm_lims95['ll']/norm_lims95['x0'], '-', np_src['param_values'][0]*norm_lims95['ul']/norm_lims95['x0']
+    #             print '  68% limits:', np_src['param_values'][0]*norm_lims68['ll']/norm_lims95['x0'], '-', np_src['param_values'][0]*norm_lims68['ul']/norm_lims95['x0']
+    #             print '* Flux:', np_src['flux'], '+/-', np_src['flux_err']
+    #             print '  95% limits:', np_src['flux']*norm_lims95['ll']/norm_lims95['x0'], '-', np_src['flux']*norm_lims95['ul']/norm_lims95['x0']
+    #             print '  68% limits:', np_src['flux']*norm_lims68['ll']/norm_lims95['x0'], '-', np_src['flux']*norm_lims68['ul']/norm_lims95['x0']
+    #             print '* Energy flux:', np_src['eflux'], '+/-', np_src['eflux_err']
+    #             print '  95% limits:', np_src['eflux']*norm_lims95['ll']/norm_lims95['x0'], '-', np_src['eflux']*norm_lims95['ul']/norm_lims95['x0']
+    #             print '  68% limits:', np_src['eflux']*norm_lims68['ll']/norm_lims95['x0'], '-', np_src['eflux']*norm_lims68['ul']/norm_lims95['x0']
+    #             print '* Index:', np_src['param_values'][1], '+/-', np_src['param_errors'][1]
+    #             print ''
+    #             for (ipar, par) in enumerate(np_src['param_names']):
+    #                 print par, ':', np_src['param_values'][ipar], '+/-', np_src['param_errors'][ipar]
+    # #TS map
+    #             if skipts==False:
+    #                 model_ts = {'Index' : 2.0, 'SpatialModel' : 'PointSource'}
+    #                 maps_ts = gta.tsmap('fit_ts',model=model_ts, make_plots=True)
+    #                 gta.plotter.make_tsmap_plots(maps_ts, roi=gta.roi)                
+    # #SED
+    #             if skipsed==False:
+    #                 if c['sources']['GRB'+NAME_TGT]['npred']>0:
+    #                     print 'Going to SED analysis...'
+    #                     print 'SED with equivalent energy bins.'
+    #                     sed_eq  = gta.sed('GRB'+NAME_TGT, prefix='EQ', use_local_index=True, make_plots=True, outfile='sed_GRB{0}{1}_eq.fits'.format(NAME_TGT, SUFFIX))
 
-    # Residual map
-                if skipresid==False:
-                    model_resid = {'Index' : 2.0, 'SpatialModel' : 'PointSource'}
-                    maps_resid = gta.residmap('fit_resid',model=model_resid, make_plots=True)
-                    gta.plotter.make_residmap_plots(maps_resid, roi=gta.roi)
+    # # Residual map
+    #             if skipresid==False:
+    #                 model_resid = {'Index' : 2.0, 'SpatialModel' : 'PointSource'}
+    #                 maps_resid = gta.residmap('fit_resid',model=model_resid, make_plots=True)
+    #                 gta.plotter.make_residmap_plots(maps_resid, roi=gta.roi)
 
 
 @click.command()
@@ -362,13 +372,14 @@ model:
 @click.option('--edisp', is_flag=True)
 #@click.option('--bpl', '-b', is_flag=True)
 @click.option('--func', multiple=True, default=None, type=str)
+#@click.option('--eshift', '-e', type=click.Choice(['fixed', 'shifted', 'both']))
 @click.option('--roi', '-r', type=float, default=12)
 def main(name, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, emin, emax, nebindecade, outpath, mode, catalogues, goodstat, edisp, shiftenergies, func, roi):
     lst_ebin = []
     #if bpl==True:
     #lst_ebin = [[316.228, 316228.0]]
     if emax==0:
-        lst_ebin = [[316.228, 316228.0]]
+        lst_ebin = [[316.228, 177828.0]]
     #    lst_ebin = [[316.228, 316228.0], [316.228, 10000.0], [56234.1, 316228.0]] #[[562.34, 316228.0], [562.34, 10000.0], [56234.0, 316228.0]]
     elif nebindecade>0:
         nebin = int((log10(emax)-log10(emin))*nebindecade+0.5)
