@@ -3,7 +3,6 @@
 import os
 import os.path
 import subprocess
-#subprocess.call(['slacsetup', '11-05-02'])
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from fermipy.utils import get_parameter_limits
@@ -20,10 +19,12 @@ import numpy as np
 from math import log10, sqrt, ceil, isnan
 from pLsList import ls_list
 from pReadGBMCatalogueInfo import ReadGBMCatalogueOneLine
-#import re
 import click
 from FindCrossEarthlimb import find_cross_earthlimb
 from FindGoodstatPeriods import find_goodstat_periods, get_entries
+import ReadLTFCatalogueInfo
+import pMETandMJD
+from DownloadFermiData import download_fermi_data_grb
 
 
 def scale_limit(value, limit, norm):
@@ -45,28 +46,31 @@ def zero_for_except(a):
         return 0.0
 
 
-def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, eranges, path_outdir='.', mode='unified', catalogues=['3FGL'], goodstat=16, shiftenergies=True, edisp=False, lst_spec_func=['PL'], radius_roi=12.) :#bpl=False): #, eranges=[[100, 316228]]):
+def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, eranges, tb_masked, path_outdir='.', mode='unified', catalogues=['3FGL'], goodstat=16, shiftenergies=True, edisp=False, lst_spec_func=['PL'], radius_roi=12.) :
     NAME_TGT = name
-    dct_grb = ReadGBMCatalogueOneLine(NAME_TGT, '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/Highest-GBM-fluence-GRBs.csv')
-    print dct_grb
+    #dct_grb = ReadGBMCatalogueOneLine(NAME_TGT, '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/Highest-GBM-fluence-GRBs.csv')
+    #print dct_grb
     path_first = os.getcwd()
 
-    RA = dct_grb['ra']
-    DEC = dct_grb['dec']
-    T0 = dct_grb['trigger_time']
-    T90 = dct_grb['t90']
-    T90_START = dct_grb['t90_start']
+    RA = tb_masked['RA'] #dct_grb['ra']
+    DEC = tb_masked['DEC'] #dct_grb['dec']
+    T0 = pMETandMJD.ConvertMjdToMet(tb_masked['TRIGGER_TIME']) #dct_grb['trigger_time']
+    T90 = tb_masked['T90'] #dct_grb['t90']
+    T90_START = tb_masked['T90_START'] #dct_grb['t90_start']
     if tmin is None:
         tmin = T90_START+T90
     if tmax is None:
         tmax = 10000.
     eranges_shifted = []
-    erange_sed_lin = [316.228, 1778.28, 5623.41, 17782.8, 56234.1, 177828.0] #[316.228, 1778.28, 10000.0, 56234.1, 316228.] #[316.228, 1000.0, 3162.28, 10000.0, 56234.1, 316228.]
+    erange_sed_lin = [100.0, 316.228, 1000.0, 3162.28, 10000.0, 31622.8, 100000.0]
+    if shiftenergies==True:
+        erange_sed_lin = [316.228, 1778.28, 5623.41, 17782.8, 56234.1, 177828.0] #[316.228, 1778.28, 10000.0, 56234.1, 316228.] #[316.228, 1000.0, 3162.28, 10000.0, 56234.1, 316228.]
     erange_sed_shifted_lin = []
     erange_hiend = erange_sed_lin[-2:] #[56234., 316228.]
     erange_hiend_shifted = []
-    if (dct_grb['z'] is not '') and (dct_grb['z'] is not '-') and (dct_grb['z'] is not '?'):
-        REDSHIFT = dct_grb['z']
+    #if (dct_grb['z'] is not '') and (dct_grb['z'] is not '-') and (dct_grb['z'] is not '?'):
+    if tb_masked['REDSHIFT']>0:
+        REDSHIFT = tb_masked['REDSHIFT'] #dct_grb['z']
         if shiftenergies==True:
             for eset in eranges:
                 eranges_shifted.append([e/(1+REDSHIFT) for e in eset])
@@ -99,7 +103,7 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
     ZCUT = 100.
     lst_tbin = []
     mstatag = 0
-    if mode == 'unified':
+    if mode == 'unified' or mode == 'afterglow':
         lst_tbin = [[tmin, tmax]]
     else:
         validtimes = find_cross_earthlimb(ft2_candidates[0], RA, DEC, T0+tmin, T0+tmax, ZCUT, T0)
@@ -160,7 +164,10 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
         os.makedirs(path_outdir)
 
     for (ieedges, eedges) in enumerate(eranges_shifted):
-        strenergies = 'E{0:0>6}-{1:0>6}MeV'.format(int(eedges[0]+0.5), int(eedges[1]+0.5))
+        #strenergies = 'E{0:0>6}-{1:0>6}MeV'.format(int(eedges[0]+0.5), int(eedges[1]+0.5))
+        strenergies = 'E{0:0>6}-{1:0>6}MeV'.format(int(eranges[ieedges][0]+0.5), int(eranges[ieedges][1]+0.5))
+        if shiftenergies==True:
+            strenergies += '_shifted'
         print '%%%%%%%%%%%%%%%%%%'
         print strenergies
         print '%%%%%%%%%%%%%%%%%%'
@@ -183,8 +190,12 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
                     if not os.path.exists(str_path_lt):
                         str_path_lt = 'Null'
                     if fspec=='PL':
-                        str_spectrum = """'SpectrumType' : 'EblAtten::PowerLaw2', 'Integral' : {{ value : 1.0, max : !!float 1e6, min : !!float 1e-6, scale : !!float 1e-6, free : '1' }}, 'Index' : {{ value : 2.0, min : -1.0, max : 8.0, scale : -1, free : '1' }}, 'LowerLimit' : {{ value : {0}, max : 100000., min : 30, scale : 1, free : '0' }}, 'UpperLimit' : {{ value : {1}, max : 1000000., min : 100., scale : 1, free : '0' }}, 'tau_norm' : {{ value : 1.0, max : 10, min : 0, scale : 1.0, free : '0' }}, 'redshift' : {{ value : {2}, max : 10, min : 0, scale : 1, free : '0' }}, 'ebl_model' : {{ value : 4, max : 8, min : 0, scale : 1.0, free : '0'}}""".format(eedges[0], eedges[1], REDSHIFT)
+                        str_spectrum = """'SpectrumType' : 'PowerLaw', 'Prefactor' : { value : 1.0, max : !!float 1e6, min : !!float 1e-3, scale : !!float 1e-6, free : '1' }, 'Index' : { value : 2.0, min : -1.0, max : 8.0, scale : -1, free : '1' }, 'Scale' : { value : 100.0, max : 100000., min : 30, scale : 1, free : '0' }"""
                     elif fspec=='BPL':
+                        str_spectrum = """'SpectrumType' : 'BrokenPowerLaw', 'Prefactor' : { value : 1.0, max : !!float 1e6, min : !!float 1e-3, scale : !!float 1e-6, free : '1' }, 'Index1' : { value : 2.0, min : -1.0, max : 8.0, scale : -1, free : '1' }, 'Index2' : { value : 1.6, min : -1.0, max : 8.0, scale : -1, free : '1' }, 'BreakValue' : { value : 5000, min : 500, max : 50000, scale : 1, free : '1' }"""
+                    if fspec=='EblPL':
+                        str_spectrum = """'SpectrumType' : 'EblAtten::PowerLaw2', 'Integral' : {{ value : 1.0, max : !!float 1e6, min : !!float 1e-6, scale : !!float 1e-6, free : '1' }}, 'Index' : {{ value : 2.0, min : -1.0, max : 8.0, scale : -1, free : '1' }}, 'LowerLimit' : {{ value : {0}, max : 100000., min : 30, scale : 1, free : '0' }}, 'UpperLimit' : {{ value : {1}, max : 1000000., min : 100., scale : 1, free : '0' }}, 'tau_norm' : {{ value : 1.0, max : 10, min : 0, scale : 1.0, free : '0' }}, 'redshift' : {{ value : {2}, max : 10, min : 0, scale : 1, free : '0' }}, 'ebl_model' : {{ value : 4, max : 8, min : 0, scale : 1.0, free : '0'}}""".format(eedges[0], eedges[1], REDSHIFT)
+                    elif fspec=='EblBPL':
                         str_spectrum = """'SpectrumType' : 'EblAtten::BrokenPowerLaw2', 'Integral' : {{ value : 1.0, max : !!float 1e6, min : !!float 1e-6, scale : !!float 1e-6, free : '1' }}, 'Index1' : {{ value : 2.0, min : -1.0, max : 8.0, scale : -1, free : '1' }}, 'Index2' : {{ value : 1.6, min : -1.0, max : 8.0, scale : -1, free : '1' }}, 'BreakValue' : {{ value : 5000, min : 500, max : 50000, scale : 1, free : '1' }}, 'LowerLimit' : {{ value : {0}, max : 100000., min : 30, scale : 1, free : '0' }}, 'UpperLimit' : {{ value : {1}, max : 1000000., min : 100., scale : 1, free : '0' }}, 'tau_norm' : {{ value : 1.0, max : 10, min : 0, scale : 1.0, free : '0' }}, 'redshift' : {{ value : {2}, max : 10, min : 0, scale : 1, free : '0' }}, 'ebl_model' : {{ value : 4, max : 8, min : 0, scale : 1.0, free : '0'}}""".format(eedges[0], eedges[1], REDSHIFT)
 
                     str_config = """fileio:
@@ -219,7 +230,7 @@ model:
   {13}
   sources :
     - {{ 'name' : 'GRB{10}', 'ra' : {8}, 'dec' :{9}, {11}, 'SpatialModel': 'PointSource'}}
-""".format(path_subdir, ft1_candidates[0], ft2_candidates[0], str_path_lt, eedges[0], eedges[1], int(T0+LST_RAN_TIME[itime][0]), int(T0+LST_RAN_TIME[itime][1]), RA, DEC, NAME_TGT, str_spectrum, ZCUT, str_catalogues, str(edisp), ceil(radius_roi*sqrt(2)), radius_roi+10.)
+""".format(path_subdir, ft1_candidates[0], ft2_candidates[0], str_path_lt, eedges[0], eedges[1], int(T0+LST_RAN_TIME[itime][0]+0.5), int(T0+LST_RAN_TIME[itime][1]+0.5), RA, DEC, NAME_TGT, str_spectrum, ZCUT, str_catalogues, str(edisp), ceil(radius_roi*sqrt(2)), radius_roi+10.)
 
                     with open("{0}/config.yaml".format(path_subdir), 'w') as conf:
                         conf.write(str_config)
@@ -235,8 +246,12 @@ model:
             
                     gta.free_sources(free=False)
                     if fspec=='PL':
-                        gta.free_source('GRB'+NAME_TGT, free=True, pars=['Integral', 'Index'])
+                        gta.free_source('GRB'+NAME_TGT, free=True, pars=['Prefactor', 'Index'])
                     elif fspec=='BPL':
+                        gta.free_source('GRB'+NAME_TGT, free=True, pars=['Prefactor', 'Index1', 'Index2', 'BreakValue'])
+                    elif fspec=='EblPL':
+                        gta.free_source('GRB'+NAME_TGT, free=True, pars=['Integral', 'Index'])
+                    elif fspec=='EblBPL':
                         gta.free_source('GRB'+NAME_TGT, free=True, pars=['Integral', 'Index1', 'Index2', 'BreakValue'])
 
                     print 'Fitting...'
@@ -250,7 +265,10 @@ model:
                     src_model = gta.get_src_model('GRB'+NAME_TGT)
                     norm_lims95 = get_parameter_limits(src_model['norm_scan'], src_model['loglike_scan'], 0.95)
                     norm_lims68 = get_parameter_limits(src_model['norm_scan'], src_model['loglike_scan'], 0.68)
-                    print '** Integral:', src_model['param_values'][0], '+/-', src_model['param_errors'][0]
+                    if fspec=='PL' or fspec=='BPL':
+                        print '** Prefactor:', src_model['param_values'][0], '+/-', src_model['param_errors'][0]
+                    if fspec=='EblPL' or fspec=='EblBPL':
+                        print '** Integral:', src_model['param_values'][0], '+/-', src_model['param_errors'][0]
                     print '  95% limits:', scale_limit(src_model['param_values'][0], norm_lims95['ll'], norm_lims95['x0']), '-', scale_limit(src_model['param_values'][0], norm_lims95['ul'], norm_lims95['x0'])
                     print '  68% limits:', scale_limit(src_model['param_values'][0], norm_lims68['ll'], norm_lims95['x0']), '-', scale_limit(src_model['param_values'][0], norm_lims68['ul'], norm_lims95['x0'])
                     print '** Flux:', src_model['flux'], '+/-', src_model['flux_err'], '(UL:', src_model['flux_ul95'], ')'
@@ -262,6 +280,12 @@ model:
                     if fspec=='PL':
                         print '** Index:', src_model['param_values'][1], '+/-', src_model['param_errors'][1]
                     elif fspec=='BPL':
+                        print '** Index1:', src_model['param_values'][1], '+/-', src_model['param_errors'][1]
+                        print '** Index2:', src_model['param_values'][2], '+/-', src_model['param_errors'][2]
+                        print '** Break energy:', src_model['param_values'][3], '+/-', src_model['param_errors'][3]
+                    elif fspec=='EblPL':
+                        print '** Index:', src_model['param_values'][1], '+/-', src_model['param_errors'][1]
+                    elif fspec=='EblBPL':
                         print '** Index1:', src_model['param_values'][1], '+/-', src_model['param_errors'][1]
                         print '** Index2:', src_model['param_values'][2], '+/-', src_model['param_errors'][2]
                         print '** Break energy:', src_model['param_values'][3], '+/-', src_model['param_errors'][3]
@@ -302,7 +326,7 @@ model:
                     withopt = 'a'
                     if ieedges==0 and ispec==0:
                         withopt = 'w'
-                    with open("{0}/GRB{1}_{2}_lc_summary.csv".format(path_first, NAME_TGT, strtime), withopt) as text:
+                    with open("{0}/GRB{1}_{2}_lc_summary.csv".format(path_outdir, NAME_TGT, strtime), withopt) as text:
                         print str_lc
                         text.write(str_lc)
                     #continue
@@ -374,7 +398,9 @@ model:
 @click.option('--func', multiple=True, default=None, type=str)
 #@click.option('--eshift', '-e', type=click.Choice(['fixed', 'shifted', 'both']))
 @click.option('--roi', '-r', type=float, default=12)
-def main(name, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, emin, emax, nebindecade, outpath, mode, catalogues, goodstat, edisp, shiftenergies, func, roi):
+@click.option('--reftable', type=str, default='/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LAT2CATALOG-v1-LTF.fits')
+@click.option('--download', is_flag=True)
+def main(name, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, emin, emax, nebindecade, outpath, mode, catalogues, goodstat, edisp, shiftenergies, func, roi, reftable, download):
     lst_ebin = []
     #if bpl==True:
     #lst_ebin = [[316.228, 316228.0]]
@@ -393,16 +419,43 @@ def main(name, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid,
     ft2_candidates = [None]
     if outpath == None:
         outpath = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/' + name
+    if not os.path.exists(outpath):
+        os.makedirs(outpath)
+    tbfits = ReadLTFCatalogueInfo.open_table(1, reftable)
+    tb_masked = ReadLTFCatalogueInfo.select_one_by_name(tbfits, name)
+
+    path_ft1_exist = ls_list(outpath+'/*_ft1*.fits')[0]
+    path_ft2_exist = ls_list(outpath+'/*_ft2*.fits')[0]
+    ft1_exist = path_ft1_exist[0]=='/'
+    ft2_exist = path_ft2_exist[0]=='/'
+
+    if ft1_exist==True and download==True:
+        subprocess.call(['mv', path_ft1_exist, path_ft1_exist.replace('.fits', '_old.fits')])
+    if ft2_exist==True and download==True:
+        subprocess.call(['mv', path_ft2_exist, path_ft2_exist.replace('.fits', '_old.fits')])
+    if ft1_exist==False or download==True:
+        print 'Downloading FT1 data...'
+        os.chdir(outpath)
+        download_fermi_data_grb(name, lst_ft=[1], path_catalogue=reftable, path_outdir=outpath)
+    if ft2_exist==False or download==True:
+        print 'Downloading FT2 data...'
+        os.chdir(outpath)
+        download_fermi_data_grb(name, lst_ft=[2], path_catalogue=reftable, path_outdir=outpath)
+    else:
+        print 'Downloading data is skipped.'
+
     if mode=='prompt':
-        ft1_candidates = ls_list(outpath+'/*-ft1*.fits')
-        ft2_candidates = ls_list(outpath+'/*-ft2*.fits')
+        ft1_candidates = ls_list(outpath+'/*_ft1*.fits')
+        ft2_candidates = ls_list(outpath+'/*_ft2*.fits')
     elif mode=='afterglow' or mode=='unified':
-        ft1_candidates = ls_list(outpath+'/*_PH??.fits')
-        ft2_candidates = ls_list(outpath+'/*_SC??.fits')
+        ft1_candidates = ls_list(outpath+'/*_ft1*.fits')
+        ft2_candidates = ls_list(outpath+'/*_ft2*.fits')
+        #ft1_candidates = ls_list(outpath+'/*_PH??.fits')
+        #ft2_candidates = ls_list(outpath+'/*_SC??.fits')
     lst_assum_spec = ['PL']
     if not any(func):
         func = ['PL', 'BPL']
-    AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, lst_ebin, outpath, mode, catalogues, goodstat, shiftenergies, edisp, func, roi)
+    AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, lst_ebin, tb_masked, outpath, mode, catalogues, goodstat, shiftenergies, edisp, func, roi)
 
 
 if __name__ == '__main__':
