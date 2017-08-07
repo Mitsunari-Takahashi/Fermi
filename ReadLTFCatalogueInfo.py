@@ -44,7 +44,7 @@ def select_by_mjd(tb, mjd_min=0., mjd_max=58000.):
 
 def select_by_fluence(tb, flu_min=0., flu_max=1.,):
     tb_gbm = select_gbm_exist(tb)
-    return tb_gbm[(tb_gbm['TRIGGER_TIME']>=mjd_min) * (tb_gbm['TRIGGER_TIME']<mjd_max)]    
+    return tb_gbm[(tb_gbm['TRIGGER_TIME']>=mjd_min) * (tb_gbm['TRIGGER_TIME']<mjd_max)]
 
 
 def select_long(tb):
@@ -65,6 +65,16 @@ def select_redshift_known(tb):
 
 def select_by_redshift(tb, z_min=0., z_max=10.,):
     return tb[(tb['REDSHIFT']>z_min) * (tb['REDSHIFT']<=z_max)]    
+
+
+def judge_category_fluence(tb, name, lst_cut):
+    tb = select_gbm_exist(tb)
+    tb1 = select_one_by_name(tb, name)
+    ncategory = len(lst_cut)
+    for ic in range(len(lst_cut)):
+        ncategory -= int(tb1['FLUENCE']>=lst_cut[ic])
+    print 'Fluence:', tb1['FLUENCE'], '-> Category:', ncategory
+    return ncategory
 
 
 @click.command()
