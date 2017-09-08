@@ -139,7 +139,7 @@ class AnalysisConfig:
         self.suffix = '' if suffix=='' else '_'+suffix
 
         self.str_time = 'T{0.tmin:0>6.0f}-{0.tmax:0>6.0f}'.format(self) if self.target.met0 >= 239557417 else 'MET{0.tmin:0>9.0f}-{0.tmax:0>9.0f}'.format(self)
-        self.str_energy = 'E{0.emin:0>6.0f}-{0.emax:0>6.0f}'.format(self)
+        self.str_energy = 'E{0.emin:0>7.0f}-{0.emax:0>7.0f}MeV'.format(self)
         self.str_roi = 'r{0:0>2.0f}deg'.format(self.deg_roi)
         self.str_index = 'Index{0}'.format(int(self.index_fixed*100) if (self.index_fixed==self.index_fixed and self.index_fixed is not None) else 'Free')
         
@@ -491,7 +491,7 @@ class AnalysisConfig:
         return (flux_total, flux_err_total)
 
 
-    def eval_limits_powerlaw(self, emin=None, emax=None, eref=None, str_index_fixed=['best', 'harder', 'softer']):
+    def eval_limits_powerlaw(self, emin=None, emax=None, eref=None, str_index_fixed=['harder', 'softer', 'free','best' ]):
         e0 = emin if emin is not None else self.emin_eval
         e1 = emax if emax is not None else self.emax_eval
         e2 = eref if eref is not None else self.target.spectralpars['Scale']
@@ -502,9 +502,9 @@ class AnalysisConfig:
         norm_idx = self.like.par_index(self.target.name, norm_name)
         logx_lowest = -2.0
         logx_highest = 2.0
-        nx = 10 * (logx_highest-logx_lowest)
+        nx = 20 * (logx_highest-logx_lowest)
         xvals = norm_value * 10 ** np.linspace(logx_lowest, logx_highest, nx)
-        xvals = np.insert(xvals, 0, 0.0)
+        #xvals = np.insert(xvals, 0, 0.0)
         logger.debug("""Profile normalization factor: 
 {0}""".format(xvals))
 
@@ -513,7 +513,7 @@ class AnalysisConfig:
         index_idx = self.like.par_index(self.target.name, index_name)
         index_value = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).value()
         index_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).error()
-        index_values = {'best':index_value}
+        index_values = {'best':index_value, 'free':index_value}
         index_values['harder'] = index_value + index_error * (1 if index_values<0 else -1)
         index_values['softer'] = index_value + index_error * (-1 if index_values<0 else 1)
 
@@ -534,13 +534,11 @@ class AnalysisConfig:
             v0['dnde'] = norm_value * (e2 / self.target.spectralpars['Scale']) ** index_values[str_index_assumed]
             v0['e2dnde'] = v0['dnde'] * e2 * e2
             self.like[index_idx] = index_values[str_index_assumed]
-            self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[index_idx:index_idx+1], value=0)
-            #xvals, loglike1 = self.like.scan(str(self.target.name), norm_name, xmin=0, xmax=10*norm_value, npts=1000)
+            if str_index_assumed == 'free':
+                self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[index_idx:index_idx+1], value=1)
+            else:
+                self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[index_idx:index_idx+1], value=0)
             o[str_index_assumed] = {'xvals': xvals,
-            #                         #'npred': np.zeros(len(xvals)),
-            #                         'dnde': np.zeros(len(xvals)),
-            #                         'flux': np.zeros(len(xvals)),
-            #                         'eflux': np.zeros(len(xvals)),
                                     'dloglike': np.zeros(len(xvals)),
                                     'loglike': np.zeros(len(xvals))
                                     }
@@ -549,17 +547,19 @@ class AnalysisConfig:
             for i, x in enumerate(xvals):
                 logger.debug('No.{ip} normalization factor = {xval}'.format(ip=i, xval=x))
                 self.like[norm_idx] = x
-                #self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[norm_idx:norm_idx+1], value=1)
-                loglike1 = -self.like() #-self.like.fit(verbosity=0,covar=False,optObject=self.likeobj)
-            #     flux = self.like[self.target.name].flux(e0, e1)
-            #     eflux = self.like[self.target.name].energyFlux(e0, e1)
-            #     dnde = x * (e2 / self.target.spectralpars['Scale']) ** index_values[str_index_assumed
+                self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[norm_idx:norm_idx+1], value=0)
+                #index_fit = index_values[str_index_assumed]
+                if str_index_assumed == 'free':
+                    loglike1 = -self.like.fit(verbosity=0,covar=False,optObject=self.likeobj)
+                    #index_fit = self.like.model[self.target.name].funcs['Spectrum'].getParam('Index').value()
+                    #o[str_index_assumed]['flux'][i] = self.like[self.target.name].flux(e0, e1)
+                    #o[str_index_assumed]['eflux'][i] = self.like[self.target.name].energyFlux(e0, e1)
+                    #o[str_index_assumed]['dnde'][i] = x * (e2 / self.target.spectralpars['Scale']) ** index_fit
+                    #o[str_index_assumed]['e2dnde'][i] = o[str_index_assumed]['dnde'][i] * e2 * e2
+                else:
+                    loglike1 = -self.like()
                 o[str_index_assumed]['dloglike'][i] = loglike1 - loglike0
                 o[str_index_assumed]['loglike'][i] = loglike1
-            #     o[str_index_assumed]['flux'][i] = flux
-            #     o[str_index_assumed]['eflux'][i] = eflux
-            #     o[str_index_assumed]['dnde'][i] = dnde
-            #     o[str_index_assumed]['e2dnde'][i] = dnde * e2 * e2
 
             # limits
             limits[str_index_assumed]['norm'] = get_parameter_limits(xval=xvals, loglike=o[str_index_assumed]['dloglike']) #, cl_limit=0.95)
@@ -571,6 +571,7 @@ class AnalysisConfig:
                 limits[str_index_assumed][item]['ul'] = v0[item] * limits[str_index_assumed]['norm']['ul'] / norm_value
                 limits[str_index_assumed][item]['ll'] = v0[item] * limits[str_index_assumed]['norm']['ll'] / norm_value
                 limits[str_index_assumed][item]['err'] = v0[item] * limits[str_index_assumed]['norm']['err'] / norm_value
+        logger.debug('Limits (index-free): {0}'.format(limits['free']))
         return limits
 
     # def apply_spectrum(self, astrosrc_other):

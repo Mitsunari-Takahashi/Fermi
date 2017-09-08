@@ -4,9 +4,9 @@ import logging
 
 def get_module_logger(modname):
     logger = logging.getLogger(modname)
-    handler = logging.StreamHandler()
+    sh = logging.StreamHandler()
     #formatter = logging.Formatter('my-format')
     #handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
+    logger.addHandler(sh)
+    logger.setLevel(logging.INFO)
     return logger
