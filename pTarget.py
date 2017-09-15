@@ -656,6 +656,7 @@ class Target:
                             hp.visufunc.cartview(hpmap, rot=(self.loncntr, self.latcntr, 0), coord=self.coord, lonra=[-self.radius, self.radius], latra=[-self.radius, self.radius], min=0, flip='astro', title="{0} {1} ({2:.1f} - {3:.1f} GeV)".format(cla, self.name, 10**(enrlow-3), 10**(enrup-3)), unit='counts')
                         else:
                             hp.visufunc.mollview(hpmap, rot=(self.loncntr, self.latcntr, 0), coord=self.coord, min=0, flip='astro', title="{0} {1} ({2:.1f} - {3:.1f} GeV)".format(cla, self.name, 10**(enrlow-3), 10**(enrup-3)), unit='counts')
+                        plt.gray()
                         plt.savefig("png/{0}_{1}_NSIDE{2}_E{3}-{4}{5}.png".format(self.name, cla, self.NSIDE, int(100*enrlow+0.5), int(100*enrup+0.5), str_smeared))
                         plt.close()
         else:
