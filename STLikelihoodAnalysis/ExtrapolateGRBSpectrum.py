@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 #!/usr/bin/env python
-"""Module for LAT likelihood analysis chain of pLATLikelihoodConfig.py.
+"""Module for extrapolation analysis of a LAT spectrum.
+The main class ExtrapolateGRBSpectrum is a chain of another module pLATLikelihoodConfig.py.
+The authour: Mitsunari Takahashi
+Version: 1.1 (2017.09.14)
 """
 import sys
 import os
@@ -20,6 +23,11 @@ import pLATLikelihoodConfig
 #import pLATLikelihoodChain
 from STLikelihoodAnalysis import get_module_logger
 
+
+##### VERSION OF THIS MACRO #####
+VERSION = 1.1 # 2017.09.14
+
+
 ##### Logger #####
 logger = get_module_logger(__name__)
 
@@ -35,6 +43,7 @@ class ExtrapolateGRBSpectrum():
 
         # Target GRB
         grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue)
+        grb_highest = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectralpars={'Prefactor':1e-10, 'Index':-2.0, 'Scale':10000.})
 
         # Energy setups
         self.emin_fitted = emin_fitted
@@ -54,15 +63,17 @@ class ExtrapolateGRBSpectrum():
 
         self.force = force
 
-        # Analysis instance
+        # Analysis instances
         self.analysis_fit = pLATLikelihoodConfig.GRBConfig(target=grb, phase=phase, tstop=tstop, emin=self.emin_fitted, emax=self.emax_fitted, deg_roi=deg_roi, zmax=zmax, suffix=suffix)
 
         emin_whole = min(self.emin_fitted, self.emin_extrapolated)
         emax_whole = max(self.emax_fitted, self.emax_extrapolated)
         self.analysis_extrapolated = pLATLikelihoodConfig.GRBConfig(target=grb, phase=phase, tstop=tstop, emin=emin_whole, emax=emax_whole, deg_roi=deg_roi, zmax=zmax, suffix=suffix)
 
+        self.analysis_highest = pLATLikelihoodConfig.GRBConfig(target=grb_highest, phase=phase, tstop=tstop, emin=emin_extrapolated, emax=emax_extrapolated, deg_roi=deg_roi, zmax=zmax, suffix=suffix)
+
         # Summary
-        self.dct_summary = {'datetime':datetime.datetime.today().strftime("%Y/%m/%d %H:%M:%S"), 'target':str(name), 'lower_energies':{'emin':self.emin_fitted, 'emax':self.emax_fitted}, 'highest_energies':{'emin':self.emin_extrapolated, 'emax':self.emax_extrapolated}, 'whole_energies':{'emin':emin_whole, 'emax':emax_whole}, 'phase':phase, 'tstart': self.analysis_fit.tmin, 'tstop':self.analysis_fit.tmax, 'roi':deg_roi, 'zmax':zmax}
+        self.dct_summary = {'version': VERSION, 'datetime':datetime.datetime.today().strftime("%Y/%m/%d %H:%M:%S"), 'target':str(name), 'lower_energies':{'emin':self.emin_fitted, 'emax':self.emax_fitted}, 'highest_energies':{'emin':self.emin_extrapolated, 'emax':self.emax_extrapolated}, 'whole_energies':{'emin':emin_whole, 'emax':emax_whole}, 'phase':phase, 'tstart': self.analysis_fit.tmin, 'tstop':self.analysis_fit.tmax, 'roi':deg_roi, 'zmax':zmax}
 
 
     # def __getstate__(self):
@@ -76,7 +87,7 @@ class ExtrapolateGRBSpectrum():
 
 
     def setup_fit(self):
-        self.analysis_fit.setup(force={'download':False, 'filter':self.force, 'maketime':self.force, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':self.force, 'diffuse_responses':self.force})
+        self.analysis_fit.setup(force={'download':False, 'filter':self.force, 'maketime':self.force, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':True, 'diffuse_responses':self.force})
 
 
     def setup_extrapolate(self):
@@ -89,6 +100,10 @@ class ExtrapolateGRBSpectrum():
         logger.debug('Path of reffered model: {0}'.format(self.analysis_fit.path_model_xml_new))
         self.analysis_extrapolated.use_external_model(self.analysis_fit.path_model_xml_new)
         self.analysis_extrapolated.diffuse_responses(self.force)
+
+
+    def setup_highest(self):
+        self.analysis_highest.setup(force={'download':False, 'filter':self.force, 'maketime':self.force, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':True, 'diffuse_responses':self.force})
         
 
 #    def fit(self, redo=True):
@@ -244,8 +259,8 @@ class ExtrapolateGRBSpectrum():
         self.dct_summary[key_edomain]['TS'] = analysis.like.Ts(str(name))
         logger.debug(self.dct_summary)
 
-        # Detailed limits on flux, eflux, dnde, e2dnde
-        logger.info('Evaluation of detailed parameter limits is starting...')
+        # Return code 
+        self.dct_summary[key_edomain]['retcode'] = analysis.retcode
 
 
     def pickle(self, obj):
@@ -265,14 +280,14 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
 
     chain = ExtrapolateGRBSpectrum(name=name, phase=mode, emin_fitted=emin_fitted, emax_fitted=emax_fitted, emin_extrapolated=emin_extrapolated, emax_extrapolated=emax_extrapolated, tstop=10000., deg_roi=deg_roi, zmax=zmax, suffix=suffix, grbcatalogue=grbcatalogue, path_pickle=outdir, force=force)
 
-    # Fitting
+    logger.info('Fitting in lower energy range.')
     chain.setup_fit()
     chain.analysis_fit.fit(bredo=brefit)
     chain.summarize_powerlaw_fit_results(chain.analysis_fit, 'lower_energies')
-    if not chain.dct_summary['lower_energies']['TS'] >= 16:
+    if not chain.dct_summary['lower_energies']['TS'] >= 25:
         chain.pickle(chain.dct_summary)    # Pickle
         logger.warning('TS={ts} is NOT enough!! Chain analysis finished.'.format(ts=chain.dct_summary['lower_energies']['TS']))
-        return 1
+        sys.exit(0)
 
     # Extrapolating
     chain.setup_extrapolate()
@@ -286,16 +301,29 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
     deviation_signed = chain.eval_deviation()
     chain.dct_summary['deviation_ts'] = deviation_signed
 
-    # Fitting in whole energy range
+    logger.info('Fitting in whole energy range')
     chain.analysis_extrapolated.fit(bredo=brefit)
     chain.summarize_powerlaw_fit_results(chain.analysis_extrapolated, 'whole_energies')
 
-    flux_and_err_highest_energies = chain.analysis_extrapolated.eval_flux_and_error(chain.analysis_extrapolated.target.name, chain.emin_extrapolated, chain.emax_extrapolated)
+    logger.info('Fitting in highest energy range')
+    chain.setup_highest()
+    chain.analysis_highest.fit(bredo=brefit)
+    logger.info('Scale of HE analysis: {0}'.format(chain.analysis_highest.like.model[chain.analysis_highest.target.name].funcs['Spectrum'].getParam('Scale')))
+    flux_and_err_highest_energies = chain.analysis_highest.eval_flux_and_error(chain.analysis_highest.target.name)
     chain.dct_summary['highest_energies']['flux'] = {'value':flux_and_err_highest_energies[0], 'error':flux_and_err_highest_energies[1]}
 
     # Detailed limits of flux, eflux, dnde, e2dnde
-    chain.dct_summary['whole_energies']['limits'] = chain.analysis_extrapolated.eval_limits_powerlaw()
-    chain.dct_summary['lower_energies']['limits'] = chain.analysis_fit.eval_limits_powerlaw()
+    chain.dct_summary['whole_energies']['limits'] = chain.analysis_extrapolated.eval_limits_powerlaw(str_index_fixed=['best'])
+    chain.summarize_powerlaw_fit_results(chain.analysis_highest, 'highest_energies')
+    chain.dct_summary['lower_energies']['limits'] = chain.analysis_fit.eval_limits_powerlaw(str_index_fixed=['best'])
+
+    #if not chain.dct_summary['highest_energies']['TS'] >= 25:
+    chain.dct_summary['highest_energies']['limits'] = chain.analysis_highest.eval_limits_powerlaw(str_index_fixed=['best'])
+        #chain.pickle(chain.dct_summary)    # Pickle
+        #logger.warning('TS={ts} is NOT enough for the limits in the highest energies!! Chain analysis finished.'.format(ts=chain.dct_summary['highest_energies']['TS']))
+        #sys.exit(0)
+    #else:
+     #   chain.dct_summary['highest_energies']['limits'] = chain.analysis_highest.eval_limits_powerlaw()
 
     # Pickle
     chain.pickle(chain.dct_summary)
