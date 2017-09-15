@@ -32,13 +32,7 @@ from DownloadFermiData import download_fermi_data_grb
 
 
 def compute_GPoisson(x, m, s, n):
-#    if n>0:
- #       return pow(x,n)*exp(-pow(x-m,2)/2./pow(s,2)-x)/sqrt(2.*pi)/s
-    #  else:
     return pow(x,n)* ( exp(-pow(x-m,2)/2./pow(s,2)-x) + int(n==0)*exp(-pow(x+m,2)/2./pow(s,2)) ) /sqrt(2.*pi)/s
-
-# def compute_GPoisson_zero(x, m, s):
-#     return exp(-pow(x-m,2)/2./pow(s,2)-x)/sqrt(2.*pi)/s
 
 
 def scale_limit(value, limit, norm):
@@ -182,7 +176,7 @@ def profile(gta, name, parName, logemin=None, logemax=None, reoptimize=False, xv
     return o
 
 
-def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, eranges, tb_masked, path_outdir='.', mode='unified', catalogues=['3FGL'], goodstat=16, shiftenergies=True, edisp=False, lst_spec_func=['PL'], index_fixed=None, ecut_fixed=None, radius_roi=12., sedadjusted=False) :
+def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, eranges, tb_masked, path_outdir='.', mode='unified', catalogues=['3FGL'], goodstat=16, shiftenergies=True, edisp=False, lst_spec_func=['PL'], index_fixed=None, ecut_fixed=None, radius_roi=12., sedadjusted=False, validtimes=None) :
     NAME_TGT = name
     #dct_grb = ReadGBMCatalogueOneLine(NAME_TGT, '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/Highest-GBM-fluence-GRBs.csv')
     #print dct_grb
@@ -194,7 +188,7 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
     T90 = tb_masked['T90'] #dct_grb['t90']
     T90_START = tb_masked['T90_START'] #dct_grb['t90_start']
     if tmin is None:
-        if mode in ('prompt', 'unified'):
+        if mode in ('prompt', 'unified', 'lightcurve'):
             tmin = 0.
         elif mode in ('afterglow', 'earlyAG'):
             tmin = T90_START+T90
@@ -205,7 +199,7 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
             tmax =  T90_START+T90
         elif mode in ('earlyAG'):
             tmax = T90_START+T90*3.
-        elif mode in ('lateAG', 'unified', 'afterglow'):
+        elif mode in ('lateAG', 'unified', 'afterglow', 'lightcurve'):
             tmax = 10000.
     eranges_shifted = []
     # erange_sed_lin = [100.0, 316.228, 1000.0, 3162.28, 10000.0, 31622.8, 100000.0]
@@ -254,32 +248,36 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
     if mode in ('unified', 'prompt', 'afterglow', 'earlyAG', 'lateAG'):
         lst_tbin = [[tmin, tmax]]
         str_suffix_csv = mode + str_suffix_csv
-    else:
-        validtimes = find_cross_earthlimb(ft2_candidates[0], RA, DEC, T0+tmin, T0+tmax, ZCUT, T0)
+    elif mode in ('lightcurve'):
+        if validtimes == None:
+            validtimes = find_cross_earthlimb(ft2_candidates[0], RA, DEC, T0+tmin, T0+tmax, ZCUT, T0)
         print validtimes
         for (ivt, vt) in enumerate(validtimes):
             if goodstat>0:
-                if mode=='prompt':
-                    periods_goodstat = find_goodstat_periods(ft1_candidates[0], T0+vt[0], T0+vt[1], goodstat)
+                if ivt==0: #mode in ('prompt', 'unified'):
+                    periods_goodstat = find_goodstat_periods(ft1_candidates[0], T0+vt[0], T0+vt[1], goodstat, ZCUT-radius_roi)
                     print periods_goodstat
                     for igs in range(len(periods_goodstat)-1):
                         lst_tbin.append([periods_goodstat[igs]-T0, periods_goodstat[igs+1]-T0])
-                elif mode=='afterglow':
-                    mstatag += get_entries(ft1_candidates[0], vt[0]+T0, vt[1]+T0)
-                    if ivt==0:
-                        lst_tbin.append([vt[0]])
-                    if mstatag>=goodstat:
-                        lst_tbin[-1].append(vt[1])
-                        mstatag = 0
-                        if ivt<len(validtimes)-1:
-                            lst_tbin.append([validtimes[ivt+1][0]])
-                    if ivt==len(validtimes)-1:
-                        if len(lst_tbin)>1:
-                            lst_tbin = lst_tbin[:-1]
-                        if len(lst_tbin[-1])<2:
-                            lst_tbin[-1].append(vt[1])
-                        else:
-                            lst_tbin[-1][1] = vt[1]
+                else: #elif mode=='afterglow':
+                    lst_tbin.append([vt[0]])
+                    lst_tbin[-1].append(vt[1])
+
+                    # mstatag += get_entries(ft1_candidates[0], vt[0]+T0, vt[1]+T0)
+                    # if ivt==0:
+                    #     lst_tbin.append([vt[0]])
+                    # if mstatag>=goodstat:
+                    #     lst_tbin[-1].append(vt[1])
+                    #     mstatag = 0
+                    #     if ivt<len(validtimes)-1:
+                    #         lst_tbin.append([validtimes[ivt+1][0]])
+                    # if ivt==len(validtimes)-1:
+                    #     if len(lst_tbin)>1:
+                    #         lst_tbin = lst_tbin[:-1]
+                    #     if len(lst_tbin[-1])<2:
+                    #         lst_tbin[-1].append(vt[1])
+                    #     else:
+                    #         lst_tbin[-1][1] = vt[1]
             else:
                 if ivt==0:
                     if tmin>=vt[0] and tmin<vt[1]:
@@ -388,7 +386,7 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
         for itime in range(NRAN_TIME):
             strtime = 'T{0:0>6}-{1:0>6}s'.format(int(0.5+LST_RAN_TIME[itime][0]), int(0.5+LST_RAN_TIME[itime][1]))
             print '=====', strtime, '====='
-            if mode!='special':
+            if not mode in ('special', 'lightcurve'):
                 strtime = mode
             dct_loglike = {}
             for (ispec, fspec) in enumerate(lst_spec_func):
@@ -398,7 +396,10 @@ def AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedg
                 str_index = 'IndexFree'
                 if index_fixed is not None:
                     str_index = 'Index{0:0>3}'.format(int(100*index_fixed))
-                path_subdir = '{0}/{1}/r{2:0>2}deg/{3}/{4}/{5}'.format(path_outdir, strenergies, int(radius_roi+0.5), strtime, fspec, str_index)
+                if mode=='lightcurve':
+                    path_subdir = '{0}/{1}/r{2:0>2}deg/lightcurve/{3}/{4}/{5}'.format(path_outdir, strenergies, int(radius_roi+0.5), strtime, fspec, str_index)
+                else:
+                    path_subdir = '{0}/{1}/r{2:0>2}deg/{3}/{4}/{5}'.format(path_outdir, strenergies, int(radius_roi+0.5), strtime, fspec, str_index)
                 if not os.path.exists(path_subdir):
                     os.makedirs(path_subdir)
                 os.chdir(path_subdir)
@@ -468,6 +469,7 @@ model:
   {13}
   sources :
     - {{ 'name' : 'GRB{10}', 'ra' : {8}, 'dec' :{9}, {11}, 'SpatialModel': 'PointSource'}}
+  extdir  : '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/Catalogues/Extended_archive_v15/Templates'
 """.format(path_subdir, ft1_candidates[0], ft2_candidates[0], str_path_lt, eedges[0], eedges[1], int(T0+LST_RAN_TIME[itime][0]+0.5), int(T0+LST_RAN_TIME[itime][1]+0.5), RA, DEC, NAME_TGT, str_spectrum, ZCUT, str_catalogues, str(edisp), ceil(radius_roi*sqrt(2)), radius_roi+10.)
 
                     with open("{0}/config.yaml".format(path_subdir), 'w') as conf:
@@ -481,6 +483,10 @@ model:
                     gta.setup()
                     #except RuntimeError:
                      #   print 'RuntimeError'
+                      #  print 'Checking ft1 file...'
+                       # hdulist=fits.open('{0}/ft1_00.fits'.format(path_subdir))
+                        #print 'FT1 file has', len(hdulist['EVENTS'].data), 'events.'
+                        #continue
                     print 'Checking ft1 file...'
                     hdulist=fits.open('{0}/ft1_00.fits'.format(path_subdir))
                     print 'FT1 file has', len(hdulist['EVENTS'].data), 'events.'
@@ -725,6 +731,7 @@ model:
                         ax_cspec.set_ylabel('[counts]')
                         ax_cspec.set_title('RoI of GRB'+NAME_TGT)
                         fig_cspec.savefig("{0}/Count_spectrum_{1}{2}.png".format(path_subdir, NAME_TGT, SUFFIX))
+                        fig_cspec.clf()
 
                     flux_prev = []
                     flux_err_prev = []
@@ -849,7 +856,7 @@ model:
 @click.option('--nebindecade', default=0)
 @click.option('--tbinedges', '-t', multiple=True, default=None, type=float)
 @click.option('--outpath', '-o', default=None)
-@click.option('--mode', '-m', type=click.Choice(['prompt', 'afterglow', 'unified', 'earlyAG', 'lateAG']))
+@click.option('--mode', '-m', type=click.Choice(['prompt', 'afterglow', 'unified', 'earlyAG', 'lateAG', 'lightcurve']))
 @click.option('--catalogues', '-c', multiple=True, default=None, type=str)
 @click.option('--goodstat', '-g', type=int, default=0)
 @click.option('--shiftenergies', is_flag=True)
@@ -886,9 +893,11 @@ def main(name, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid,
         os.makedirs(outpath)
     tbfits = ReadLTFCatalogueInfo.open_table(1, reftable)
     tb_masked = ReadLTFCatalogueInfo.select_one_by_name(tbfits, name)
-
+    str_ft2_interval = '30s'
+    if mode in ('lightcurve', 'prompt'):
+        str_ft2_interval = '1s'
     path_ft1_exist = ls_list(outpath+'/*_ft1*.fits')[0]
-    path_ft2_exist = ls_list(outpath+'/*_ft2*.fits')[0]
+    path_ft2_exist = ls_list(outpath+'/*_ft2-'+str_ft2_interval+'.fits')[0]
     ft1_exist = path_ft1_exist[0]=='/'
     ft2_exist = path_ft2_exist[0]=='/'
 
@@ -903,22 +912,22 @@ def main(name, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid,
     if ft2_exist==False or download==True:
         print 'Downloading FT2 data...'
         os.chdir(outpath)
-        download_fermi_data_grb(name, lst_ft=[2], path_catalogue=reftable, path_outdir=outpath)
+        download_fermi_data_grb(name, lst_ft=[2], ft2_interval=str_ft2_interval, path_catalogue=reftable, path_outdir=outpath)
     else:
         print 'Downloading data is skipped.'
 
-    if mode=='prompt':
+    if mode in ('lightcurve', 'prompt'):
         ft1_candidates = ls_list(outpath+'/*_ft1*.fits')
-        ft2_candidates = ls_list(outpath+'/*_ft2*.fits')
+        ft2_candidates = ls_list(outpath+'/*_ft2-1s.fits')
     elif mode in ('afterglow', 'unified', 'earlyAG', 'lateAG', 'special'):
         ft1_candidates = ls_list(outpath+'/*_ft1*.fits')
-        ft2_candidates = ls_list(outpath+'/*_ft2*.fits')
+        ft2_candidates = ls_list(outpath+'/*_ft2-30s.fits')
         #ft1_candidates = ls_list(outpath+'/*_PH??.fits')
         #ft2_candidates = ls_list(outpath+'/*_SC??.fits')
     lst_assum_spec = ['PL']
     if not any(func):
         func = ['PL', 'BPL']
-    AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, lst_ebin, tb_masked, outpath, mode, catalogues, goodstat, shiftenergies, edisp, func, fixindex, fixecut, roi, sedadjusted)
+    AnalyzeGRB_fermipy(name, ft1_candidates, ft2_candidates, tmin, tmax, tbinedges, suffix, force, skipts, skipsed, skipresid, lst_ebin, tb_masked, outpath, mode, catalogues, goodstat, shiftenergies, edisp, func, fixindex, fixecut, roi, sedadjusted) #, [[0.0, 7.8887174129486084], [7.8887174129486084, 10.144435524940491], [10.144435524940491, 12.116088330745697], [12.116088330745697, 460.72827231884003], [2854.6134397983551, 6193.5413244366646], [8586.6134397983551, 10000.0]])
 
 
 if __name__ == '__main__':
