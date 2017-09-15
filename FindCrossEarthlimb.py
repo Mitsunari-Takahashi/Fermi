@@ -19,9 +19,10 @@ from pMETandMJD import *
 import commands
 
 
-def find_cross_earthlimb(pathFileScAll, ra, dec, metStart, metStop, zcut, torigin):
+def find_cross_earthlimb(pathFileScAll, ra, dec, metStart, metStop, zcut, torigin=0):
     """Look over spacecraft files and find times the target object crosses the Earthlimb.
 """
+    print pathFileScAll
     coordsTgt = SkyCoord(ra, dec, unit="deg")
     print coordsTgt
     fmwStart = ConvertMetToFMW(metStart)
@@ -50,6 +51,8 @@ def find_cross_earthlimb(pathFileScAll, ra, dec, metStart, metStop, zcut, torigi
         aDEC_SCZ = tbdataSC.field('DEC_SCZ')
         aDEC_SCX = tbdataSC.field('DEC_SCX')
         aLIVETIME = tbdataSC.field('LIVETIME')
+        aDATA_QUAL = tbdataSC.field('DATA_QUAL')
+        aLAT_CONFIG = tbdataSC.field('LAT_CONFIG')
         degZenith_prev = 0
         start_prev = 0
         stop_prev = 0
@@ -60,7 +63,13 @@ def find_cross_earthlimb(pathFileScAll, ra, dec, metStart, metStop, zcut, torigi
             if aSTART[iTI]<stop_prev:
                 print 'Odd order!!!'
                 return 1
-            if aSTART[iTI]>=metStart and aSTART[iTI]<metStop:
+            if not aDATA_QUAL[iTI]>0:
+                print 'Bad time interval', aSTART[iTI], '-', aSTOP[iTI], ':', aDATA_QUAL[iTI]
+                continue
+            if not aLAT_CONFIG[iTI]==1:
+                print 'LAT config:', aSTART[iTI], '-', aSTOP[iTI], ':', aLAT_CONFIG[iTI]
+                continue
+            if aSTOP[iTI]>=metStart and aSTART[iTI]<metStop:
                 tti = aLIVETIME[iTI]
                 coordsSCZ = SkyCoord(aRA_SCZ[iTI], aDEC_SCZ[iTI], unit="deg")
                 coordsZenith = SkyCoord(aRA_ZENITH[iTI], aDEC_ZENITH[iTI], unit="deg")
@@ -94,7 +103,7 @@ def find_cross_earthlimb(pathFileScAll, ra, dec, metStart, metStop, zcut, torigi
                 stop_prev = aSTOP[iTI]
                 iTIR +=1
 
-                if iTI%20==0:
+                if iTI%50==0:
                     print iTI, 'Time:', aSTART[iTI], 'RA:', aRA_SCZ[iTI], 'DEC:', aDEC_SCZ[iTI], 'Zenith:', degZenith, 'LAT_MODE:', tbdataSC.field('LAT_MODE')[iTI]#math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), degZenith, math.degrees(radSCY)
                 sys.stdout.flush()
         if len(validtimes[-1])<2:
