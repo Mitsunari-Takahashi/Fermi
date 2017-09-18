@@ -3,7 +3,9 @@
 """Module for extrapolation analysis of a LAT spectrum.
 The main class ExtrapolateGRBSpectrum is a chain of another module pLATLikelihoodConfig.py.
 The authour: Mitsunari Takahashi
-Version: 1.1 (2017.09.14)
+ - Version: 2.0 (2017.09.18)
+Use n_sigma from fitting in the highest energies.
+ - Version: 1.1 (2017.09.14)
 """
 import sys
 import os
@@ -25,7 +27,7 @@ from STLikelihoodAnalysis import get_module_logger
 
 
 ##### VERSION OF THIS MACRO #####
-VERSION = 1.1 # 2017.09.14
+VERSION = 2.0 # 2017.09.18
 
 
 ##### Logger #####
@@ -207,8 +209,9 @@ class ExtrapolateGRBSpectrum():
         g_index = freeParValues.index(self.analysis_fit.like.freePars(self.analysis_fit.target.name)[1].getValue())
         # Covariance for index and itself
         cov_gg = self.analysis_fit.like.covariance[g_index][g_index]
-        nobs_sigma_factor = sqrt(pow(flux_frac_err,2) + pow(nobs/npred_all*(log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
-        nobs_sigma = npred_all * nobs_sigma_factor
+        nobs_sigma_factor = self.dct_summary['highest_energies']['flux_total']['error']/self.dct_summary['highest_energies']['flux_total']['value']
+        #sqrt(pow(flux_frac_err,2) + pow(nobs/npred_all*(log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
+        nobs_sigma = nobs #npred_all * nobs_sigma_factor
         logger.info('Tentative uncertainty of observed count ({0}): {1}'.format(nobs, nobs_sigma))
         npred_sigma_factor = sqrt(pow(flux_frac_err,2) + pow((log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
         npred_sigma = npred_target * npred_sigma_factor
@@ -297,7 +300,18 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
     chain.dct_summary['highest_energies']['emin'] = chain.emin_extrapolated
     chain.dct_summary['highest_energies']['emax'] = chain.emax_extrapolated
 
+    # Fitting in the highest energies
+    logger.info('Fitting in highest energy range')
+    chain.setup_highest()
+    chain.analysis_highest.fit(bredo=brefit)
+    logger.info('Scale of HE analysis: {0}'.format(chain.analysis_highest.like.model[chain.analysis_highest.target.name].funcs['Spectrum'].getParam('Scale')))
+    flux_and_err_highest_energies = chain.analysis_highest.eval_flux_and_error(chain.analysis_highest.target.name)
+    chain.dct_summary['highest_energies']['flux'] = {'value':flux_and_err_highest_energies[0], 'error':flux_and_err_highest_energies[1]}
+    flux_and_err_highest_energies_total = chain.analysis_highest.eval_flux_and_error_total()
+    chain.dct_summary['highest_energies']['flux_total'] = {'value':flux_and_err_highest_energies_total[0], 'error':flux_and_err_highest_energies_total[1]}
+
     # Deriving deviation
+    logger.info('Deriving the deviation from power-law in the highest energies...')
     deviation_signed = chain.eval_deviation()
     chain.dct_summary['deviation_ts'] = deviation_signed
 
@@ -305,33 +319,16 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
     chain.analysis_extrapolated.fit(bredo=brefit)
     chain.summarize_powerlaw_fit_results(chain.analysis_extrapolated, 'whole_energies')
 
-    logger.info('Fitting in highest energy range')
-    chain.setup_highest()
-    chain.analysis_highest.fit(bredo=brefit)
-    logger.info('Scale of HE analysis: {0}'.format(chain.analysis_highest.like.model[chain.analysis_highest.target.name].funcs['Spectrum'].getParam('Scale')))
-    flux_and_err_highest_energies = chain.analysis_highest.eval_flux_and_error(chain.analysis_highest.target.name)
-    chain.dct_summary['highest_energies']['flux'] = {'value':flux_and_err_highest_energies[0], 'error':flux_and_err_highest_energies[1]}
-
     # Detailed limits of flux, eflux, dnde, e2dnde
     chain.dct_summary['whole_energies']['limits'] = chain.analysis_extrapolated.eval_limits_powerlaw(str_index_fixed=['best'])
     chain.summarize_powerlaw_fit_results(chain.analysis_highest, 'highest_energies')
     chain.dct_summary['lower_energies']['limits'] = chain.analysis_fit.eval_limits_powerlaw(str_index_fixed=['best'])
 
-    #if not chain.dct_summary['highest_energies']['TS'] >= 25:
     chain.dct_summary['highest_energies']['limits'] = chain.analysis_highest.eval_limits_powerlaw(str_index_fixed=['best'])
-        #chain.pickle(chain.dct_summary)    # Pickle
-        #logger.warning('TS={ts} is NOT enough for the limits in the highest energies!! Chain analysis finished.'.format(ts=chain.dct_summary['highest_energies']['TS']))
-        #sys.exit(0)
-    #else:
-     #   chain.dct_summary['highest_energies']['limits'] = chain.analysis_highest.eval_limits_powerlaw()
-
     # Pickle
     chain.pickle(chain.dct_summary)
 
     logger.info('Chain analysis finished.')
-
-#class ExtrapolateGRBSpectrumResults():
-#    def __init__(self):
         
 
 @click.command()
