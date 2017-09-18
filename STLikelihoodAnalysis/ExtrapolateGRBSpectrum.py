@@ -3,7 +3,7 @@
 """Module for extrapolation analysis of a LAT spectrum.
 The main class ExtrapolateGRBSpectrum is a chain of another module pLATLikelihoodConfig.py.
 The authour: Mitsunari Takahashi
- - Version: 2.0 (2017.09.18)
+ - Version: 2.1 (2017.09.18)
 Use n_sigma from fitting in the highest energies.
  - Version: 1.1 (2017.09.14)
 """
@@ -27,7 +27,7 @@ from STLikelihoodAnalysis import get_module_logger
 
 
 ##### VERSION OF THIS MACRO #####
-VERSION = 2.0 # 2017.09.18
+VERSION = 2.1 # 2017.09.18
 
 
 ##### Logger #####
@@ -184,6 +184,10 @@ class ExtrapolateGRBSpectrum():
         nobs = sum(self.analysis_extrapolated.like._Nobs()[nemin_eval:nemax_eval+1])
         self.dct_summary['highest_energies']['nobs'] = nobs
         logger.info('Observed count in {emin} - {emax}: {nobs}'.format(emin=emin_eval, emax=emax_eval, nobs=nobs))
+
+        nobs_fit = sum(self.analysis_fit.like._Nobs())
+        self.dct_summary['lower_energies']['nobs'] = nobs_fit
+
         # Predicted count
         y_model_all, y_model_target, y_model_others = self.analysis_extrapolated.count_axes()
         npred_all = sum(y_model_all[nemin_eval:nemax_eval+1])
@@ -209,9 +213,9 @@ class ExtrapolateGRBSpectrum():
         g_index = freeParValues.index(self.analysis_fit.like.freePars(self.analysis_fit.target.name)[1].getValue())
         # Covariance for index and itself
         cov_gg = self.analysis_fit.like.covariance[g_index][g_index]
-        nobs_sigma_factor = self.dct_summary['highest_energies']['flux_total']['error']/self.dct_summary['highest_energies']['flux_total']['value']
+        #nobs_sigma_factor = self.dct_summary['highest_energies']['flux_total']['error']/self.dct_summary['highest_energies']['flux_total']['value']
         #sqrt(pow(flux_frac_err,2) + pow(nobs/npred_all*(log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
-        nobs_sigma = nobs #npred_all * nobs_sigma_factor
+        nobs_sigma = self.dct_summary['lower_energies']['nobs']/self.dct_summary['lower_energies']['flux_total']['value']*self.dct_summary['highest_energies']['flux']['error']* #nobs #npred_all * nobs_sigma_factor
         logger.info('Tentative uncertainty of observed count ({0}): {1}'.format(nobs, nobs_sigma))
         npred_sigma_factor = sqrt(pow(flux_frac_err,2) + pow((log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
         npred_sigma = npred_target * npred_sigma_factor
@@ -291,6 +295,11 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
         chain.pickle(chain.dct_summary)    # Pickle
         logger.warning('TS={ts} is NOT enough!! Chain analysis finished.'.format(ts=chain.dct_summary['lower_energies']['TS']))
         sys.exit(0)
+
+    flux_and_err_lower_energies = chain.analysis_fit.eval_flux_and_error(chain.analysis_fit.target.name)
+    chain.dct_summary['lower_energies']['flux'] = {'value':flux_and_err_lower_energies[0], 'error':flux_and_err_lower_energies[1]}
+    flux_and_err_lower_energies_total = chain.analysis_fit.eval_flux_and_error_total()
+    chain.dct_summary['lower_energies']['flux_total'] = {'value':flux_and_err_lower_energies_total[0], 'error':flux_and_err_lower_energies_total[1]}
 
     # Extrapolating
     chain.setup_extrapolate()
