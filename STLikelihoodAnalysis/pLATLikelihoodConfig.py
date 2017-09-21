@@ -35,7 +35,7 @@ from make3FGLxml import *
 from pLsList import ls_list
 import pMETandMJD
 from FindCrossEarthlimb import find_cross_earthlimb
-from FindGoodstatPeriods import find_goodstat_periods, get_entries
+from FindGoodstatPeriods import find_goodstat_periods, get_entries, get_entries_roi
 from DownloadFermiData import download_fermi_data_grb
 import ReadLTFCatalogueInfo
 from STLikelihoodAnalysis import get_module_logger
@@ -118,7 +118,7 @@ class GRBTarget(PointTarget):
 PATH_BASEDIR = '/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone'
 
 class AnalysisConfig:
-    def __init__(self, target, emin, emax, tmin, tmax, evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, suffix='', emin_fit=None, emax_fit=None, emin_eval=None, emax_eval=None, psForce=False):
+    def __init__(self, target, emin, emax, tmin, tmax, evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, suffix='', emin_fit=None, emax_fit=None, emin_eval=None, emax_eval=None, psForce=False, roi_checked=5.0):
         self.target = target
         logger.debug(self.target)
         self.emin = emin
@@ -140,6 +140,7 @@ class AnalysisConfig:
         self.index_fixed = index_fixed
         self.rad_margin = rad_margin
         self.suffix = '' if suffix=='' else '_'+suffix
+        self.roi_checked = roi_checked # Radius within which number of events is checked.
 
         self.str_time = 'T{0.tmin:0>6.0f}-{0.tmax:0>6.0f}'.format(self) if self.target.met0 >= 239557417 else 'MET{0.tmin:0>9.0f}-{0.tmax:0>9.0f}'.format(self)
         self.str_energy = 'E{0.emin:0>7.0f}-{0.emax:0>7.0f}MeV'.format(self)
@@ -266,6 +267,12 @@ class AnalysisConfig:
         my_apps.maketime.run()
         logger.info("""Making GTI finished.
 """)
+        nevt_rough = get_entries_roi(self.path_filtered_gti, self.tmin, self.tmax, self.roi_checked, self.target.ra, self.target.dec, self.target.met0)
+        if nevt_rough>0:
+            logger.info('{0} events within {1} deg.'.format(nevt_rough, self.roi_checked))
+        else:
+            logger.warning('No valid events within {0} deg!!'.format(self.roi_checked))
+        return nevt_rough
 
 
     def livetime(self, bforce=False):
@@ -367,11 +374,12 @@ class AnalysisConfig:
         self.set_directories()
         self.download(bforce=force['download'])
         self.filter(bforce=force['filter'])
-        self.maketime(bforce=force['maketime'])
+        nevt_rough = self.maketime(bforce=force['maketime'])
         self.livetime(bforce=force['livetime'])
         self.exposure(bforce=force['exposure'])
         self.model_3FGL_sources(bforce=force['model_3FGL_sources'])
         self.diffuse_responses(bforce=force['diffuse_responses'])
+        return nevt_rough
 
 
     def set_likelihood(self):
@@ -456,15 +464,25 @@ class AnalysisConfig:
         self.likeobj = pyLike.NewMinuit(self.like.logLike)
         #likeobj = pyLike.NewMinuit(like.logLike)
         logger.info("""Likelihood fitting is starting...""")
+        logger.debug('Prefactor of {0}: {1}'.format(self.target.name, self.like.normPar(self.target.name).getValue()))
         if bredo==True:
             try:
                 logger.error('RuntimeError!!')
                 logger.warning('Tolerance is relaxed from {tol0} to {tol1}'.format(tol0=self.like.tol, tol1=self.like.tol*10.))
+                logger.info('Fitting again...')
                 self.dofit(tol=self.like.tol*10.)
+                logger.debug('Prefactor of {0}: {1}'.format(self.target.name, self.like.normPar(self.target.name).getValue()))
             except RuntimeError:
+                logger.info('Resetting likelihood.')
+                self.set_likelihood()
+                self.likeobj = pyLike.NewMinuit(self.like.logLike)
+                logger.debug('Prefactor of {0}: {1}'.format(self.target.name, self.like.normPar(self.target.name).getValue()))
+                logger.info('Fixing normalization of other sources.')
                 for source in self.like.sourceNames():
                     if source not in (self.target.name):
                         self.like.normPar(source).setFree(False)
+                logger.debug('Prefactor of {0}: {1}'.format(self.target.name, self.like.normPar(self.target.name).getValue()))
+                logger.info('Fitting again...')
                 self.dofit(tol=self.like.tol*10.)
         else:
             self.dofit()

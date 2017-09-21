@@ -89,7 +89,8 @@ class ExtrapolateGRBSpectrum():
 
 
     def setup_fit(self):
-        self.analysis_fit.setup(force={'download':False, 'filter':self.force, 'maketime':self.force, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':True, 'diffuse_responses':self.force})
+        nevt_rough = self.analysis_fit.setup(force={'download':False, 'filter':self.force, 'maketime':self.force, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':True, 'diffuse_responses':self.force})
+        return nevt_rough
 
 
     def setup_extrapolate(self):
@@ -286,7 +287,11 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
     chain = ExtrapolateGRBSpectrum(name=name, phase=mode, emin_fitted=emin_fitted, emax_fitted=emax_fitted, emin_extrapolated=emin_extrapolated, emax_extrapolated=emax_extrapolated, tstop=10000., deg_roi=deg_roi, zmax=zmax, suffix=suffix, grbcatalogue=grbcatalogue, path_pickle=outdir, force=force)
 
     logger.info('Fitting in lower energy range.')
-    chain.setup_fit()
+    nevt_rough = chain.setup_fit()
+    if not nevt_rough>0:
+        chain.dct_summary['lower_energies']['TS'] = 0
+        chain.pickle(chain.dct_summary)    # Pickle
+        return 0
     chain.analysis_fit.fit(bredo=brefit)
     chain.summarize_powerlaw_fit_results(chain.analysis_fit, 'lower_energies')
     if not chain.dct_summary['lower_energies']['TS'] >= 25:
