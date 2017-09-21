@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/Usr/bin/env python
 """Modules for LAT likelihood analysis in python style.
 """
 import sys
@@ -146,6 +146,7 @@ class AnalysisConfig:
         self.str_roi = 'r{0:0>2.0f}deg'.format(self.deg_roi)
         self.str_index = 'Index{0}'.format(int(self.index_fixed*100) if (self.index_fixed==self.index_fixed and self.index_fixed is not None) else 'Free')
         
+        self.dir_base = PATH_BASEDIR
         self.dir_work = '{base}/{target}/{energy}/{roi}/{time}/{spectype}/{index}'.format(base=PATH_BASEDIR, target=self.target.name, energy=self.str_energy, roi=self.str_roi, time=self.str_time, spectype=self.target.spectraltype, index=self.str_index)
         # Data
         self.path_dir_data = '{base}/{target}'.format(base=PATH_BASEDIR, target=self.target.name)
@@ -197,6 +198,9 @@ class AnalysisConfig:
         self.path_dir_extended = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/Catalogues/Extended_archive_v15/Templates'
         self.galdiff_name = os.path.basename(self.path_galdiff)[:-5]
         self.isodiff_name = os.path.basename(self.path_isodiff)[:-4]
+
+        # Summary of results
+        self.dct_summary_results = {}
 
 
     def set_directories(self):
@@ -512,13 +516,40 @@ class AnalysisConfig:
 """)
 
 
+    def summarize_fit_results(self):
+        """Summarize the results after fitting and return a dictonary. The contents are the model parameters, photon flux, TS, return code.
+"""
+        # Model parameters
+        if self.target.spectraltype=='PowerLaw':
+            model_pars = ('Prefactor', 'Index', 'Scale')
+        elif self.target.spectraltype=='ExpCutoff':
+            model_pars = ('Prefactor', 'Index', 'Scale', 'Ebreak', 'P1', 'P2', 'P3')
+        for name_param in model_pars:
+            param = self.like.model[self.target.name].funcs['Spectrum'].getParam(name_param)
+            self.dct_summary_results[name_param] = {'value':param.value(), 'error':param.error()}
+
+        # Flux
+        flux_and_err = self.eval_flux_and_error(self.target.name, self.emin_eval, self.emax_eval)
+
+        # TS
+        name = self.target.name
+        logger.debug('TS of {0}:'.format(name))
+        self.dct_summary_results['TS'] = self.like.Ts(str(name))
+
+        # Return code 
+        self.dct_summary_results['retcode'] = self.retcode
+
+        logger.debug(self.dct_summary_results)
+        return self.dct_summary_results
+
+
     def eval_flux_and_error(self, name=None, emin=None, emax=None):
         name_eval = name if name is not None else self.target.name
         e0 = emin if emin is not None else self.emin_eval
         e1 = emax if emax is not None else self.emax_eval
         flux = self.like.flux(name_eval, e0, e1)
         flux_err = self.like.fluxError(name_eval, e0, e1)
-        #logger.info('Flux of {0} in {1} - {2} MeV: {3} +/- {4}'.format(name_eval, e0, e1, flux, flux_err))
+        self.dct_summary_results['flux'] = {'value':flux, 'error':flux_err}
         return (flux, flux_err)
         
 
@@ -532,11 +563,11 @@ class AnalysisConfig:
             flux_total += fsrc[0]
             flux_err_total_sq += pow(fsrc[1], 2)
         flux_err_total = sqrt(flux_err_total_sq)
-        #logger.info('Total flux in {0} - {1} MeV: {2} +/- {3}'.format(e0, e1, flux_total, flux_err_total))
+        self.dct_summary_results['flux_total'] = {'value':flux_total, 'error':flux_err_total}
         return (flux_total, flux_err_total)
 
 
-    def eval_limits_powerlaw(self, emin=None, emax=None, eref=None, str_index_fixed=['free','best' ]):
+    def eval_limits_powerlaw(self, emin=None, emax=None, eref=None, str_index_fixed=['best', 'free']):
         e0 = emin if emin is not None else self.emin_eval
         e1 = emax if emax is not None else self.emax_eval
         e2 = eref if eref is not None else self.target.spectralpars['Scale']
@@ -554,7 +585,7 @@ class AnalysisConfig:
         if np.inf in xvals:
             logger.warning('Infinite profile normalization value exists!!')
             xvals = 10 ** np.linspace(-20, 0, 100)
-        xvals = np.insert(xvals, 0, 0.0)
+        #xvals = np.insert(xvals, 0, 0.0)
         self.like.normPar(self.target.name).setBounds(xvals[0], xvals[-1])
         logger.info("""Profile normalization factor: 
 {0}
@@ -631,14 +662,9 @@ class AnalysisConfig:
                 limits[str_index_assumed][item]['ul'] = v0[item] * limits[str_index_assumed]['norm']['ul'] / norm_value
                 limits[str_index_assumed][item]['ll'] = v0[item] * limits[str_index_assumed]['norm']['ll'] / norm_value
                 limits[str_index_assumed][item]['err'] = v0[item] * limits[str_index_assumed]['norm']['err'] / norm_value
-        #logger.debug('Limits (index-free): {0}'.format(limits['free']))
+
+        self.dct_summary_results['limits'] = limits
         return limits
-
-    # def apply_spectrum(self, astrosrc_other):
-    #     self.target.spectraltype = astrosrc_other.spectraltype
-    #     self.target.spectralpars = astrosrc_other.spectralpars
-    #     self.target.spectralpars_scale = astrosrc_other.spectralpars_scale
-
 
 
 
@@ -674,7 +700,7 @@ class GRBConfig(AnalysisConfig):
         AnalysisConfig.__init__(self, target, emin=emin, emax=emax, tmin=tmin, tmax=tmax, evclass=128, evtype=3, ft2interval=ft2interval, deg_roi=deg_roi, zmax=zmax, index_fixed=index_fixed, suffix=suffix, emin_fit=emin_fit, emax_fit=emax_fit, emin_eval=emin_eval, emax_eval=emax_eval, psForce=psForce)
 
         # Reassign work directory
-        self.str_time = 'T{0:0>6.0f}-{1:0>6.0f}'.format(self.tmin, self.tmax)
+        self.str_time = 'T{0:0>9.0f}-{1:0>9.0f}ms'.format(self.tmin*1000, self.tmax*1000)
         if self.phase in ('lightcurve', 'special'):
             self.dir_work = '{base}/{target}/{energy}/{roi}/{phase}/{time}/{spectype}/{index}'.format(base=PATH_BASEDIR, target=self.target.name, energy=self.str_energy, roi=self.str_roi, phase=self.phase, time=self.str_time, spectype=self.target.spectraltype, index=self.str_index)
         else:
