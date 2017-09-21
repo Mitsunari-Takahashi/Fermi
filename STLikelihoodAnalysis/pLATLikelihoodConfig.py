@@ -597,7 +597,7 @@ class AnalysisConfig:
         norm_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(norm_name).error()
         norm_idx = self.like.par_index(self.target.name, norm_name)
         logx_lowest = -4.0
-        logx_highest = max(4.0, 3*norm_error/norm_value)
+        logx_highest = 4.0 #max(2.0, 2*norm_error/norm_value)
         nx = 10 * (logx_highest-logx_lowest)
         xvals = norm_value * 10 ** np.linspace(logx_lowest, logx_highest, nx)
         logger.info('Normarization = {0} +/- {1}'.format(norm_value, norm_error))
@@ -620,7 +620,13 @@ class AnalysisConfig:
         index_name = 'Index'
         index_idx = self.like.par_index(self.target.name, index_name)
         index_value = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).value()
+        #if not index_value==index_value:
+        #    logger.error('Index value is NOT valid!!! {0}'.format(index_value))
+        #    index_value = -2.0
         index_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).error()
+        #if not index_error==index_error:
+        #    logger.error('Index error is NOT valid!!! {0}'.format(index_value))
+        #    index_error = 0.0
         index_values = {'best':index_value, 'free':index_value}
         index_values['harder'] = index_value + index_error * (1 if index_values<0 else -1)
         index_values['softer'] = index_value + index_error * (-1 if index_values<0 else 1)
@@ -642,6 +648,9 @@ class AnalysisConfig:
             logger.info('Index = {idxa} ({st}) is assumed.'.format(idxa=index_values[str_index_assumed], st=str_index_assumed))
             v0['dnde'] = norm_value * (e2 / self.target.spectralpars['Scale']) ** index_values[str_index_assumed]
             v0['e2dnde'] = v0['dnde'] * e2 * e2
+            if not index_values[str_index_assumed]==index_values[str_index_assumed]:
+                logger.error('Index value is NOT valid!!! {0}'.format(index_values[str_index_assumed]))
+                sys.exit(1)
             self.like[index_idx] = index_values[str_index_assumed]
             if str_index_assumed == 'free':
                 self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[index_idx:index_idx+1], value=1)
@@ -662,14 +671,10 @@ class AnalysisConfig:
                     try:
                         loglike1 = -self.like.fit(verbosity=0,covar=False,optObject=self.likeobj)
                     except RuntimeError:
-                        logger.warning('Fitting with free index failed!!')
+                        logger.error('RuntimeError!!!')
+                        logger.error('Fitting with free index failed!!')
                         failed_freeIndex = True
-                        break
-                    #index_fit = self.like.model[self.target.name].funcs['Spectrum'].getParam('Index').value()
-                    #o[str_index_assumed]['flux'][i] = self.like[self.target.name].flux(e0, e1)
-                    #o[str_index_assumed]['eflux'][i] = self.like[self.target.name].energyFlux(e0, e1)
-                    #o[str_index_assumed]['dnde'][i] = x * (e2 / self.target.spectralpars['Scale']) ** index_fit
-                    #o[str_index_assumed]['e2dnde'][i] = o[str_index_assumed]['dnde'][i] * e2 * e2
+                        sys.exit(1)
                 else:
                     loglike1 = -self.like()
                 o[str_index_assumed]['dloglike'][i] = loglike1 - loglike0
