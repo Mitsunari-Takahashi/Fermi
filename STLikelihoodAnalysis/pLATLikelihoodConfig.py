@@ -14,7 +14,6 @@ import numpy as np
 #from array import array
 import math
 from math import log10, log, sqrt, ceil, isnan, pi, factorial
-#import subprocess
 import gt_apps as my_apps
 import pyLikelihood
 from UnbinnedAnalysis import *
@@ -25,10 +24,6 @@ import SummedLikelihood
 from fermipy.utils import get_parameter_limits
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-#from astropy.io import fits
-#from sympy import *
-#from scipy import integrate
-#from fermipy.utils import get_parameter_limits
 import copy
 sys.path.append('/nfs/farm/g/glast/u/mtakahas/python_packages')
 from make3FGLxml import *
@@ -352,10 +347,6 @@ class AnalysisConfig:
 
 
     def diffuse_responses(self, bforce=False):
-#         if bforce==False:
-#             logger.info("""Calculating diffuse source responses is skipped.
-# """)
-#             return 0
         logger.info("""Calculating diffuse source responses is starting...""")
         check_required_files({'FT2':self.path_ft2, 'Filtered GTI event':self.path_filtered_gti, 'Source model':self.path_model_xml})
 
@@ -368,17 +359,27 @@ class AnalysisConfig:
 """)
 
 
-    def setup(self, force={'download':False, 'filter':False, 'maketime':False, 'livetime':False, 'exposure':False, 'model_3FGL_sources':False, 'diffuse_responses':False}):
+    def setup(self, force={'download':False, 'filter':False, 'maketime':False, 'livetime':False, 'exposure':False, 'model_3FGL_sources':False, 'diffuse_responses':False}, skip_zero_data=False):
         """Perform all preparation before fitting. Namely, downloading, filtering, making GTI, calculating livetime and exposure, modeling 3FGL sources, making diffuse source responses.
 """
         self.set_directories()
         self.download(bforce=force['download'])
         self.filter(bforce=force['filter'])
         nevt_rough = self.maketime(bforce=force['maketime'])
-        self.livetime(bforce=force['livetime'])
-        self.exposure(bforce=force['exposure'])
-        self.model_3FGL_sources(bforce=force['model_3FGL_sources'])
-        self.diffuse_responses(bforce=force['diffuse_responses'])
+        if skip_zero_data==False:
+            self.livetime(bforce=force['livetime'])
+            self.exposure(bforce=force['exposure'])
+            self.model_3FGL_sources(bforce=force['model_3FGL_sources'])
+            self.diffuse_responses(bforce=force['diffuse_responses'])
+        elif skip_zero_data==True:
+            if nevt_rough>0:
+                self.livetime(bforce=force['livetime'])
+                self.exposure(bforce=force['exposure'])
+                self.model_3FGL_sources(bforce=force['model_3FGL_sources'])
+                self.diffuse_responses(bforce=force['diffuse_responses'])
+            else:
+                logger.warning('Skipping calculation of livetime, exposre and diffuse responses.')
+                self.model_3FGL_sources(bforce=force['model_3FGL_sources'])
         return nevt_rough
 
 
@@ -604,6 +605,12 @@ class AnalysisConfig:
             logger.warning('Infinite profile normalization value exists!!')
             xvals = 10 ** np.linspace(-20, 0, 100)
         #xvals = np.insert(xvals, 0, 0.0)
+        if norm_value<min(xvals):
+            xvals = np.insert(xvals, 0, norm_value)
+            xvals = np.insert(xvals, 0, norm_value*0.1)
+        if norm_value>max(xvals):
+            xvals = np.insert(xvals, len(xvals), norm_value)
+            xvals = np.insert(xvals, len(xvals), norm_value*10)
         self.like.normPar(self.target.name).setBounds(xvals[0], xvals[-1])
         logger.info("""Profile normalization factor: 
 {0}

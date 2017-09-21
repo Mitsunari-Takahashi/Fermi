@@ -3,8 +3,10 @@
 """Module for extrapolation analysis of a LAT spectrum.
 The main class ExtrapolateGRBSpectrum is a chain of another module pLATLikelihoodConfig.py.
 The authour: Mitsunari Takahashi
+ - Version: 2.2 (2017.09.20)
+   Introduced rough check of event number after filter and GTI.
  - Version: 2.1 (2017.09.18)
-Use n_sigma from fitting in the highest energies.
+   Use n_sigma from fitting in the highest energies.
  - Version: 1.1 (2017.09.14)
 """
 import sys
@@ -27,7 +29,7 @@ from STLikelihoodAnalysis import get_module_logger
 
 
 ##### VERSION OF THIS MACRO #####
-VERSION = 2.1 # 2017.09.18
+VERSION = 2.2 # 2017.09.20
 
 
 ##### Logger #####
@@ -78,18 +80,8 @@ class ExtrapolateGRBSpectrum():
         self.dct_summary = {'version': VERSION, 'datetime':datetime.datetime.today().strftime("%Y/%m/%d %H:%M:%S"), 'target':str(name), 'lower_energies':{'emin':self.emin_fitted, 'emax':self.emax_fitted}, 'highest_energies':{'emin':self.emin_extrapolated, 'emax':self.emax_extrapolated}, 'whole_energies':{'emin':emin_whole, 'emax':emax_whole}, 'phase':phase, 'tstart': self.analysis_fit.tmin, 'tstop':self.analysis_fit.tmax, 'roi':deg_roi, 'zmax':zmax}
 
 
-    # def __getstate__(self):
-    #     state = self.__dict__.copy()
-    #     del state['like', 'likeobj']
-    #     return state
-
-
-    # def __setstate__(self, state):
-    #     self.__dict__.update(state)
-
-
     def setup_fit(self):
-        nevt_rough = self.analysis_fit.setup(force={'download':False, 'filter':self.force, 'maketime':self.force, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':True, 'diffuse_responses':self.force})
+        nevt_rough = self.analysis_fit.setup(force={'download':False, 'filter':self.force, 'maketime':self.force, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':True, 'diffuse_responses':self.force}, skip_zero_data=True)
         return nevt_rough
 
 
@@ -109,19 +101,8 @@ class ExtrapolateGRBSpectrum():
         self.analysis_highest.setup(force={'download':False, 'filter':self.force, 'maketime':self.force, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':True, 'diffuse_responses':self.force})
         
 
-#    def fit(self, redo=True):
-#        self.analysis_fit.fit(bredo=redo)
-
-
-#    def fit_whole(self, redo=True):
-#        self.analysis_extrapolated.fit(bredo=redo)
-
-
     def set_likelihood_extrapolate(self):
         self.analysis_extrapolated.set_likelihood()
-        #for i in range(self.analysis_extrapolated.like.nFreeParams()):
-        #    self.analysis_extrapolated.like.freeze(i)
-
         # Energy bins
         self.ebins = self.analysis_extrapolated.like.energies
         self.nebins = len(self.ebins)-1
@@ -212,9 +193,7 @@ class ExtrapolateGRBSpectrum():
         # Covariance for index and itself
         cov_gg = self.analysis_fit.like.covariance[g_index][g_index]
 
-        #nobs_sigma_factor = self.dct_summary['highest_energies']['flux_total']['error']/self.dct_summary['highest_energies']['flux_total']['value']
-        #sqrt(pow(flux_frac_err,2) + pow(nobs/npred_all*(log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
-        nobs_sigma = frac_count_per_flux_target * flux_err #self.dct_summary['lower_energies']['nobs']/self.dct_summary['lower_energies']['flux_total']['value']*self.dct_summary['highest_energies']['flux']['error'] #nobs #npred_all * nobs_sigma_factor
+        nobs_sigma = frac_count_per_flux_target * flux_err
         logger.info('Tentative uncertainty of observed count ({0}): {1}'.format(nobs, nobs_sigma))
         npred_sigma_factor = sqrt(pow(flux_frac_err,2) + pow((log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
         npred_sigma = npred_target * npred_sigma_factor
@@ -292,6 +271,7 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
         chain.dct_summary['lower_energies']['TS'] = 0
         chain.pickle(chain.dct_summary)    # Pickle
         return 0
+    # Fitting in the lower energies
     chain.analysis_fit.fit(bredo=brefit)
     chain.summarize_powerlaw_fit_results(chain.analysis_fit, 'lower_energies')
     if not chain.dct_summary['lower_energies']['TS'] >= 25:
