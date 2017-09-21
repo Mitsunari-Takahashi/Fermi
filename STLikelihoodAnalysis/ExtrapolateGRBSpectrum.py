@@ -167,10 +167,6 @@ class ExtrapolateGRBSpectrum():
                 diff_energy_edge_hi = abs(self.ebins[ie+1]-self.emax_extrapolated)
                 nemax_eval = ie
 
-            # if self.ebins[ie]<=self.emin_extrapolated and self.ebins[min(self.nebins, ie+1)]>self.emin_extrapolated:
-            #     nemin_eval = ie
-            # if self.ebins[ie]<self.emax_extrapolated and self.ebins[min(self.nebins,ie+1)]>=self.emax_extrapolated:
-            #     nemax_eval = ie
         emin_eval = self.ebins[nemin_eval]
         emax_eval = self.ebins[nemax_eval+1]
         if emin_eval!=self.emin_extrapolated:
@@ -198,6 +194,7 @@ class ExtrapolateGRBSpectrum():
         flux_frac_err = flux_err / flux
         npred_target_err = npred_target*flux_frac_err
         logger.info('Predicted count in {emin} - {emax}: {npred} +/- {npred_err}'.format(emin=emin_eval, emax=emax_eval, npred=npred_all, npred_err=npred_target_err))
+        frac_count_per_flux_target = npred_target/flux
 
         self.dct_summary['highest_energies']['npred_all'] = {'value':npred_all}
         self.dct_summary['highest_energies']['npred_target'] = {'value':npred_target, 'error':npred_target_err}
@@ -213,9 +210,10 @@ class ExtrapolateGRBSpectrum():
         g_index = freeParValues.index(self.analysis_fit.like.freePars(self.analysis_fit.target.name)[1].getValue())
         # Covariance for index and itself
         cov_gg = self.analysis_fit.like.covariance[g_index][g_index]
+
         #nobs_sigma_factor = self.dct_summary['highest_energies']['flux_total']['error']/self.dct_summary['highest_energies']['flux_total']['value']
         #sqrt(pow(flux_frac_err,2) + pow(nobs/npred_all*(log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
-        nobs_sigma = self.dct_summary['lower_energies']['nobs']/self.dct_summary['lower_energies']['flux_total']['value']*self.dct_summary['highest_energies']['flux']['error']* #nobs #npred_all * nobs_sigma_factor
+        nobs_sigma = frac_count_per_flux_target * flux_err #self.dct_summary['lower_energies']['nobs']/self.dct_summary['lower_energies']['flux_total']['value']*self.dct_summary['highest_energies']['flux']['error'] #nobs #npred_all * nobs_sigma_factor
         logger.info('Tentative uncertainty of observed count ({0}): {1}'.format(nobs, nobs_sigma))
         npred_sigma_factor = sqrt(pow(flux_frac_err,2) + pow((log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
         npred_sigma = npred_target * npred_sigma_factor
