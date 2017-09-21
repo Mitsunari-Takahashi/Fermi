@@ -19,12 +19,14 @@ from pMETandMJD import *
 import commands
 
 
-def find_cross_earthlimb(pathFileScAll, ra, dec, metStart, metStop, zcut, torigin=0):
+def find_cross_earthlimb(pathFileScAll, ra, dec, tStart, tStop, zcut, torigin=0):
     """Look over spacecraft files and find times the target object crosses the Earthlimb.
 """
     print pathFileScAll
     coordsTgt = SkyCoord(ra, dec, unit="deg")
     print coordsTgt
+    metStart = tStart + torigin
+    metStop = tStop + torigin
     fmwStart = ConvertMetToFMW(metStart)
     fmwStop = ConvertMetToFMW(metStop)
     validtimes = []
