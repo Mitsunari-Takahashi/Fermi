@@ -14,6 +14,8 @@ def unbinned_grb_analysis(name, mode, emin, emax, roi, spectraltype, refit, forc
         spectralpars = {'Prefactor':1e-10, 'Index':-2.0, 'Scale':1000.}
     elif spectraltype=='ExpCutoff':
         spectralpars = {'Prefactor':1e-10, 'Index':-2.0, 'Scale':1000., 'Ebreak':10.0, 'P1':10000., 'P2':0, 'P3':0}
+    elif spectraltype=='BrokenPowerLaw':
+        spectralpars = {'Prefactor':1e-12, 'Index1':-2.0, 'Index2':-2.0, 'BreakValue':10000.}
     else:
         logger.critical("""{0} is NOT available!!! Use PowerLaw or ExpCutoff.""".format(spectraltype))
         sys.exit(1)
@@ -35,7 +37,7 @@ def unbinned_grb_analysis(name, mode, emin, emax, roi, spectraltype, refit, forc
 @click.option('--emin', type=float, default=100.)
 @click.option('--emax', type=float, default=100000.)
 @click.option('--roi', type=float, default=12.)
-@click.option('--spectraltype', type=click.Choice(['PowerLaw', 'ExpCutoff']))
+@click.option('--spectraltype', type=click.Choice(['PowerLaw', 'ExpCutoff', 'BrokenPowerLaw']), default='PowerLaw')
 @click.option('--suffix', '-s', type=str, default='')
 @click.option('--force', '-f', is_flag=True)
 @click.option('--modelonly', is_flag=True)
