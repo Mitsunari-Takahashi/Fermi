@@ -2,6 +2,10 @@
 """Module for making light curves of LAT data.
 The main class LightCurve is a chain of another module pLATLikelihoodConfig.py.
 The authour: Mitsunari Takahashi
+* Version: 1.5 (2017.09.22) 
+  Energy vs. time plot.
+* Version: 1.4 (2017.09.22) 
+  Fitting light curves.
 * Version: 1.3 (2017.09.21) 
   Fixed bug of freeing index
 * Version: 1.2 (2017.09.19) 
@@ -25,6 +29,7 @@ import math
 from math import log10, log, sqrt, ceil, isnan, pi, factorial
 from sympy import *
 from scipy import integrate
+from astropy.io import fits
 import click
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -33,12 +38,15 @@ import STLikelihoodAnalysis.pLATLikelihoodConfig as pLATLikelihoodConfig
 from FindGoodstatPeriods import find_goodstat_periods
 from FindCrossEarthlimb import find_cross_earthlimb
 from STLikelihoodAnalysis import get_module_logger
+import ReadLTFCatalogueInfo
 import pickle_utilities
 import pMatplot
 
+mpl.rcParams['text.usetex'] = True
+mpl.rcParams['text.latex.preamble'] = [r'\usepackage{amsmath}']
 
 ##### VERSION OF THIS MACRO #####
-VERSION = 1.3 # 2017.09.21
+VERSION = 1.5 # 2017.09.22
 
 
 ##### Logger #####
@@ -77,6 +85,8 @@ class LightCurveGRB(LightCurve):
         self.config['goodstat'] = {'n':ngoodstat, 'r':rlim_goodstat}
         self.periods_goodstat = []
         self.analyses = []
+        self.counts_time = None
+        self.counts_energy = None
 
 
     def setup(self):
@@ -104,6 +114,19 @@ class LightCurveGRB(LightCurve):
 {vt}""".format(nth=self.config['goodstat']['n'], rlim=self.config['goodstat']['r'], vt=self.periods_goodstat))
 
 
+    def count_energy(self):
+        hdulistEVT = fits.open(self.analysis_whole.path_filtered_gti)
+        tbdataEVT = hdulistEVT[1].data
+        aTIME = tbdataEVT.field('TIME')
+        aENERGY = tbdataEVT.field('ENERGY')
+        nEVT = len(aTIME)
+        self.counts_time = np.zeros(nEVT)
+        self.counts_energy = np.zeros(nEVT)
+        for iEVT in range(nEVT):
+            self.counts_time[iEVT] = aTIME[iEVT] - self.analysis_whole.target.met0
+            self.counts_energy[iEVT] = aENERGY[iEVT]
+
+
     def run_analysis(self):
         self.summary_results = []
         for ip, pds in enumerate(self.periods_goodstat):
@@ -123,7 +146,7 @@ class LightCurveGRB(LightCurve):
 
 
     def pickle(self):
-        self.dct_stored = {'config':self.config, 'results':self.summary_results}
+        self.dct_stored = {'config':self.config, 'results':self.summary_results, 'counts':{'time':self.counts_time, 'energy':self.counts_energy}}
         #path_pickle = '{base}/{target}/{energy}/{roi}/{phase}/LightCurve_{target}_{spectype}_{index}{suffix}.pickle'.format(base=self.analysis_whole.dir_base, target=self.analysis_whole.target.name, energy=self.analysis_whole.str_energy, roi=self.analysis_whole.str_roi, phase='lightcurve', spectype=self.analysis_whole.target.spectraltype, index=self.analysis_whole.str_index, suffix=self.analysis_whole.suffix)
         path_pickle = '{0}/{1}.pickle'.format(self.outdir, self.outbasename)
         logger.info("""Object contents: 
@@ -137,6 +160,7 @@ class LightCurveGRB(LightCurve):
 def make_lightcurves(name, emin, emax, roi, ngoodstat, suffix, grbcatalogue, refit, force, outdir, index):
     lc = LightCurveGRB(name=name, emin=emin, emax=emax, deg_roi=roi, ngoodstat=ngoodstat, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=None)
     lc.setup()
+    lc.count_energy()
     lc.run_analysis()
     lc.pickle()
     plot_lightcurves(lc.dct_stored, index=index)
@@ -188,7 +212,7 @@ def dataframe(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
     df.to_csv('{dire}/{name}.csv'.format(dire=outdir, name=outbasename))
 
 
-def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
+def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LTF, addphoton=None):
     if isinstance(dct_summary, basestring) and dct_summary[-7:]=='.pickle':
         dct_summary = pickle_utilities.load(dct_summary)
     elif not isinstance(dct_summary, dict):
@@ -197,6 +221,11 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
 
     # Config
     str_energies = '{emin:3.3f} - {emax:3.0f}'.format(emin=dct_summary['config']['energy']['min'], emax=dct_summary['config']['energy']['max'])
+
+    # Starting point of fitting
+    tb_ltf = ReadLTFCatalogueInfo.open_table(1, grbcatalogue)
+    tb_one = ReadLTFCatalogueInfo.select_one_by_name(tb_ltf, dct_summary['config']['name'])
+    t95 = tb_one['GBMT95']
 
     # Characteristices
     dct_curves = {}
@@ -213,7 +242,9 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
 
     dct_curves['Index'] = pMatplot.Curve('Index', xlabel='Time - T0 [s]', ylabel='Spectral index', xerr_asym=True, yerr_asym=False)
 
-    fig, ax = plt.subplots(sum([int(v.ul==False) for v in dct_curves.values()]), 1, figsize=(10, 16), sharex=True)
+#    dct_curves['Energy'] = pMatplot.Curve('Energy', xlabel='Time - T0 [s]', ylabel=r'$\log Energy \, \rm{{[GeV]}}$')
+
+    fig, ax = plt.subplots(1+sum([int(v.ul==False) for v in dct_curves.values()]), 1, figsize=(10, 16), sharex=True)
     
     for ic, curve in enumerate(dct_curves.values()):
         logger.info('===== {0} ====='.format(curve.quantity))
@@ -272,7 +303,17 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
     ax[1].grid(ls='-', lw=0.5, alpha=0.5)
     logger.debug('Axis label:')
     logger.debug(ax[1].get_yticks())
-    ax[1].set_yticks([y for y in ax[1].get_yticks() if y<ax[1].get_ylim()[1]])
+    ax[1].set_yticks([y for y in ax[1].get_yticks() if y<0.5*ax[1].get_ylim()[1]])
+    # Fit
+    params, butterfly = dct_curves['flux'].fit(t95, t95)
+    for iparam, param, in enumerate(params[0]):
+        logger.info("""Parameter {0}: {1} +/- {2}""".format(iparam, params[0][iparam], params[1][iparam]))
+    str_powerlaw_fitted = r"""$ \displaystyle F(t) = \rm{{ F_{{0}} }} \left( \frac{{ \it{{ t }} }}{{ \rm{{ T_{{ 95}} }} }} \right)^{{- \rm{{ \alpha }} }}$
+$\rm{{ F_{{0}} = {f0:.2E} \pm {f0err:.1E} }}$
+$\rm{{ \alpha = {alpha:.2E} \pm {alphaerr:.2E} }}$""".format(f0=params[0][0], f0err=params[1][0], alpha=params[0][1], alphaerr=params[1][1])
+    ax[1].plot(butterfly[0], butterfly[1], c='g')
+    ax[1].fill_between(butterfly[0],butterfly[1]+butterfly[2],butterfly[1]-butterfly[2] ,alpha=0.2, facecolor='g')
+    ax[1].text(butterfly[0][0]*4, butterfly[1][0], str_powerlaw_fitted)
 
     ax[2].errorbar(dct_curves['eflux'].get_xdata(), dct_curves['eflux'].get_ydata(), xerr=dct_curves['eflux'].get_xerr(), yerr=dct_curves['eflux'].get_yerr(), fmt=dct_curves['eflux'].fmt)
     ax[2].errorbar(dct_curves['eflux_ul'].get_xdata(), dct_curves['eflux_ul'].get_ydata(), xerr=dct_curves['eflux_ul'].get_xerr(), fmt=dct_curves['eflux_ul'].fmt)
@@ -282,7 +323,7 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
     ax[2].grid(ls='-', lw=0.5, alpha=0.5)
     logger.debug('Axis label:')
     logger.debug(ax[2].get_yticks())
-    ax[2].set_yticks([y for y in ax[2].get_yticks() if y<ax[2].get_ylim()[1]])
+    ax[2].set_yticks([y for y in ax[2].get_yticks() if y<0.5*ax[2].get_ylim()[1]])
 
     ax[3].errorbar(dct_curves['e2dnde'].get_xdata(), dct_curves['e2dnde'].get_ydata(), xerr=dct_curves['e2dnde'].get_xerr(), yerr=dct_curves['e2dnde'].get_yerr(), fmt=dct_curves['e2dnde'].fmt)
     ax[3].errorbar(dct_curves['e2dnde_ul'].get_xdata(), dct_curves['e2dnde_ul'].get_ydata(), xerr=dct_curves['e2dnde_ul'].get_xerr(), fmt=dct_curves['e2dnde_ul'].fmt)
@@ -292,7 +333,7 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
     ax[3].grid(ls='-', lw=0.5, alpha=0.5)
     logger.debug('Axis label:')
     logger.debug(ax[3].get_yticks())
-    ax[3].set_yticks([y for y in ax[3].get_yticks() if y<ax[3].get_ylim()[1]])
+    ax[3].set_yticks([y for y in ax[3].get_yticks() if y<0.5*ax[3].get_ylim()[1]])
 
     ax[4].errorbar(dct_curves['Index'].get_xdata(), dct_curves['Index'].get_ydata(), xerr=dct_curves['Index'].get_xerr(), yerr=dct_curves['Index'].get_yerr(), fmt=dct_curves['Index'].fmt)
     ax[4].set_ylabel(dct_curves['Index'].ylabel)
@@ -301,7 +342,23 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
     ax[4].grid(ls='-', lw=0.5, alpha=0.5)
     logger.debug('Axis label:')
     logger.debug(ax[4].get_yticks())
-    ax[4].set_yticks([y for y in ax[4].get_yticks() if y<ax[4].get_ylim()[1]])
+    ax[4].set_yticks([y for y in ax[4].get_yticks() if y<ax[4].get_ylim()[1]-0.1])
+
+    ax[5].scatter(dct_summary['counts']['time'], dct_summary['counts']['energy'], alpha=0.5) #, s=5*np.log10(dct_summary['counts']['energy']))
+    if addphoton is not None:
+        logger.info('Additional photons:')
+        t_added = np.array(addphoton['time'])
+        e_added = np.array(addphoton['energy'])
+        for t,e in zip(t_added, e_added):
+            logger.info('{e:.1f} MeV at {t:.1f}'.format(t=t, e=e))
+        ax[5].scatter(t_added, e_added, marker='D', c='r', edgecolors='face')#, s=np.log10(e_added))
+    ax[5].set_xlabel('Time - T0 [s]')
+    ax[5].set_ylabel('Energy [MeV]')
+    ax[5].set_xscale("log", nonposx='clip')
+    ax[5].set_yscale("log", nonposx='clip')
+    ax[5].grid(ls='-', lw=0.5, alpha=0.5)
+    ax[5].set_yticks([y for y in ax[5].get_yticks() if y<0.5*ax[5].get_ylim()[1]])
+    ax[5].set_ylim(bottom=300.0)
 
     fig.tight_layout() #subplots_adjust(hspace=0)
     fig.subplots_adjust(hspace=0)
@@ -328,7 +385,7 @@ def main(name, emin, emax, roi, ngoodstat, refit, force, suffix, grbcatalogue, o
     if plotonly==None:
         make_lightcurves(name, emin, emax, roi, ngoodstat, suffix, grbcatalogue, refit, force, outdir, index)
     else:
-        plot_lightcurves(plotonly, index=index)
+        plot_lightcurves(plotonly, index=index, addphoton={'time': (422.7,), 'energy':(50.49609375*1000.,)})
         dataframe(plotonly, index=index)
 
 
