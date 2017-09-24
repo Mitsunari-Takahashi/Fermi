@@ -3,6 +3,11 @@
 """Module for extrapolation analysis of a LAT spectrum.
 The main class ExtrapolateGRBSpectrum is a chain of another module pLATLikelihoodConfig.py.
 The authour: Mitsunari Takahashi
+ - Version: 3.1 (2017.09.22)
+   Calculation of nobs_sigma is back.
+ - Version: 3.0 (2017.09.21)
+   Introduced scan over Index. 
+   Corrected nobs_sigma.
  - Version: 2.2 (2017.09.20)
    Introduced rough check of event number after filter and GTI.
  - Version: 2.1 (2017.09.18)
@@ -29,7 +34,7 @@ from STLikelihoodAnalysis import get_module_logger
 
 
 ##### VERSION OF THIS MACRO #####
-VERSION = 2.2 # 2017.09.20
+VERSION = 3.1 # 2017.09.22
 
 
 ##### Logger #####
@@ -81,7 +86,8 @@ class ExtrapolateGRBSpectrum():
 
 
     def setup_fit(self):
-        nevt_rough = self.analysis_fit.setup(force={'download':False, 'filter':self.force, 'maketime':self.force, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':True, 'diffuse_responses':self.force}, skip_zero_data=True)
+        nevt_rough = self.analysis_fit.setup(force={'download':False, 'filter':self.force, 'maketime':True, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':True, 'diffuse_responses':self.force}, skip_zero_data=True)
+#        nevt_rough = self.analysis_fit.setup(force={'download':False, 'filter':self.force, 'maketime':self.force, 'livetime':self.force, 'exposure':self.force, 'model_3FGL_sources':True, 'diffuse_responses':self.force}, skip_zero_data=True)
         return nevt_rough
 
 
@@ -132,7 +138,7 @@ class ExtrapolateGRBSpectrum():
         fig.savefig("{0}/Extrapolated_count_spectrum_{1}{2}.png".format(self.analysis_extrapolated.dir_work, self.analysis_extrapolated.target.name, self.analysis_extrapolated.suffix))
 
 
-    def eval_deviation(self):
+    def eval_deviation(self, bool_index_fixed=False):
         """Eval deviation in a certain energy range from
 """
         #x_cspec_fit = (self.analysis_extrapolated.like.energies[:-1] + self.analysis_extrapolated.like.energies[1:])/2.
@@ -189,14 +195,20 @@ class ExtrapolateGRBSpectrum():
         for sourcename in self.analysis_fit.like.sourceNames():
             for element in self.analysis_fit.like.freePars(sourcename):
                 freeParValues.append(element.getValue())
-        g_index = freeParValues.index(self.analysis_fit.like.freePars(self.analysis_fit.target.name)[1].getValue())
-        # Covariance for index and itself
-        cov_gg = self.analysis_fit.like.covariance[g_index][g_index]
-
-        nobs_sigma = frac_count_per_flux_target * flux_err
-        logger.info('Tentative uncertainty of observed count ({0}): {1}'.format(nobs, nobs_sigma))
-        npred_sigma_factor = sqrt(pow(flux_frac_err,2) + pow((log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
+        flux_observed_highest, flux_observed_err_highest = self.analysis_highest.eval_flux_and_error()
+        #nobs_sigma = frac_count_per_flux_target * flux_observed_err_highest
+        if bool_index_fixed==False:
+            g_index = freeParValues.index(self.analysis_fit.like.freePars(self.analysis_fit.target.name)[1].getValue())
+           # Covariance for index and itself
+            cov_gg = self.analysis_fit.like.covariance[g_index][g_index]
+            nobs_sigma_factor = sqrt(pow(nobs/npred_target*flux_frac_err,2) + pow((log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
+            npred_sigma_factor = sqrt(pow(flux_frac_err,2) + pow((log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
+        else:
+            nobs_sigma_factor = nobs/npred_target*flux_frac_err
+            npred_sigma_factor = flux_frac_err
+        nobs_sigma = npred_target * nobs_sigma_factor
         npred_sigma = npred_target * npred_sigma_factor
+        logger.info('Tentative uncertainty of observed count ({0}): {1}'.format(nobs, nobs_sigma))
         logger.info('Check of uncertainty of predicted count ({0}): {1}'.format(npred_all, npred_sigma))
 
         # Use simpy
@@ -223,7 +235,150 @@ class ExtrapolateGRBSpectrum():
         deviation = 2. * ( log(integral_PGauss_n / integral_PGauss_mu) )
         sign_deviation = int(nobs>=npred_all)*2-1
         logger.info('{sign} deviation: TS={ts}'.format(sign='Positive' if sign_deviation>=0 else 'Negative', ts=deviation))
-        return sign_deviation*deviation
+        return sign_deviation*max(1e-4, deviation)
+
+
+    def tune_energies_eval(self):
+        nemin_eval = -1
+        nemax_eval = -1
+        logger.debug('Energy bins: {0}'.format(self.ebins))
+        diff_energy_edge_lo = sys.maxsize
+        diff_energy_edge_hi = sys.maxsize
+        for ie in range(self.nebins):
+            if abs(self.ebins[ie]-self.emin_extrapolated) < diff_energy_edge_lo:
+                diff_energy_edge_lo = abs(self.ebins[ie]-self.emin_extrapolated)
+                nemin_eval = ie
+            if abs(self.ebins[ie+1]-self.emax_extrapolated) < diff_energy_edge_hi:
+                diff_energy_edge_hi = abs(self.ebins[ie+1]-self.emax_extrapolated)
+                nemax_eval = ie
+
+        self.emin_eval = self.ebins[nemin_eval]
+        self.emax_eval = self.ebins[nemax_eval+1]
+        if self.emin_eval!=self.emin_extrapolated:
+            self.emin_extrapolated = self.emin_eval
+            logger.warning('Minimum evaluation energy has changed to {0} MeV!'.format(self.emin_eval))
+        if self.emax_eval!=self.emax_extrapolated:
+            self.emax_extrapolated = self.emax_eval
+            logger.warning('Maxmum evaluation energy has changed to {0} MeV!'.format(self.emax_eval))
+        self.nemin_eval = nemin_eval
+        self.nemax_eval = nemax_eval
+
+
+    def eval_likelihood(self, bool_index_fixed=False):
+        """Eval deviation in a certain energy range from
+"""
+        self.tune_energies_eval()
+
+        # Observed count
+        nobs = sum(self.analysis_extrapolated.like._Nobs()[self.nemin_eval:self.nemax_eval+1])
+
+        # Predicted count
+        y_model_all, y_model_target, y_model_others = self.analysis_extrapolated.count_axes()
+        npred_all = sum(y_model_all[self.nemin_eval:self.nemax_eval+1])
+        npred_target = sum(y_model_target[self.nemin_eval:self.nemax_eval+1])
+        npred_others = sum(y_model_others[self.nemin_eval:self.nemax_eval+1])
+        # Predicted error
+        flux, flux_err = self.analysis_fit.eval_flux_and_error(emin=self.ebins[self.nemin_eval], emax=self.ebins[self.nemax_eval+1])
+        flux_frac_err = flux_err / flux
+        npred_target_err = npred_target*flux_frac_err
+        logger.info('Predicted count in {emin} - {emax}: {npred} +/- {npred_err}'.format(emin=self.emin_eval, emax=self.emax_eval, npred=npred_all, npred_err=npred_target_err))
+        frac_count_per_flux_target = npred_target/flux
+
+        eref_hiend = sqrt(self.emin_eval*self.emax_eval)
+        # Calc tentative uncertainty of observed count for TS evaluation
+        # Find Index parameter
+        freeParValues = []
+        for sourcename in self.analysis_fit.like.sourceNames():
+            for element in self.analysis_fit.like.freePars(sourcename):
+                freeParValues.append(element.getValue())
+
+        if bool_index_fixed==False:
+            g_index = freeParValues.index(self.analysis_fit.like.freePars(self.analysis_fit.target.name)[1].getValue())
+           # Covariance for index and itself
+            cov_gg = self.analysis_fit.like.covariance[g_index][g_index]
+            npred_sigma_factor = sqrt(pow(flux_frac_err,2) + pow((log10(eref_hiend)-log10(self.analysis_fit.like.model[self.analysis_fit.target.name].funcs['Spectrum'].getParam('Scale').value())) ,2) * cov_gg)
+        else:
+            npred_sigma_factor = flux_frac_err
+        npred_sigma = npred_target * npred_sigma_factor
+        logger.info('Check of uncertainty of predicted count ({0}): {1}'.format(npred_all, npred_sigma))
+
+        # Use simpy
+        # Predicted
+        (integral_PGauss_mu, integral_PGauss_mu_err)  = integrate.quad(compute_GPoisson, 0, npred_all+5.*npred_target_err, args=(npred_all, npred_target_err, nobs))
+        logger.info('Integral of modified Gaussian : {0} +/- {1}:'.format(integral_PGauss_mu, integral_PGauss_mu_err))
+        if integral_PGauss_mu<=0:
+            logger.warning("""Integral for model is NOT positive!!!
+{0}""".format(integral_PGauss_mu))
+            integral_PGauss_mu = 0.001
+        if integral_PGauss_mu_err>integral_PGauss_mu/100.:
+            logger.warning("""Uncertainty of integration for model is very large!!!
+{0} +/- {1}""".format(integral_PGauss_mu, integral_PGauss_mu_err))
+            integral_PGauss_mu = 0.001
+        return npred_all, npred_target_err, integral_PGauss_mu
+
+
+    def eval_deviation_scan_index(self, indices=np.linspace(-3.5, -1.0, 51)):
+        path_xml_temp = self.analysis_fit.path_model_xml_new.replace('.xml', '_temp.xml')
+        self.analysis_fit.set_likelihood_external_model(self.analysis_fit.path_model_xml_new)
+        loglike0 = -self.analysis_fit.loglike_inversed
+        #self.analysis_fit.likeobj = pyLike.NewMinuit(self.analysis_fit.like.logLike)
+        logger.info("""Likelihood fitting is starting...""")
+        o = {'indices':indices, 
+             'dloglike_fit': np.zeros(len(indices)), 
+             'npred_all': np.zeros(len(indices)), 
+             'npred_err': np.zeros(len(indices)), 
+             'likeliood_model': np.zeros(len(indices)),
+             'sign_deviation': np.zeros(len(indices)),
+             'deviation_ts': np.zeros(len(indices))}
+             #'npred_extrapolated': np.zeros(len(indices)),
+             #'flux_extrapolated': np.zeros(len(indices)), 
+             #'flux_err_extrapolated': np.zeros(len(indices))}
+
+        i_maxlike = 0
+        maxlike = 0
+        for i, x in enumerate(indices):
+            index_idx = self.analysis_fit.like.par_index(self.analysis_fit.target.name, 'Index')
+            self.analysis_fit.like[index_idx] = x
+            self.analysis_fit.like.freeze(index_idx)
+            retcode, loglike_inversed = self.analysis_fit.fit_fixed_index(x, path_xml_temp)
+            o['dloglike_fit'][i] = -loglike_inversed - loglike0
+            self.analysis_extrapolated.set_likelihood_external_model(path_xml_temp)
+            o['npred_all'][i], o['npred_err'][i], o['likeliood_model'][i] = self.eval_likelihood(True)
+            if o['likeliood_model'][i]>maxlike:
+                maxlike = o['likeliood_model'][i]
+                i_maxlike = i
+        logger.info("""Best reproduction of highest energy events:
+{0} +/- {1}
+""".format(o['npred_all'][i_maxlike], o['npred_err'][i_maxlike]))
+
+        # Observed
+        nobs = sum(self.analysis_extrapolated.like._Nobs()[self.nemin_eval:self.nemax_eval+1])
+        nobs_sigma = nobs*o['npred_err'][i_maxlike]/o['npred_all'][i_maxlike]
+        logger.info('Observed count: {0} +/- {1}'.format(nobs, nobs_sigma))
+        if nobs>0:
+            (integral_PGauss_n, integral_PGauss_n_err)  = integrate.quad(compute_GPoisson, 0, nobs+5.*nobs_sigma, args=(nobs, nobs_sigma, nobs))
+        else:
+            (integral_PGauss_n, integral_PGauss_n_err)  = (1, 0)
+        logger.info('Integral of modified Gaussian for mu=n : {0} +/- {1}'.format(integral_PGauss_n, integral_PGauss_n_err))
+        if integral_PGauss_n_err>integral_PGauss_n/100.:
+            logger.warning("""Uncertainty of integration for observation is very large!!!
+{0} +/- {1}""".format(integral_PGauss_n, integral_PGauss_n_err))
+
+        for i, x in enumerate(indices):
+            o['deviation_ts'][i] = 2. * ( log(integral_PGauss_n / o['likeliood_model'][i]) )
+            o['sign_deviation'][i] = int(nobs>=o['npred_all'][i])*2-1
+        logger.info("""Indices:
+{0}
+Npred:
+{1}
+dLoglike:
+{2}
+TS of deviation:
+{3}
+Sign:
+{4}""".format(o['indices'], o['npred_all'], o['dloglike_fit'], o['deviation_ts'], o['sign_deviation']))
+        return o
+
 
     def summarize_powerlaw_fit_results(self, analysis, key_edomain):
         logger.debug(self.dct_summary)
@@ -311,12 +466,16 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
     chain.analysis_extrapolated.fit(bredo=brefit)
     chain.summarize_powerlaw_fit_results(chain.analysis_extrapolated, 'whole_energies')
 
-    # Detailed limits of flux, eflux, dnde, e2dnde
+    #Detailed limits of flux, eflux, dnde, e2dnde
     chain.dct_summary['whole_energies']['limits'] = chain.analysis_extrapolated.eval_limits_powerlaw(str_index_fixed=['best'])
     chain.summarize_powerlaw_fit_results(chain.analysis_highest, 'highest_energies')
     chain.dct_summary['lower_energies']['limits'] = chain.analysis_fit.eval_limits_powerlaw(str_index_fixed=['best'])
 
     chain.dct_summary['highest_energies']['limits'] = chain.analysis_highest.eval_limits_powerlaw(str_index_fixed=['best'])
+
+    # Scan index
+    chain.dct_summary['deviation_ts_index_scanned'] = chain.eval_deviation_scan_index()
+
     # Pickle
     chain.pickle(chain.dct_summary)
 
