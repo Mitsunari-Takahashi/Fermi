@@ -9,9 +9,6 @@ import os.path
 import shutil
 import logging
 import numpy as np
-#import pickle
-#import datetime
-#from array import array
 import math
 from math import log10, log, sqrt, ceil, isnan, pi, factorial
 import gt_apps as my_apps
@@ -97,6 +94,9 @@ class GRBTarget(PointTarget):
             elif spectraltype=='ExpCutoff':
                 spectralpars_scale = {'Prefactor':1, 'Index':1, 'Ebreak':1, 'P1':1, 'P2':1, 'P3':1}
                 spectralpars_fixed = ['Scale', 'P2', 'P3']
+            elif spectraltype=='BrokenPowerLaw':
+                spectralpars_scale = {'Prefactor':1, 'Index1':1, 'Index2':1, 'BreakValue':1}
+                spectralpars_fixed = ['BreakValue']
             PointTarget.__init__(self, name, float(tb_one['RA']), float(tb_one['DEC']), spectraltype=spectraltype, spectralpars=spectralpars, spectralpars_scale=spectralpars_scale, spectralpars_fixed=spectralpars_fixed, met0=pMETandMJD.ConvertMjdToMet(float(tb_one['TRIGGER_TIME'])), redshift=(float(tb_one['REDSHIFT']) if float(tb_one['REDSHIFT'])>0 else np.nan))
             self.t05 = tb_one['T90_START']
             self.met05 = self.met0 + self.t05
@@ -434,10 +434,26 @@ class AnalysisConfig:
                 ebreak = pl.getParam("Ebreak")
                 ebreak.setBounds(-1000., 1000.)
                 pl.setParam(ebreak)
-                target_src.setSpectrum(pl)
+                #target_src.setSpectrum(pl)
                 ecutoff = pl.getParam("P1")
                 ecutoff.setBounds(100., 1000000.)
                 pl.setParam(ecutoff)
+                target_src.setSpectrum(pl)
+            elif self.target.spectraltype=='BrokenPowerLaw':
+                pl.setParamValues((self.target.spectralpars['Prefactor'], self.target.spectralpars['Index1'], self.target.spectralpars['Index2'], self.target.spectralpars['BreakValue'])) # Prefactor, Index1, Index2, BreakValue
+                indexPar1 = pl.getParam("Index1")
+                indexPar1.setBounds(-9.0, 3.0)
+                pl.setParam(indexPar1)
+                indexPar2 = pl.getParam("Index2")
+                indexPar2.setBounds(-9.0, 3.0)
+                pl.setParam(indexPar2)
+                prefactor = pl.getParam("Prefactor")
+                prefactor.setBounds(0.0, 1e-4)
+                prefactor.setScale(1)
+                pl.setParam(prefactor)
+                ebreak = pl.getParam("BreakValue")
+                ebreak.setBounds(100., 100000.)
+                pl.setParam(ebreak)
                 target_src.setSpectrum(pl)
 
             target_src.setName('{0}'.format(self.target.name))
@@ -458,6 +474,22 @@ class AnalysisConfig:
 
             self.like.writeXml()
             return self.like
+
+
+    def set_likelihood_external_model(self, path_model):
+        logger.info("""Setting up likelihood by {0} ...""".format(path_model))
+        check_required_files({'FT2':self.path_ft2, 'Filtered GTI event':self.path_filtered_gti, 'Livetime':self.path_livetime, 'Exposure':self.path_exposure, 'Source model':path_model})
+
+        self.obs = UnbinnedObs(self.path_filtered_gti, self.path_ft2, expMap=self.path_exposure, expCube=self.path_livetime, irfs=self.irfs)
+        self.like = UnbinnedAnalysis(self.obs, path_model, optimizer='NewMinuit')
+        self.path_model_xml = path_model
+        self.path_model_xml_new = None
+        self.likeobj = pyLike.NewMinuit(self.like.logLike)
+        self.loglike_inversed = self.like()
+        self.retcode = None
+
+        self.like.reset_ebounds(self.energies)
+        logger.info('Energy bound has changed to {0}'.format(self.like.energies))
 
 
     def fit(self, bredo=True):
@@ -518,6 +550,22 @@ class AnalysisConfig:
         # Save new XML model file
         self.path_model_xml_new = self.path_model_xml.replace('.xml', '_new.xml')
         self.like.writeXml(self.path_model_xml_new)
+        return (self.retcode, self.loglike_inversed)
+
+
+    def fit_fixed_index(self, index, path_xml_temp):
+        index_idx = self.like.par_index(self.target.name, 'Index')
+        self.like[index_idx] = index
+        self.like.freeze(index_idx)
+        try:
+            self.dofit()
+        except RuntimeError:
+            logger.error('RuntimeError!!')
+            logger.warning('Tolerance is relaxed from {tol0} to {tol1}'.format(tol0=self.like.tol, tol1=self.like.tol*10.))
+            self.dofit(tol=self.like.tol*10.)
+
+        # Save new XML model file
+        self.like.writeXml(path_xml_temp)
         return (self.retcode, self.loglike_inversed)
 
             
@@ -597,9 +645,9 @@ class AnalysisConfig:
         norm_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(norm_name).error()
         norm_idx = self.like.par_index(self.target.name, norm_name)
         logx_lowest = -4.0
-        logx_highest = 4.0 #max(2.0, 2*norm_error/norm_value)
-        nx = 10 * (logx_highest-logx_lowest)
-        xvals = norm_value * 10 ** np.linspace(logx_lowest, logx_highest, nx)
+        logx_highest = 2.0 #max(2.0, 2*norm_error/norm_value)
+        nx = min(100, 10 * (logx_highest-logx_lowest))
+        xvals = max(norm_value, norm_error) * 10 ** np.linspace(logx_lowest, logx_highest, nx)
         logger.info('Normarization = {0} +/- {1}'.format(norm_value, norm_error))
         if np.inf in xvals:
             logger.warning('Infinite profile normalization value exists!!')
