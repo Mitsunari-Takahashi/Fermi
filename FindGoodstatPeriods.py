@@ -8,16 +8,20 @@ from astropy.coordinates import SkyCoord  # High-level coordinates
 from astropy.coordinates import ICRS, Galactic, FK4, FK5  # Low-level frames
 from astropy.coordinates import Angle, Latitude, Longitude  # Angles
 import astropy.units as u
-from math import sqrt
+from math import sqrt, floor
 import commands
 
 
-def get_entries(pathFileEvt, metStart, metStop):
+def get_entries(pathFileEvt, tStart=None, tStop=None, torigin=0.0):
     """Return entry number between metStart and metStop.
 """
     hdulistEVT = fits.open(pathFileEvt)
     tbdataEVT = hdulistEVT[1].data
     aTIME = tbdataEVT.field('TIME')
+    if tStart==None and tStop==None:
+        return len(aTIME)
+    metStart = tStart + torigin
+    metStop = tStop + torigin
     n = 0
     for t in range(len(aTIME)):
         if t>=metStart and t<metStop:
@@ -70,6 +74,17 @@ def find_goodstat_periods(pathFileEvt, tStart, tStop, nthreshold, rlim=0.0, ra=0
     time_prev = 0
     coords_target = SkyCoord(ra, dec, unit="deg")
     print "  ", pathFileEvt, "(", nEVT, "events )"
+
+    nEVT_ROI = get_entries_roi(pathFileEvt, tStart, tStop, rlim, ra, dec, torigin)
+    if nEVT_ROI>=nthreshold:
+        mthreshold = floor(nEVT_ROI/floor(nEVT_ROI/nthreshold))
+        print 'Threshold count: {0} events within {1} deg'.format(mthreshold, rlim)
+    else:# nEVT_period>0:
+        print 'Single period.'
+        return [[tStart, tStop]]
+    #else: 
+    #    print 'No valid events.'
+    #    return []
     for iEVT in range(1, nEVT):
         if aTIME[iEVT]<time_prev:
             print 'Odd order!!!'
@@ -86,7 +101,7 @@ def find_goodstat_periods(pathFileEvt, tStart, tStop, nthreshold, rlim=0.0, ra=0
                     nstat+=1
                 else:
                     continue
-            if (nstat-noffset) >= nthreshold and int(time_fill)>=int(periods_goodstat[-1][0]): #and time_fill-periods_goodstat[-1][0]>=1:
+            if (nstat-noffset) >= mthreshold and int(time_fill)>=int(periods_goodstat[-1][0]): #and time_fill-periods_goodstat[-1][0]>=1:
                 periods_goodstat[-1].append(time_fill)
                 periods_goodstat.append([time_fill])
                 nstat = 0
