@@ -34,10 +34,13 @@ def show(path_file, keys):
     else:
         parent = data
         for i in range(nkey):
-            child = parent[keys[i]]
+            key = keys[i]
+            if key in [str(m) for m in range(-len(parent), len(parent))]:
+                key = int(key)
+            child = parent[key]
             parent = child
             #if i<nkey:
-            print ' '*i, keys[i]
+            print ' '*i, key
             #else:
         print ' '*(i+1), child
 
