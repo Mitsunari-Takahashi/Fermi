@@ -3,6 +3,8 @@
 """Module for extrapolation analysis of a LAT spectrum.
 The main class ExtrapolateGRBSpectrum is a chain of another module pLATLikelihoodConfig.py.
 The authour: Mitsunari Takahashi
+ - Version: 4.0 (2017.09.25)
+   Scan over normalization and index
  - Version: 3.1 (2017.09.22)
    Calculation of nobs_sigma is back.
  - Version: 3.0 (2017.09.21)
@@ -34,7 +36,7 @@ from STLikelihoodAnalysis import get_module_logger
 
 
 ##### VERSION OF THIS MACRO #####
-VERSION = 3.1 # 2017.09.22
+VERSION = 4.0 # 2017.09.25
 
 
 ##### Logger #####
@@ -52,7 +54,7 @@ class ExtrapolateGRBSpectrum():
 
         # Target GRB
         grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue)
-        grb_highest = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectralpars={'Prefactor':1e-10, 'Index':-2.0, 'Scale':10000.})
+        grb_highest = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue) #, spectralpars={'Prefactor':1e-10, 'Index':-2.0, 'Scale':10000.})
 
         # Energy setups
         self.emin_fitted = emin_fitted
@@ -380,6 +382,127 @@ Sign:
         return o
 
 
+    def scan_norm_index(self, ologlike_inv_lower=0, ologlike_inv_highest=0):
+        self.tune_energies_eval()
+
+        # Normalization parameters after fitting
+        norm_fit = self.dct_summary['lower_energies']['Prefactor']['value'] #self.analysis_fit.like.normPar(self.analysis_fit.target.name).getValue()
+        norm_highest = max(self.dct_summary['highest_energies']['Prefactor']['value'], 1e-24)
+
+        # Parameter index in likelihood instance
+        norm_idx_fit = self.analysis_fit.like.par_index(self.analysis_fit.target.name, 'Prefactor')
+        index_idx_fit = self.analysis_fit.like.par_index(self.analysis_fit.target.name, 'Index')
+        #norm_idx_extraplated = self.analysis_extrapolated.like.par_index(self.analysis_extrapolated.target.name, 'Prefactor')
+        #index_idx_extraplated = self.analysis_extrapolated.like.par_index(self.analysis_extrapolated.target.name, 'Index')
+        norm_idx_highest = self.analysis_highest.like.par_index(self.analysis_highest.target.name, 'Prefactor')
+        index_idx_highest = self.analysis_highest.like.par_index(self.analysis_highest.target.name, 'Index')
+
+        # Scanned mesh
+        norms = 10 ** np.linspace(np.log10(min(norm_fit, norm_highest))-2, np.log10(max(norm_fit, norm_highest))+2, 121)
+        #norms = 10 ** np.linspace(-12, -8, 161)
+        #norms = np.insert(norms, 0, 0.0)
+        indices = np.linspace(-4.0, 0.0, 161)
+        xindex, ynorm = np.meshgrid(indices, norms)
+        zloglike_inv = np.zeros_like(xindex)
+        yts_dev = np.zeros_like(xindex)
+        ysign_dev = np.zeros_like(xindex)
+        npred = np.zeros_like(xindex)
+        self.analysis_fit.like[norm_idx_fit] = norm_fit
+        try:
+            self.analysis_fit.like.normPar(self.analysis_fit.target.name).setBounds(0, norms[-1])
+        except RuntimeError:
+            logger.critical('RuntimeError!!!')
+            logger.critical('Normalization of the fitting anlaysis: {0}!!!'.format(self.analysis_fit.like.normPar(self.analysis_fit.target.name).getValue()))
+            logger.critical('{0} - {1}'.format(norms[0], norms[-1]))
+        #self.analysis_extrapolated.like.normPar(self.analysis_extrapolated.target.name).setBounds(norms[0], norms[-1])
+        self.analysis_highest.like[norm_idx_highest] = norm_highest
+        try:
+            self.analysis_highest.like.normPar(self.analysis_highest.target.name).setBounds(0, norms[-1])
+        except RuntimeError:
+            logger.critical('RuntimeError!!!')
+            logger.critical('Normalization of the highest energy analysis: {0}!!!'.format(self.analysis_highest.like.normPar(self.analysis_highest.target.name).getValue()))
+            logger.critical('{0} - {1}'.format(norms[0], norms[-1]))
+        norms_shown = []
+        indices_shown = []
+        dev_shown = []
+
+        # Observed
+        nobs = sum(self.analysis_highest.like._Nobs())
+        #nobs = sum(self.analysis_extrapolated.like._Nobs()[self.nemin_eval:self.nemax_eval+1])
+
+        # Loop
+        for inorm, norm in enumerate(norms):
+            self.analysis_fit.like[norm_idx_fit] = norm
+            self.analysis_highest.like[norm_idx_highest] = norm
+            for jindex, index in enumerate(indices):
+                self.analysis_fit.like[index_idx_fit] = index
+                zloglike_inv[inorm][jindex] = self.analysis_fit.like()
+                self.analysis_highest.like[index_idx_highest] = index
+                yts_dev[inorm][jindex] = 2.*(self.analysis_highest.like()-ologlike_inv_highest)
+
+                # Predicted count
+                y_model_all, y_model_target, y_model_others = self.analysis_highest.count_axes()
+                npred_all = sum(y_model_all)
+                npred_target = sum(y_model_target)
+                npred_others = sum(y_model_others)
+                # Deviation
+                #like_dev = exp(-npred_all) * pow(npred_all,nobs) * factorial(nobs)
+                #like_dev_ratio = like_dev / (exp(-nobs) * pow(nobs,nobs) * factorial(nobs))
+                #yts_dev[inorm][jindex] = -2* log(like_dev_ratio)
+                ysign_dev[inorm][jindex] = 1 if nobs>=npred_all else -1
+
+                if zloglike_inv[inorm][jindex]-ologlike_inv_lower<=25:
+                    norms_shown.append(norm)
+                    indices_shown.append(index)
+                    dev_shown.append(yts_dev[inorm][jindex] * ysign_dev[inorm][jindex])
+
+        self.dct_summary['scan'] = {'lower_energies':{}, 'highest_energies':{}}
+        self.dct_summary['scan']['lower_energies']['index'] = indices
+        self.dct_summary['scan']['lower_energies']['norm'] = norms
+        self.dct_summary['scan']['highest_energies']['nobs'] = nobs
+        self.dct_summary['scan']['highest_energies']['npred'] = npred
+        self.dct_summary['scan']['lower_energies']['dloglike_inv'] = zloglike_inv - ologlike_inv_lower
+        self.dct_summary['scan']['lower_energies']['TS'] = 2.0*self.dct_summary['scan']['lower_energies']['dloglike_inv']
+        logger.debug('TS of deviation')
+        logger.debug(yts_dev)
+        self.dct_summary['scan']['highest_energies']['TS'] = yts_dev
+        self.dct_summary['scan']['highest_energies']['sign'] = ysign_dev
+
+        ##logger.debug(xindex)
+        #logger.debug(yts_dev*self.dct_summary['scan']['highest_energies']['deviation_sign'])
+        fig, ax = plt.subplots(1, 2, figsize=(20, 10))
+        cont1 = ax[0].contour(xindex, ynorm, self.dct_summary['scan']['lower_energies']['TS'], levels=[2.30, 6.18, 11.83])
+        if len(indices_shown)>1:
+            ax[0].set_xlim(min(indices_shown), max(indices_shown))
+        if len(norms_shown)>1:
+            ax[0].set_ylim(min(norms_shown)/2.0, max(norms_shown)*2.0)
+        else:
+            ax[0].set_ylim(norms[1], norms[-1])
+        ax[0].set_yscale("log", nonposy='clip')
+        ax[0].grid(which='major', axis='both', color='black', linestyle='-', alpha=0.5)
+        ax[0].grid(which='minor', axis='y', color='black',linestyle='-', alpha=0.2)
+        cont1.clabel(fmt='%1.0f', fotnts_size=14)
+        ax[0].set_title(self.analysis_highest.target.name)
+        ax[0].set_xlabel('Spectral index')
+        ax[0].set_ylabel('Normalization factor')
+
+        cont2 = ax[1].contour(xindex, yts_dev*self.dct_summary['scan']['highest_energies']['sign'], self.dct_summary['scan']['lower_energies']['TS'], levels=[1, 4, 9])
+        if len(indices_shown)>1:
+            ax[1].set_xlim(min(indices_shown), max(indices_shown))
+        if len(norms_shown)>1:
+            ax[1].set_ylim(min(dev_shown), max(dev_shown))
+            ax[1].set_ylim(-25, 25)
+        ax[1].grid(which='major', axis='both', color='black', linestyle='-', alpha=0.5)
+        cont2.clabel(fmt=r'%1.0f', fontsize=14)
+        ax[1].set_title('TS of fitting')
+        ax[1].set_xlabel('Spectral index')
+        ax[1].set_ylabel(r'TS of deviation')
+        path_countour_plot = "{0}/Contours_scan_{1}{2}.png".format(self.analysis_highest.dir_work, self.analysis_highest.target.name, self.analysis_highest.suffix)
+        fig.savefig(path_countour_plot)
+        logger.info('{0} is savid.'.format(path_countour_plot))
+
+                
+
     def summarize_powerlaw_fit_results(self, analysis, key_edomain):
         logger.debug(self.dct_summary)
         if not key_edomain in self.dct_summary:
@@ -427,7 +550,8 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
         chain.pickle(chain.dct_summary)    # Pickle
         return 0
     # Fitting in the lower energies
-    chain.analysis_fit.fit(bredo=brefit)
+    retcode_fit, loglike_inv_fit = chain.analysis_fit.fit(bredo=brefit)
+    chain.dct_summary['lower_energies']['loglike'] = -loglike_inv_fit
     chain.summarize_powerlaw_fit_results(chain.analysis_fit, 'lower_energies')
     if not chain.dct_summary['lower_energies']['TS'] >= 25:
         chain.pickle(chain.dct_summary)    # Pickle
@@ -450,7 +574,7 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
     # Fitting in the highest energies
     logger.info('Fitting in highest energy range')
     chain.setup_highest()
-    chain.analysis_highest.fit(bredo=brefit)
+    retcode_highest, loglike_inv_highest = chain.analysis_highest.fit(bredo=brefit)
     logger.info('Scale of HE analysis: {0}'.format(chain.analysis_highest.like.model[chain.analysis_highest.target.name].funcs['Spectrum'].getParam('Scale')))
     flux_and_err_highest_energies = chain.analysis_highest.eval_flux_and_error(chain.analysis_highest.target.name)
     chain.dct_summary['highest_energies']['flux'] = {'value':flux_and_err_highest_energies[0], 'error':flux_and_err_highest_energies[1]}
@@ -474,7 +598,8 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
     chain.dct_summary['highest_energies']['limits'] = chain.analysis_highest.eval_limits_powerlaw(str_index_fixed=['best'])
 
     # Scan index
-    chain.dct_summary['deviation_ts_index_scanned'] = chain.eval_deviation_scan_index()
+    chain.scan_norm_index(loglike_inv_fit, loglike_inv_highest)
+    #chain.dct_summary['deviation_ts_index_scanned'] = chain.eval_deviation_scan_index()
 
     # Pickle
     chain.pickle(chain.dct_summary)
