@@ -500,12 +500,11 @@ class AnalysisConfig:
         logger.debug('Prefactor of {0}: {1}'.format(self.target.name, self.like.normPar(self.target.name).getValue()))
         if bredo==True:
             try:
-                logger.error('RuntimeError!!')
-                logger.warning('Tolerance is relaxed from {tol0} to {tol1}'.format(tol0=self.like.tol, tol1=self.like.tol*10.))
-                logger.info('Fitting again...')
-                self.dofit(tol=self.like.tol*10.)
+                self.dofit(tol=self.like.tol)
                 logger.debug('Prefactor of {0}: {1}'.format(self.target.name, self.like.normPar(self.target.name).getValue()))
             except RuntimeError:
+                logger.error('RuntimeError!!')
+                logger.warning('Tolerance is relaxed from {tol0} to {tol1}'.format(tol0=self.like.tol, tol1=self.like.tol*10.))
                 logger.info('Resetting likelihood.')
                 self.set_likelihood()
                 self.likeobj = pyLike.NewMinuit(self.like.logLike)
@@ -516,6 +515,7 @@ class AnalysisConfig:
                         self.like.normPar(source).setFree(False)
                 logger.debug('Prefactor of {0}: {1}'.format(self.target.name, self.like.normPar(self.target.name).getValue()))
                 logger.info('Fitting again...')
+                #self.like.normPar(self.target.name).setTrueValue(1E-12)
                 self.dofit(tol=self.like.tol*10.)
         else:
             self.dofit()
@@ -645,7 +645,7 @@ class AnalysisConfig:
         norm_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(norm_name).error()
         norm_idx = self.like.par_index(self.target.name, norm_name)
         logx_lowest = -4.0
-        logx_highest = 2.0 #max(2.0, 2*norm_error/norm_value)
+        logx_highest = 4.0 #max(2.0, 2*norm_error/norm_value)
         nx = min(100, 10 * (logx_highest-logx_lowest))
         xvals = max(norm_value, norm_error) * 10 ** np.linspace(logx_lowest, logx_highest, nx)
         logger.info('Normarization = {0} +/- {1}'.format(norm_value, norm_error))
