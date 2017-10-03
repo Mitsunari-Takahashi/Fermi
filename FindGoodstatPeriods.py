@@ -29,11 +29,11 @@ def get_entries(pathFileEvt, tStart=None, tStop=None, torigin=0.0):
     return n
 
 
-def get_entries_roi(pathFileEvt, tStart, tStop, rlim=0.0, ra=0, dec=0, torigin=0.0):
+def get_entries_roi(pathFileEvt, tStart=None, tStop=None, rlim=0.0, ra=0, dec=0, torigin=0.0):
     """Return entry number between tStart - tStop from torigin, and within rlim degrees from (ra, dec).
 """
-    metStart = tStart + torigin
-    metStop = tStop + torigin
+    metStart = tStart + torigin if tStop is not None else -sys.maxint
+    metStop = tStop + torigin if tStop is not None else sys.maxint
     hdulistEVT = fits.open(pathFileEvt)
     tbdataEVT = hdulistEVT[1].data
     aTIME = tbdataEVT.field('TIME')
