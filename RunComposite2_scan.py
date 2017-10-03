@@ -164,7 +164,7 @@ def run_composite2(lst_inputs, path_outdir, names_params_tied_universal=['Index'
         print '* Negative log-likelihood :'
         for (i,s) in enumerate(loglike_inversed_scanned):
             print '{0} ({1}) at {2} MeV'.format(s, s-loglike_inversed_min, xvals[i])
-        ecutoff_lim95[icat] = get_parameter_limits(xvals, -1*loglike_inversed_scanned)
+        ecutoff_lim95[icat] = get_parameter_limits(xvals, -1*loglike_inversed_scanned, cl_limit=0.99540, cl_err=0.9398)
     print '* 95% limit of cutoff energy:'
     print ecutoff_lim95
 
