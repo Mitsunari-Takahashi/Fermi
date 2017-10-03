@@ -21,6 +21,7 @@ import SummedLikelihood
 from fermipy.utils import get_parameter_limits
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+#from ROOT import TMath.Prob as Prob
 import copy
 sys.path.append('/nfs/farm/g/glast/u/mtakahas/python_packages')
 from make3FGLxml import *
@@ -694,6 +695,13 @@ class AnalysisConfig:
         failed_freeIndex = False
         for str_index_assumed in str_index_fixed:
             logger.info('Index = {idxa} ({st}) is assumed.'.format(idxa=index_values[str_index_assumed], st=str_index_assumed))
+
+            cl_1sigma = 1.
+            cl_2sigma = 4.
+            if str_index_assumed=='free':
+                cl_1sigma = 0.87063
+                cl_2sigma = 0.96821
+                
             v0['dnde'] = norm_value * (e2 / self.target.spectralpars['Scale']) ** index_values[str_index_assumed]
             v0['e2dnde'] = v0['dnde'] * e2 * e2
             if not index_values[str_index_assumed]==index_values[str_index_assumed]:
@@ -731,7 +739,7 @@ class AnalysisConfig:
             # limits
             if str_index_assumed=='free' and failed_freeIndex==True:
                 break
-            limits[str_index_assumed]['norm'] = get_parameter_limits(xval=xvals, loglike=o[str_index_assumed]['dloglike']) #, cl_limit=0.95)
+            limits[str_index_assumed]['norm'] = get_parameter_limits(xval=xvals, loglike=o[str_index_assumed]['dloglike'], cl_limit=cl_2sigma, cl_err=cl_1sigma)
             for item in ('flux', 'eflux', 'dnde', 'e2dnde'):
                 limits[str_index_assumed][item] = {}
                 limits[str_index_assumed][item]['x0'] = v0[item] * limits[str_index_assumed]['norm']['x0'] / norm_value
@@ -754,7 +762,7 @@ class GRBConfig(AnalysisConfig):
         if not ft2interval in ('1s', '30s'):
             if self.phase in ('prompt', 'lightcurve'):
                 ft2interval = '1s'
-            elif self.phase in ('afterglow', 'unified'):
+            elif self.phase in ('afterglow', 'unified', 'earlyAG', 'lateAG', 'farAG'):
                 ft2interval = '30s'
             elif self.phase in ('special', 'lightcurve'):
                 if tmin_special==None or tmax_special==None:
@@ -861,8 +869,8 @@ def define_timephase(target, phase, tstop=10000.):
     print 'Target T90:', target.t90
     print 'Target T95:', target.t95
     # Check phase argement
-    if not phase in ("unified", "prompt", "afterglow", "earlyAG", "lateAG"):
-        logger.critical('Phase {0} is NOT avalable!!! Use "unified", "prompt", "afterglow", "earlyAG" or "lateAG".')
+    if not phase in ("unified", "prompt", "afterglow", "earlyAG", "lateAG", "farAG"):
+        logger.critical('Phase {0} is NOT avalable!!! Use "unified", "prompt", "afterglow", "earlyAG", "lateAG", "farAG".')
         sys.exit(1)
     logger.debug(phase)
     tmid_afterglow = target.t95+2.*target.t90
@@ -878,5 +886,7 @@ def define_timephase(target, phase, tstop=10000.):
         else:
             logger.critical('tstop is earlier than start of the late afterglow!!!')
             sys.exit(1)
+    elif phase == 'farAG':
+        return (tstop, 100000.)
     elif phase == 'unified':
         return (0., tstop)

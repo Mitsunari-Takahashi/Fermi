@@ -33,7 +33,7 @@ def unbinned_grb_analysis(name, mode, emin, emax, roi, spectraltype, refit, forc
 @click.command()
 @click.argument('name', type=str)
 @click.option('--grbcatalogue', '-c', type=str, default=pLATLikelihoodConfig.GRB_CATALOGUE_LTF)
-@click.option('--mode', '-m', type=click.Choice(['unified', 'prompt', 'afterglow', 'earlyAG', 'lateAG', 'lightcurve', 'special']))
+@click.option('--mode', '-m', type=click.Choice(['unified', 'prompt', 'afterglow', 'earlyAG', 'lateAG', 'farAG', 'lightcurve', 'special']))
 @click.option('--emin', type=float, default=100.)
 @click.option('--emax', type=float, default=100000.)
 @click.option('--roi', type=float, default=12.)
