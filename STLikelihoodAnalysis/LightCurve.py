@@ -2,6 +2,8 @@
 """Module for making light curves of LAT data.
 The main class LightCurve is a chain of another module pLATLikelihoodConfig.py.
 The authour: Mitsunari Takahashi
+* Version: 1.8 (2017.10.02) 
+  Parameter limits with ndf=2 for free index
 * Version: 1.7 (2017.09.27) 
   Fit with weighting by yerr/ydata
 * Version: 1.6 (2017.09.26) 
@@ -51,7 +53,7 @@ mpl.rcParams['text.usetex'] = True
 mpl.rcParams['text.latex.preamble'] = [r'\usepackage{amsmath}']
 
 ##### VERSION OF THIS MACRO #####
-VERSION = 1.7 # 2017.09.27
+VERSION = 1.8 # 2017.10.02
 
 
 ##### Logger #####
@@ -250,8 +252,8 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free', g
     dct_curves['eflux'] = pMatplot.Curve('eflux', xlabel='Time - T0 [s]', ylabel=r'Energy flux $\mathrm{[erg/cm^2 s]}$', xerr_asym=True, yerr_asym=True)
     dct_curves['eflux_ul'] = pMatplot.Curve('eflux', xlabel='Time - T0 [s]', ylabel=r'Energy flux $\mathrm{[erg/cm^2 s]}$', xerr_asym=True, yerr_asym=False, ul=True)
 
-    dct_curves['e2dnde'] = pMatplot.Curve('e2dnde', xlabel='Time - T0 [s]', ylabel=r'$E^2 dN/dE \, \rm{{at}} \, {ene:3.1f} \rm{{GeV}} \, \mathrm{{[erg/cm^2 s]}}$'.format(ene=dct_summary['results'][0]['Scale']['value']/1000.), xerr_asym=True, yerr_asym=True)
-    dct_curves['e2dnde_ul'] = pMatplot.Curve('e2dnde', xlabel='Time - T0 [s]', ylabel=r'$E^2 dN/dE \, \rm{{at}} \, {ene:3.1f} \rm{{GeV}} \, \mathrm{{[erg/cm^2 s]}}$'.format(ene=dct_summary['results'][0]['Scale']['value']/1000.), xerr_asym=True, yerr_asym=False, ul=True)
+    dct_curves['e2dnde'] = pMatplot.Curve('e2dnde', xerr_asym=True, yerr_asym=True, xlabel='Time - T0 [s]', ylabel=r'$E^2 dN/dE \, \rm{{at}} \, {ene:3.1f} \rm{{GeV}} \, \mathrm{{[erg/cm^2 s]}}$'.format(ene=1.0))
+    dct_curves['e2dnde_ul'] = pMatplot.Curve('e2dnde', xerr_asym=True, yerr_asym=False, ul=True, xlabel='Time - T0 [s]', ylabel=r'$E^2 dN/dE \, \rm{{at}} \, {ene:3.1f} \rm{{GeV}} \, \mathrm{{[erg/cm^2 s]}}$'.format(ene=1.0)) #ene=dct_summary['results'][0]['Scale']['value']/1000.), )
 
     dct_curves['Index'] = pMatplot.Curve('Index', xlabel='Time - T0 [s]', ylabel='Spectral index', xerr_asym=True, yerr_asym=False)
 
@@ -321,23 +323,26 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free', g
     logger.debug(ax[1].get_yticks())
     ax[1].set_yticks([y for y in ax[1].get_yticks() if y<0.5*ax[1].get_ylim()[1]])
     # Fit
-    fit_result = dct_curves['flux'].fit_lin(t95, t95)
-    dct_fit = {'fit':{'flux':{'afterglow':{}}}}
-    if isinstance(fit_result, tuple) and len(fit_result)==2:
-        params, butterfly = fit_result[0], fit_result[1]
-        for iparam, param, in enumerate(params[0]):
-            logger.info("""Parameter {0}: {1} +/- {2}""".format(iparam, params[0][iparam], params[1][iparam]))
-            str_powerlaw_fitted = r"""$ \displaystyle F(t) = \rm{{ F_{{0}} }} \left( \frac{{ \it{{ t }} }}{{ \rm{{ T_{{ 95}} }} }} \right)^{{- \rm{{ \alpha }} }}$
+    dct_fit = {'fit':{'flux':{'lightcurve':{}}}}
+    flux_max = dct_curves['flux'].get_maximum()
+    if flux_max!=0:
+        t_flux_max = flux_max[1]
+        fit_result = dct_curves['flux'].fit_lin(t_flux_max, t_flux_max)
+        if isinstance(fit_result, tuple) and len(fit_result)==2:
+            params, butterfly = fit_result[0], fit_result[1]
+            for iparam, param, in enumerate(params[0]):
+                logger.info("""Parameter {0}: {1} +/- {2}""".format(iparam, params[0][iparam], params[1][iparam]))
+            str_powerlaw_fitted = r"""$ \displaystyle F(t) = \rm{{ F_{{0}} }} \left( \frac{{ \it{{ t }} }}{{ {t_scale:.1E} }} \right)^{{- \rm{{ \alpha }} }}$
 $\rm{{ F_{{0}} = {f0:.2E} \pm {f0err:.1E} }}$
-$\rm{{ \alpha = {alpha:.2E} \pm {alphaerr:.2E} }}$""".format(f0=params[0][0], f0err=params[1][0], alpha=params[0][1], alphaerr=params[1][1])
-        ax[1].plot(butterfly[0], butterfly[1], c='g')
+$\rm{{ \alpha = {alpha:.2E} \pm {alphaerr:.2E} }}$""".format(f0=params[0][0], f0err=params[1][0], alpha=params[0][1], alphaerr=params[1][1], t_scale=t_flux_max)
+            ax[1].plot(butterfly[0], butterfly[1], c='g')
        #ax[1].fill_between(butterfly[0],butterfly[1]+butterfly[2],butterfly[1]-butterfly[2] ,alpha=0.2, facecolor='g')
-        ax[1].text(butterfly[0][0]*4, butterfly[1][0], str_powerlaw_fitted)
-        dct_fit['fit']['flux']['afterglow']['amplitude'] = {'value':params[0][0], 'error':params[1][0]}
-        dct_fit['fit']['flux']['afterglow']['index'] = {'value':params[0][1], 'error':params[1][1]}
-        dct_fit['fit']['flux']['afterglow']['t_scale'] = t95
-        dct_fit['fit']['flux']['afterglow']['tmin'] = t95
-        dct_fit['fit']['flux']['afterglow']['tmax'] = None
+            ax[1].text(butterfly[0][0]*10, butterfly[1][0]/5., str_powerlaw_fitted)
+            dct_fit['fit']['flux']['lightcurve']['amplitude'] = {'value':params[0][0], 'error':params[1][0]}
+            dct_fit['fit']['flux']['lightcurve']['index'] = {'value':params[0][1], 'error':params[1][1]}
+            dct_fit['fit']['flux']['lightcurve']['t_scale'] = t95
+            dct_fit['fit']['flux']['lightcurve']['tmin'] = t95
+            dct_fit['fit']['flux']['lightcurve']['tmax'] = None
 
     ax[2].errorbar(dct_curves['eflux'].get_xdata(), dct_curves['eflux'].get_ydata(), xerr=dct_curves['eflux'].get_xerr(), yerr=dct_curves['eflux'].get_yerr(), fmt=dct_curves['eflux'].fmt)
     ax[2].errorbar(dct_curves['eflux_ul'].get_xdata(), dct_curves['eflux_ul'].get_ydata(), xerr=dct_curves['eflux_ul'].get_xerr(), fmt=dct_curves['eflux_ul'].fmt)
@@ -434,7 +439,7 @@ def main(name, emin, emax, roi, ngoodstat, rgoodstat, refit, force, suffix, grbc
         if plotonly==None:
             make_lightcurves(name, emin, emax, roi, ngoodstat, rgoodstat, suffix, grbcatalogue, refit, force, outdir, index)
         else:
-            plot_lightcurves(plotonly, index=index)#, addphoton={'time': (422.7,), 'energy':(50.49609375*1000.,)})
+            plot_lightcurves(plotonly, index=index) #, addphoton={'time': (422.7,), 'energy':(50.49609375*1000.,)})
             dataframe(plotonly, index=index)
 
 
