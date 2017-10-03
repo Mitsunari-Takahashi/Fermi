@@ -3,6 +3,8 @@
 """Module for extrapolation analysis of a LAT spectrum.
 The main class ExtrapolateGRBSpectrum is a chain of another module pLATLikelihoodConfig.py.
 The authour: Mitsunari Takahashi
+ - Version: 4.1 (2017.10.03)
+   Evaluate low-E flux even if TS<25
  - Version: 4.0 (2017.09.25)
    Scan over normalization and index
  - Version: 3.1 (2017.09.22)
@@ -36,7 +38,7 @@ from STLikelihoodAnalysis import get_module_logger
 
 
 ##### VERSION OF THIS MACRO #####
-VERSION = 4.0 # 2017.09.25
+VERSION = 4.1 # 2017.10.03
 
 
 ##### Logger #####
@@ -553,15 +555,16 @@ def extrapolate_spectrum(name, mode, emin_fitted, emax_fitted, emin_extrapolated
     retcode_fit, loglike_inv_fit = chain.analysis_fit.fit(bredo=brefit)
     chain.dct_summary['lower_energies']['loglike'] = -loglike_inv_fit
     chain.summarize_powerlaw_fit_results(chain.analysis_fit, 'lower_energies')
-    if not chain.dct_summary['lower_energies']['TS'] >= 25:
-        chain.pickle(chain.dct_summary)    # Pickle
-        logger.warning('TS={ts} is NOT enough!! Chain analysis finished.'.format(ts=chain.dct_summary['lower_energies']['TS']))
-        sys.exit(0)
 
     flux_and_err_lower_energies = chain.analysis_fit.eval_flux_and_error(chain.analysis_fit.target.name)
     chain.dct_summary['lower_energies']['flux'] = {'value':flux_and_err_lower_energies[0], 'error':flux_and_err_lower_energies[1]}
     flux_and_err_lower_energies_total = chain.analysis_fit.eval_flux_and_error_total()
     chain.dct_summary['lower_energies']['flux_total'] = {'value':flux_and_err_lower_energies_total[0], 'error':flux_and_err_lower_energies_total[1]}
+
+    if not chain.dct_summary['lower_energies']['TS'] >= 25:
+        chain.pickle(chain.dct_summary)    # Pickle
+        logger.warning('TS={ts} is NOT enough!! Chain analysis finished.'.format(ts=chain.dct_summary['lower_energies']['TS']))
+        sys.exit(0)
 
     # Extrapolating
     chain.setup_extrapolate()
