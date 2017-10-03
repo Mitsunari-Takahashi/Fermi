@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import ROOT
 from ROOT import gROOT, gDirectory, gPad, gSystem, gStyle, kTRUE, kFALSE, TTree, TH1, TGraphErrors, kWhite, kBlack, kGray, kRed, kGreen, kBlue, kYellow, kMagenta, kCyan, kOrange, kSpring, kTeal, kAzure, kViolet, kPink
 ROOT.gROOT.SetBatch()
+from scipy.optimize import leastsq
 import pickle_utilities
 import pMatplot
 from pLsList import ls_list
@@ -36,7 +37,7 @@ mpl.rcParams['font.size'] = 15
 def plot_grbs_deviation(lst_path_pickle, path_table, path_out):
     # GBM data
     tb = ReadLTFCatalogueInfo.open_table(1, path_table)
-    FLUENCE_CUT = [1.45E-4, 3.70E-5]
+    FLUENCE_CUT = [1.09e-04, 3.06e-05] #[1.45E-4, 3.70E-5]
 
     # Common numbers
     d0 = pickle_utilities.load(lst_path_pickle[0])
@@ -404,11 +405,22 @@ TS of deviation from power-law:""")
 
 #        dp_flux_ul_highest_energies_vs_lightcurve_index.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', ydata=np.array([f for f in bools_lightcurve[icat]*bools_non_flux_finite_highest_energies[icat]*fluxes_ul_highest_energies[icat] if f!=0]), xdata=np.array([f for f in lightcurve_indices[icat]*bools_non_flux_finite_highest_energies[icat] if f!=0]), xdata_err=np.array([f for f in bools_non_flux_finite_highest_energies[icat]*lightcurve_indices_err[icat] if f!=0]), ul=True))
 
+    # Fit index
+    def residuals_weighted(const, y, x, yerr):
+        err = (y - const) / yerr
+        return(err)
+
+    index_fitted = leastsq(residuals_weighted, -2.,
+                                          args=(indices_whole_energies[0], fluences_gbm[0], indices_err_whole_energies[0]), 
+                                          full_output=True)
+    chisq_index = 0
+
     for jgrb in range(len(lst_dev_scanned[0])):
         dp_ts_scanned.append(pMatplot.Data_plotted(label=name, gr_type='contour', xdata=lst_index_scanned[0][jgrb], ydata=lst_dev_scanned[0][jgrb], zdata=lst_ts_fit_scanned[0][jgrb]))
-        #logger.debug(lst_index_scanned[0][jgrb])
-        #logger.debug(lst_dev_scanned[0][jgrb])
-        #logger.debug(lst_ts_fit_scanned[0][jgrb])
+        chisq_index += pow(residuals_weighted(index_fitted[0][0], indices_whole_energies[0][jgrb], fluences_gbm[0][jgrb], indices_err_whole_energies[0][jgrb]), 2)
+    chisq_index = chisq_index/len(lst_dev_scanned[0])
+    logger.info('Averaged index: {0} +/- {1}'.format(index_fitted[0][0], sqrt(index_fitted[1][0][0])))
+    logger.info('Chi^2/NDF: {0}'.format(chisq_index))
     
     # plot
     ps_deviation_vs_fluence_gbm = pMatplot.Plot_single((dp_deviation_vs_fluence_gbm[0],), xtitle=str_fluence_gbm, ytitle=str_deviation, xlog=True)
@@ -462,9 +474,23 @@ TS of deviation from power-law:""")
 
     ps_ts_scanned1 = pMatplot.Plot_single(dp_ts_scanned, xtitle=str_index_lower_energies, ytitle=str_ts_highest_energies, title=str_ts_lower_energies, xfigsize=20, yfigsize=20, zlevels=[2.30])
     ps_ts_scanned1.plot(xlim=(-3.5, -1.0), ylim=(-10, 25), path_save='{dire}/fig_ts_scanned_1sigma'.format(dire=path_out)) #ylim=(-100, 100), 
+    ps_ts_scanned1.ax.axhline(y=2.30, label=r'$1\sigma$', ls='--', c='k')
+    ps_ts_scanned1.ax.axhline(y=4.61, label=r'$2\sigma$', ls='--', c='k')
+    ps_ts_scanned1.ax.axhline(y=-2.30, label=r'$-1\sigma$', ls='--', c='k')
+    ps_ts_scanned1.ax.axhline(y=-4.61, label=r'$-2\sigma$', ls='--', c='k')
+    #ps_ts_scanned1.savefig('{dire}/fig_ts_scanned_2sigma'.format(dire=path_out))
+    ps_ts_scanned1.fig.savefig('{dire}/fig_ts_scanned_1sigma.png'.format(dire=path_out))
+    ps_ts_scanned1.fig.savefig('{dire}/fig_ts_scanned_1sigma.pdf'.format(dire=path_out))
 
     ps_ts_scanned4 = pMatplot.Plot_single(dp_ts_scanned, xtitle=str_index_lower_energies, ytitle=str_ts_highest_energies, title=str_ts_lower_energies, xfigsize=20, yfigsize=20, zlevels=[6.18])
     ps_ts_scanned4.plot(xlim=(-3.5, -1.0), ylim=(-10, 25), path_save='{dire}/fig_ts_scanned_2sigma'.format(dire=path_out)) #ylim=(-100, 100), 
+    ps_ts_scanned4.ax.axhline(y=2.30, label=r'$1\sigma$', ls='--', c='k', lw=2)
+    ps_ts_scanned4.ax.axhline(y=4.61, label=r'$2\sigma$', ls='--', c='k', lw=2)
+    ps_ts_scanned4.ax.axhline(y=-2.30, label=r'$-1\sigma$', ls='--', c='k', lw=2)
+    ps_ts_scanned4.ax.axhline(y=-4.61, label=r'$-2\sigma$', ls='--', c='k', lw=2)
+    #ps_ts_scanned4.savefig('{dire}/fig_ts_scanned_2sigma'.format(dire=path_out))
+    ps_ts_scanned4.fig.savefig('{dire}/fig_ts_scanned_2sigma.png'.format(dire=path_out))
+    ps_ts_scanned4.fig.savefig('{dire}/fig_ts_scanned_2sigma.pdf'.format(dire=path_out))
                                                      
 
 @click.command()
