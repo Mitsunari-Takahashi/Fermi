@@ -19,6 +19,7 @@ from astropy.io import fits
 import numpy as np
 import ReadLTFCatalogueInfo
 from pLsList import ls_list
+import pickle_utilities
 
 mpl.rcParams['font.size'] = 25
 
@@ -32,7 +33,12 @@ def judge_category_fluence(tb, name, lst_cut):
     return ncategory
 
 
-def run_composite2(lst_inputs, path_outdir, names_params_tied_universal=['Index'], names_params_tied_category=['Prefactor'], ncat_analyzed=0, str_suffix=''):
+def get_category(chara, ncategory, name, path_dct='/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/LongGRBs/QuantiledGRBs.pickle'):
+    dct = pickle_utilities.load(path_dct)
+    return dct[chara][ncategory]
+
+
+def run_composite2(chara_cat, lst_inputs, path_outdir, names_params_tied_universal=['Index'], names_params_tied_category=['Prefactor'], ncat_analyzed=0, str_suffix=''):
     # Open table
     tb = ReadLTFCatalogueInfo.open_table()
     # Definition of GBM fluence categories
@@ -216,7 +222,7 @@ def run_composite2(lst_inputs, path_outdir, names_params_tied_universal=['Index'
             ax[0].loglog(x_stacked, model_grb, label=target)
             ax[0].loglog(x_stacked, model_others, label='Others')
             ax[0].errorbar(x_stacked, nobs_sum, yerr=np.sqrt(nobs_sum), fmt='o',label='Counts')
-            ax[0].legend(loc=1, fontsize=12)
+            ax[0].legend(loc=1, fontsize=20)
             ax[0].set_ylabel('[counts]')
             ax[0].set_title(target)
             ax[0].set_xticklabels([])
@@ -261,8 +267,9 @@ def run_composite2(lst_inputs, path_outdir, names_params_tied_universal=['Index'
     ax_stacked[0].loglog(x_stacked, model_grb_stacked, label='GRBs')
     ax_stacked[0].loglog(x_stacked, model_others_stacked, label='Others')
     ax_stacked[0].errorbar(x_stacked, nobs_sum_stacked, yerr=np.sqrt(nobs_sum_stacked), fmt='o',label='Counts')
-    ax_stacked[0].legend(loc=1, fontsize=12)
+    ax_stacked[0].legend(loc=1, fontsize=20)
     ax_stacked[0].set_ylabel('[counts]')
+    ax_stacked[0].set_ylim(0.1, 2E4)
     ax_stacked[0].set_xticklabels([])
     ax_stacked[0].grid(ls='-', lw=0.5, alpha=0.2)
     #ax_stacked[0].set_xlabel(r'$\log_{10}Energy$ [MeV]')
