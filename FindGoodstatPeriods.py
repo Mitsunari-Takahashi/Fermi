@@ -57,6 +57,45 @@ def get_entries_roi(pathFileEvt, tStart=None, tStop=None, rlim=0.0, ra=0, dec=0,
     return nstat
 
 
+def get_event_time_and_energy(pathFileEvt, tStart=None, tStop=None, rlim=0.0, ra=0, dec=0, torigin=0.0, emin=0, emax=sys.maxint, zmax=100., z=0.):
+    """Return entry number between tStart - tStop from torigin, and within rlim degrees from (ra, dec).
+"""
+    metStart = tStart + torigin if tStop is not None else -sys.maxint
+    metStop = tStop + torigin if tStop is not None else sys.maxint
+    hdulistEVT = fits.open(pathFileEvt)
+    tbdataEVT = hdulistEVT[1].data
+    aTIME = tbdataEVT.field('TIME')
+    aENERGY = tbdataEVT.field('ENERGY') * (1.0+z)
+    aRA = tbdataEVT.field('RA')
+    aDEC = tbdataEVT.field('DEC')
+    aZENITH = tbdataEVT.field('ZENITH_ANGLE')
+    nEVT = len(aTIME)
+    time_prev = 0
+    coords_target = SkyCoord(ra, dec, unit="deg")
+    nstat = 0
+    lst_time = []
+    lst_energy = []
+    #print metStart, metStop, emin, emax, zmax
+    for iEVT in range(nEVT):
+        if aTIME[iEVT]<time_prev:
+            print 'Odd order!!!'
+            sys.exit(1)
+        if aTIME[iEVT]>=metStart and aTIME[iEVT]<metStop and aENERGY[iEVT]>=emin and aENERGY[iEVT]<emax and aZENITH[iEVT]<zmax:
+            coords_event = SkyCoord(aRA[iEVT], aDEC[iEVT], unit="deg")
+            sep_ang = coords_target.separation(coords_event)
+            sep_deg = float(sep_ang.to_string(unit=u.deg, decimal=True))
+            if sep_deg<=rlim:
+                nstat+=1
+                print 'x',
+                lst_time.append(aTIME[iEVT]-torigin)
+                lst_energy.append(aENERGY[iEVT])
+                if aENERGY[iEVT]>=20000.:
+                    print '{0} GeV at {1} s'.format(aENERGY[iEVT]/1000., aTIME[iEVT]-torigin)
+        time_prev = aTIME[iEVT]
+    print ''
+    return (np.array(lst_time), np.array(lst_energy))
+
+
 def find_goodstat_periods(pathFileEvt, tStart, tStop, nthreshold, rlim=0.0, ra=0, dec=0, torigin=0.0, noffset=0): #, ethreshold=100., evtclass=128):
     """Look over spacecraft files and find time intervals which have more than N events.
 """
