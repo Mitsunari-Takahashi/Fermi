@@ -18,6 +18,7 @@ from BinnedAnalysis import *
 import FluxDensity
 from LikelihoodState import LikelihoodState
 import SummedLikelihood
+from astropy.io import fits
 from fermipy.utils import get_parameter_limits
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -31,6 +32,7 @@ from FindCrossEarthlimb import find_cross_earthlimb
 from FindGoodstatPeriods import find_goodstat_periods, get_entries, get_entries_roi
 from DownloadFermiData import download_fermi_data_grb
 import ReadLTFCatalogueInfo
+import ReadGBMCatalogueInfo
 from STLikelihoodAnalysis import get_module_logger
 
 
@@ -40,6 +42,7 @@ logger = get_module_logger(__name__)
 
 ##### PATH of Catalogue #####
 GRB_CATALOGUE_LTF = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LAT2CATALOG-v1-LTF.fits'
+GRB_CATALOGUE_GBM = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/GBMcatalogue20171005.fits'
 
 
 ##### LAT IRFs #####
@@ -62,6 +65,11 @@ class _AstroTarget:
         if self.spectraltype =='PowerLaw':
             if not set(spectralpars.keys()) == set(['Prefactor', 'Index', 'Scale']):
                 logger.error('Spectral parameters are NOT correct for PoweLaw!!!')
+                logger.error(spectralpars)
+                sys.exit(1)
+        if self.spectraltype =='PowerLaw2':
+            if not set(spectralpars.keys()) == set(['Integral', 'Index', 'LowerLimit', 'UpperLimit']):
+                logger.error('Spectral parameters are NOT correct for PoweLaw2!!!')
                 logger.error(spectralpars)
                 sys.exit(1)
         self.spectralpars = spectralpars
@@ -89,21 +97,31 @@ class GRBTarget(PointTarget):
             self.path_catalogue = path_catalogue
             tb_ltf = ReadLTFCatalogueInfo.open_table(1, self.path_catalogue)
             tb_one = ReadLTFCatalogueInfo.select_one_by_name(tb_ltf, name)
+            tb_gbm = ReadGBMCatalogueInfo.open_table(1, GRB_CATALOGUE_GBM)
+            tb_gbm = ReadGBMCatalogueInfo.select_one_by_name(tb_gbm, tb_one['GBM_assoc_key'])
             if spectraltype=='PowerLaw':
                 spectralpars_scale = {'Prefactor':1, 'Index':1, 'Scale':1}
                 spectralpars_fixed = ['Scale']
+            if spectraltype=='PowerLaw2':
+                spectralpars_scale = {'Integral':1, 'Index':1, 'LowerLimit':1, 'UpperLimit':1}
+                spectralpars_fixed = ['LowerLimit', 'UpperLimit']
             elif spectraltype=='ExpCutoff':
                 spectralpars_scale = {'Prefactor':1, 'Index':1, 'Ebreak':1, 'P1':1, 'P2':1, 'P3':1}
                 spectralpars_fixed = ['Scale', 'P2', 'P3']
             elif spectraltype=='BrokenPowerLaw':
                 spectralpars_scale = {'Prefactor':1, 'Index1':1, 'Index2':1, 'BreakValue':1}
                 spectralpars_fixed = ['BreakValue']
+
+            #position_err = tb_gbm['ERR']
             PointTarget.__init__(self, name, float(tb_one['RA']), float(tb_one['DEC']), spectraltype=spectraltype, spectralpars=spectralpars, spectralpars_scale=spectralpars_scale, spectralpars_fixed=spectralpars_fixed, met0=pMETandMJD.ConvertMjdToMet(float(tb_one['TRIGGER_TIME'])), redshift=(float(tb_one['REDSHIFT']) if float(tb_one['REDSHIFT'])>0 else np.nan))
             self.t05 = tb_one['T90_START']
             self.met05 = self.met0 + self.t05
             self.t90 = tb_one['T90']
             self.t95 = self.t05 + self.t90
             self.met95 = self.met05 + self.t90
+            self.t25 = tb_gbm['T50_START']
+            self.met25 = self.met0 + self.t25
+            self.t50 = tb_gbm['T50']
             logger.debug('Target name: {0}'.format(self.name))
         else:
             logger.critical('Catalogue {0} is not in readable format!!!'.format(path_catalogue))
@@ -114,9 +132,11 @@ class GRBTarget(PointTarget):
 PATH_BASEDIR = '/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone'
 
 class AnalysisConfig:
-    def __init__(self, target, emin, emax, tmin, tmax, evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, suffix='', emin_fit=None, emax_fit=None, emin_eval=None, emax_eval=None, psForce=False, roi_checked=5.0):
+    def __init__(self, target, emin, emax, tmin, tmax, evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, suffix='', emin_fit=None, emax_fit=None, emin_eval=None, emax_eval=None, binned=False, psForce=False, roi_checked=5.0):
         self.target = target
         logger.debug(self.target)
+        self.binned = binned
+        self.str_binned = 'Binned' if self.binned==True else 'Unbinned'
         self.emin = emin
         self.emax = emax
         self.emin_fit = emin_fit if emin_fit is not None else self.emin
@@ -126,8 +146,8 @@ class AnalysisConfig:
         logger.debug('Energy range: {emin} - {emax}'.format(emin=self.emin, emax=self.emax))
         self.tmin = tmin
         self.tmax = tmax
-        self.metmin = self.target.met0 + self.tmin
-        self.metmax = self.target.met0 + self.tmax
+        self.metmin = (self.target.met0 + self.tmin) if self.tmin is not None else None
+        self.metmax = (self.target.met0 + self.tmax) if self.tmax is not None else None
         self.evclass = evclass
         self.evtype = evtype
         self.ft2interval = ft2interval
@@ -138,13 +158,13 @@ class AnalysisConfig:
         self.suffix = '' if suffix=='' else '_'+suffix
         self.roi_checked = roi_checked # Radius within which number of events is checked.
 
-        self.str_time = 'T{0.tmin:0>6.0f}-{0.tmax:0>6.0f}'.format(self) if self.target.met0 >= 239557417 else 'MET{0.tmin:0>9.0f}-{0.tmax:0>9.0f}'.format(self)
+        self.str_time = 'T{0.tmin:0>6.0f}-{0.tmax:0>6.0f}'.format(self) if self.target.met0 >= 239557417 else 'MET{0.tmin:0>9.0f}-{0.tmax:0>9.0f}'.format(self) 
         self.str_energy = 'E{0.emin:0>7.0f}-{0.emax:0>7.0f}MeV'.format(self)
         self.str_roi = 'r{0:0>2.0f}deg'.format(self.deg_roi)
         self.str_index = 'Index{0}'.format(int(self.index_fixed*100) if (self.index_fixed==self.index_fixed and self.index_fixed is not None) else 'Free')
         
         self.dir_base = PATH_BASEDIR
-        self.dir_work = '{base}/{target}/{energy}/{roi}/{time}/{spectype}/{index}'.format(base=PATH_BASEDIR, target=self.target.name, energy=self.str_energy, roi=self.str_roi, time=self.str_time, spectype=self.target.spectraltype, index=self.str_index)
+        self.dir_work = '{base}/{target}/{energy}/{roi}/{time}/{spectype}/{binned}'.format(base=PATH_BASEDIR, target=self.target.name, energy=self.str_energy, roi=self.str_roi, time=self.str_time, spectype=self.target.spectraltype, binned=self.str_binned) #index=self.str_index)
         # Data
         self.path_dir_data = '{base}/{target}'.format(base=PATH_BASEDIR, target=self.target.name)
 
@@ -153,10 +173,12 @@ class AnalysisConfig:
         self.path_ft2 = None
         self.path_filtered = None
         self.path_filtered_gti = None
+        self.path_ccube = None
         self.path_livetime = None
         self.path_exposure = None
         self.path_model_xml = None
         self.path_model_xml_new = None
+        self.path_srcmap = None
         self.obs = None
         self.like = None
         self.likeobj = None
@@ -167,17 +189,23 @@ class AnalysisConfig:
         self.gti_filter = '(DATA_QUAL>0)&&(LAT_CONFIG==1)'
         self.roicut = False
 
+        # CCube
+        self.binsz = 0.2
+        self.npix = int(self.deg_roi/self.binsz*2+0.5)
+
         # Livetime
-        self.dcostheta = 0.025
-        self.binsz = 1
+        self.dcostheta = 0.05 #0.025
+        self.binsz_lt = 1
 
         # Exposure
         self.irfs = 'CALDB'
         self.srcrad = self.deg_roi + self.rad_margin
         self.nlong_exp = int(self.srcrad * 2.+0.5)
         self.nlat_exp = int(self.srcrad * 2.+0.5)
-        self.nenergies_exp = int(log10(self.emax/self.emin)*4+0.5)
-        self.energies = 10 ** np.linspace(log10(self.emin), log10(self.emax), self.nenergies_exp+1)
+        self.npix_exp = int(max(15+self.deg_roi, sqrt(2)*self.deg_roi)/self.binsz*2+0.5)
+        self.nenergies_exp = int(log10(self.emax/self.emin)*10+0.5)
+        self.nenergies_plot = int(log10(self.emax/self.emin)*4+0.5)
+        self.energies = 10 ** np.linspace(log10(self.emin), log10(self.emax), self.nenergies_plot+1)
         logger.debug('Energy bins: {0}'.format(self.energies))
 
         # Modeling
@@ -232,7 +260,10 @@ class AnalysisConfig:
         my_apps.filter['evtype'] = self.evtype
         my_apps.filter['ra'] = self.target.ra
         my_apps.filter['dec'] = self.target.dec
-        my_apps.filter['rad'] = self.deg_roi
+        if self.binned==False:
+            my_apps.filter['rad'] = self.deg_roi
+        else:
+            my_apps.filter['rad'] = sqrt(2)*self.deg_roi
         my_apps.filter['emin'] = self.emin
         my_apps.filter['emax'] = self.emax
         my_apps.filter['zmax'] = self.zmax
@@ -271,6 +302,34 @@ class AnalysisConfig:
         return nevt_rough
 
 
+    def evtbin(self, bforce=False):
+        check_required_files({'FT2':self.path_ft2, 'Filtered GTI event':self.path_filtered_gti})
+        self.path_ccube = '{0}/{1}'.format(self.dir_work, os.path.basename(self.path_ft1).replace('.fits', '_ccube.fits'))
+        my_apps.evtbin['evfile'] = self.path_filtered_gti
+        my_apps.evtbin['scfile']= self.path_ft2
+        my_apps.evtbin['algorithm'] = "ccube"
+        my_apps.evtbin['outfile'] = self.path_ccube
+        my_apps.evtbin['ebinalg'] = 'LOG'
+        my_apps.evtbin['ebinfile'] = None
+        my_apps.evtbin['emin'] = self.emin
+        my_apps.evtbin['emax'] = self.emax
+        my_apps.evtbin['enumbins'] = self.nenergies_exp
+        my_apps.evtbin['coordsys'] = "CEL" 
+        my_apps.evtbin['xref'] = self.target.ra
+        my_apps.evtbin['yref'] = self.target.dec
+        my_apps.evtbin['nxpix'] = self.npix
+        my_apps.evtbin['nypix'] = self.npix
+        my_apps.evtbin['binsz'] = self.binsz
+        my_apps.evtbin['axisrot'] = 0.0 
+        my_apps.evtbin['rafield'] = "RA" 
+        my_apps.evtbin['decfield'] = "DEC" 
+        my_apps.evtbin['proj'] = "CAR"
+        logger.info('Going to make CCUBE.')
+        my_apps.evtbin.run()
+        logger.info("""Creating ccube finished.
+""")
+
+
     def livetime(self, bforce=False):
         check_required_files({'FT2':self.path_ft2, 'Filtered GTI event':self.path_filtered_gti})
         self.path_livetime = self.path_filtered_gti.replace('_filtered_gti.fits', '_ltCube.fits')
@@ -285,7 +344,7 @@ class AnalysisConfig:
         my_apps.expCube['outfile'] = self.path_livetime
         my_apps.expCube['zmax'] = self.zmax
         my_apps.expCube['dcostheta'] = self.dcostheta
-        my_apps.expCube['binsz'] = self.binsz
+        my_apps.expCube['binsz'] = self.binsz_lt
         my_apps.expCube.run()
         logger.info("""Calculating livetime finished.
 """)
@@ -300,17 +359,41 @@ class AnalysisConfig:
             return 0
         else:
             logger.info("""Calculating exposure is starting...""")
-        
-        my_apps.expMap['evfile'] = self.path_filtered_gti
-        my_apps.expMap['scfile'] = self.path_ft2
-        my_apps.expMap['expcube'] = self.path_livetime
-        my_apps.expMap['outfile'] = self.path_exposure
-        my_apps.expMap['irfs'] = self.irfs
-        my_apps.expMap['srcrad'] = self.srcrad
-        my_apps.expMap['nlong'] = self.nlong_exp
-        my_apps.expMap['nlat'] = self.nlat_exp
-        my_apps.expMap['nenergies'] = self.nenergies_exp
-        my_apps.expMap.run()
+        if self.binned==False:
+            logger.info('Unbinned exposure map...')
+            my_apps.expMap['evfile'] = self.path_filtered_gti
+            my_apps.expMap['scfile'] = self.path_ft2
+            my_apps.expMap['expcube'] = self.path_livetime
+            my_apps.expMap['outfile'] = self.path_exposure
+            my_apps.expMap['irfs'] = self.irfs
+            my_apps.expMap['srcrad'] = self.srcrad
+            my_apps.expMap['nlong'] = self.nlong_exp
+            my_apps.expMap['nlat'] = self.nlat_exp
+            my_apps.expMap['nenergies'] = self.nenergies_exp
+            my_apps.expMap.run()
+        else:
+            logger.info('Binned exposure map...')
+            #my_apps.gtexpcube2['evfile'] = self.path_filtered_gti
+            #my_apps.gtexpcube2['scfile'] = self.path_ft2
+            my_apps.gtexpcube2['infile'] = self.path_livetime
+            my_apps.gtexpcube2['outfile'] = self.path_exposure
+            my_apps.gtexpcube2['irfs'] = self.irfs
+            my_apps.gtexpcube2['cmap'] = self.path_ccube
+            my_apps.gtexpcube2['evtype'] = self.evtype
+            #npix = int((10+self.deg_roi)/self.binsz*2+0.5)
+            my_apps.gtexpcube2['nxpix'] = self.npix_exp
+            my_apps.gtexpcube2['nypix'] = self.npix_exp
+            my_apps.gtexpcube2['binsz'] = self.binsz 
+            my_apps.gtexpcube2['coordsys'] = "CEL" 
+            my_apps.gtexpcube2['xref'] = self.target.ra
+            my_apps.gtexpcube2['yref'] = self.target.dec
+            my_apps.gtexpcube2['axisrot'] = 0.0 
+            my_apps.gtexpcube2['proj'] = "CAR" 
+            my_apps.gtexpcube2['ebinalg'] = "LOG" 
+            my_apps.gtexpcube2['emin'] = self.emin
+            my_apps.gtexpcube2['emax'] = self.emax
+            my_apps.gtexpcube2['enumbins'] = self.nenergies_exp
+            my_apps.gtexpcube2.run()
         logger.info("""Calculating exposure finished.
 """)
 
@@ -327,7 +410,7 @@ class AnalysisConfig:
         logger.info('External XML file {0} is used for modeling.'.format(self.path_model_xml))
 
 
-    def model_3FGL_sources(self, bforce=False):
+    def model_3FGL_sources(self, bforce=False, rm_catalogue_srcs=False):
         check_required_files({'Filtered GTI event':self.path_filtered_gti, 'Galactic diffuse':self.path_galdiff, 'Isotoropic diffuse':self.path_isodiff, 'Extened source templates':self.path_dir_extended})
 
         self.path_model_xml = self.path_filtered_gti.replace('_filtered_gti.fits', '_model.xml')
@@ -342,8 +425,33 @@ class AnalysisConfig:
 
         logger.debug('Galdiff:'+ self.galdiff_name)
         logger.debug('Isodiff:'+ self.isodiff_name)
-        mymodel.makeModel(self.path_galdiff, self.galdiff_name, self.path_isodiff, self.isodiff_name, extDir=self.path_dir_extended, ExtraRad=self.rad_margin, radLim=self.radius_free_sources, normsOnly=self.free_norms_only, psForce=self.psForce)
+        if rm_catalogue_srcs==False:
+            mymodel.makeModel(self.path_galdiff, self.galdiff_name, self.path_isodiff, self.isodiff_name, extDir=self.path_dir_extended, ExtraRad=self.rad_margin, radLim=self.radius_free_sources, normsOnly=self.free_norms_only, psForce=self.psForce)
+        else:
+            mymodel.makeModel(self.path_galdiff, self.galdiff_name, self.path_isodiff, self.isodiff_name, extDir=self.path_dir_extended, ExtraRad=0, radLim=0, normsOnly=self.free_norms_only, psForce=self.psForce)
         logger.info("""Making 3FGL source model finished.
+""")
+
+
+    def srcmaps(self, bforce=False):
+        if self.binned==False:
+            logger.error('srcmaps is NOT available for Binned analysis!!')
+            return 1
+        check_required_files({'FT2':self.path_ft2, 'CountCube':self.path_ccube, 'Livetime':self.path_livetime, 'SourceModel':self.path_model_xml, 'ExposureMap':self.path_exposure}) 
+        my_apps.srcMaps['scfile'] = self.path_ft2
+        my_apps.srcMaps['sctable'] = "SC_DATA" 
+        my_apps.srcMaps['expcube'] = self.path_livetime
+        my_apps.srcMaps['cmap'] = self.path_ccube
+        my_apps.srcMaps['srcmdl'] = self.path_model_xml
+        my_apps.srcMaps['bexpmap'] = self.path_exposure
+        #my_apps.srcMaps['wmap'] =none 
+        self.path_srcmap = self.path_filtered_gti.replace('_filtered_gti.fits', '_srcmap.fits')
+        my_apps.srcMaps['outfile'] = self.path_srcmap
+        my_apps.srcMaps['irfs'] = self.irfs #"P8R2_SOURCE_V6" 
+        my_apps.srcMaps['evtype'] = self.evtype
+        #my_apps.srcMaps['emapbnds'] = 'no'
+        my_apps.srcMaps.run()
+        logger.info("""Mapping sources finished.
 """)
 
 
@@ -360,44 +468,71 @@ class AnalysisConfig:
 """)
 
 
-    def setup(self, force={'download':False, 'filter':False, 'maketime':False, 'livetime':False, 'exposure':False, 'model_3FGL_sources':False, 'diffuse_responses':False}, skip_zero_data=False):
+    def setup(self, force={'download':False, 'filter':False, 'maketime':False, 'evtbin':False, 'livetime':False, 'exposure':False, 'model_3FGL_sources':False, 'diffuse_responses':False, 'srcmaps':False}, skip_zero_data=False):
         """Perform all preparation before fitting. Namely, downloading, filtering, making GTI, calculating livetime and exposure, modeling 3FGL sources, making diffuse source responses.
 """
         self.set_directories()
         self.download(bforce=force['download'])
         self.filter(bforce=force['filter'])
         nevt_rough = self.maketime(bforce=force['maketime'])
+        logger.info('Roughly {0} events.'.format(nevt_rough))
+        if self.binned==True:
+            self.evtbin(bforce=force['evtbin'])
         if skip_zero_data==False:
             self.livetime(bforce=force['livetime'])
             self.exposure(bforce=force['exposure'])
-            self.model_3FGL_sources(bforce=force['model_3FGL_sources'])
+            self.model_3FGL_sources(bforce=force['model_3FGL_sources'], rm_catalogue_srcs=False if nevt_rough>0 else True)
             self.diffuse_responses(bforce=force['diffuse_responses'])
+            if self.binned==True:
+                self.srcmaps(bforce=force['srcmaps'])
+                if check_required_files({'srcmap':self.path_srcmap})>0:
+                    logger.error('Making source map failed!!')
+                    self.psForce = True
+                    logger.warning('Source model is being recreated forcing diffuse sources to be point-like!')
+                    self.model_3FGL_sources(bforce=force['model_3FGL_sources'], rm_catalogue_srcs=False if nevt_rough>0 else True)
+                    logger.warning('Souce map is being recreated...')
+                    self.srcmaps(bforce=force['srcmaps'])
+                    if check_required_files({'srcmap':self.path_srcmap})>0:
+                        logger.critical('Making source map failed again!!!')
+                    else:
+                        logger.info('Source model has been created forcing diffuse sources to be point-like.')
+
         elif skip_zero_data==True:
             if nevt_rough>0:
                 self.livetime(bforce=force['livetime'])
                 self.exposure(bforce=force['exposure'])
-                self.model_3FGL_sources(bforce=force['model_3FGL_sources'])
+                self.model_3FGL_sources(bforce=force['model_3FGL_sources'], rm_catalogue_srcs=False if nevt_rough>0 else True)
                 self.diffuse_responses(bforce=force['diffuse_responses'])
+                if self.binned==True:
+                    self.srcmaps(bforce=force['srcmaps'])
             else:
                 logger.warning('Skipping calculation of livetime, exposre and diffuse responses.')
-                self.model_3FGL_sources(bforce=force['model_3FGL_sources'])
+                self.model_3FGL_sources(bforce=force['model_3FGL_sources'], rm_catalogue_srcs=False if nevt_rough>0 else True)
         return nevt_rough
 
 
     def set_likelihood(self):
-        logger.info("""Setting up likelihood...""")
+
         check_required_files({'FT2':self.path_ft2, 'Filtered GTI event':self.path_filtered_gti, 'Livetime':self.path_livetime, 'Exposure':self.path_exposure, 'Source model':self.path_model_xml})
 
-        self.obs = UnbinnedObs(self.path_filtered_gti, self.path_ft2, expMap=self.path_exposure, expCube=self.path_livetime, irfs=self.irfs)
-        self.like = UnbinnedAnalysis(self.obs, self.path_model_xml, optimizer='NewMinuit')
+        if self.binned==True:
+            logger.info("""Setting up Binned likelihood...""")
+            self.obs = BinnedObs(self.path_srcmap, self.path_livetime, self.path_exposure, irfs=self.irfs)
+            self.like = BinnedAnalysis(self.obs, self.path_model_xml, optimizer='NewMinuit')
+        else:
+            logger.info("""Setting up Unbinned likelihood...""")
+            self.obs = UnbinnedObs(self.path_filtered_gti, self.path_ft2, expMap=self.path_exposure, expCube=self.path_livetime, irfs=self.irfs)
+            self.like = UnbinnedAnalysis(self.obs, self.path_model_xml, optimizer='NewMinuit')
         #self.like.setEnergyRange(self.emin_fit, self.emax_fit)
         #logger.debug('New energy bounds: {0}'.format(self.like.energies))
-        self.like.reset_ebounds(self.energies)
-        logger.info('Energy bound has changed to {0}'.format(self.like.energies))
+        if self.binned==False:
+            self.like.reset_ebounds(self.energies)
+            logger.info('Energy bound has changed to {0}'.format(self.like.energies))
 
         # Target source
         if not self.target.name in self.like.sourceNames():
-            target_src = pyLike.PointSource(0, 0, self.like.observation.observation)
+            logger.info("""Adding {0}.""".format(self.target.name))
+            target_src = pyLike.PointSource(0, 0, self.obs.observation) #self.like.observation.observation)
             pl = pyLike.SourceFactory_funcFactory().create(self.target.spectraltype)
             if self.target.spectraltype=='PowerLaw':
                 pl.setParamValues((self.target.spectralpars['Prefactor'], self.target.spectralpars['Index'], self.target.spectralpars['Scale']))
@@ -417,6 +552,33 @@ class AnalysisConfig:
                 escale.setScale(self.target.spectralpars_scale['Scale'])
                 pl.setParam(escale)
                 pl.setParamAlwaysFixed('Scale')
+
+                target_src.setSpectrum(pl)
+
+            elif self.target.spectraltype=='PowerLaw2':
+                pl.setParamValues((self.target.spectralpars['Integral'], self.target.spectralpars['Index'], self.target.spectralpars['LowerLimit'], self.target.spectralpars['UpperLimit']))
+               #Integral
+                prefactor = pl.getParam("Integral")
+                prefactor.setBounds(0.0, 1.0)
+                prefactor.setScale(self.target.spectralpars_scale['Integral'])
+                pl.setParam(prefactor)
+              # Index
+                indexPar = pl.getParam("Index")
+                indexPar.setBounds(-9.0, 3.0)
+                indexPar.setScale(self.target.spectralpars_scale['Index'])
+                pl.setParam(indexPar)
+               #LowerLimit
+                ell = pl.getParam("LowerLimit")
+                ell.setBounds(100., 100000.)
+                ell.setScale(self.target.spectralpars_scale['LowerLimit'])
+                pl.setParam(ell)
+                pl.setParamAlwaysFixed('LowerLimit')
+               #UpperLimit
+                eul = pl.getParam("UpperLimit")
+                eul.setBounds(100., 100000.)
+                eul.setScale(self.target.spectralpars_scale['UpperLimit'])
+                pl.setParam(eul)
+                pl.setParamAlwaysFixed('UpperLimit')
 
                 target_src.setSpectrum(pl)
 
@@ -462,19 +624,19 @@ class AnalysisConfig:
             target_src.setDir(self.target.ra, self.target.dec,True,False)
             self.like.addSource(target_src)
 
-            iso_norm_idx = self.like.par_index(self.isodiff_name, 'Normalization')
-            self.like.freeze(iso_norm_idx)
-            logger.info("""{0} has been fixed.""".format(self.isodiff_name))
+        iso_norm_idx = self.like.par_index(self.isodiff_name, 'Normalization')
+        self.like.freeze(iso_norm_idx)
+        logger.info("""{0} has been fixed.""".format(self.isodiff_name))
 
-           # Fix some parameters of the target
-            p_idxs = [self.like.par_index(self.target.name, x) for x in self.target.spectralpars_fixed] 
-            for p_idx in p_idxs:
-                self.like.freeze(p_idx)
-                logger.info(self.like.params()[p_idx])
-            logger.info('Free parameter of {src}: {free}'.format(src=self.target.name, free=self.like.freePars(self.target.name)))
+        # Fix some parameters of the target
+        p_idxs = [self.like.par_index(self.target.name, x) for x in self.target.spectralpars_fixed] 
+        for p_idx in p_idxs:
+            self.like.freeze(p_idx)
+            logger.info(self.like.params()[p_idx])
+        logger.info('Free parameter of {src}: {free}'.format(src=self.target.name, free=self.like.freePars(self.target.name)))
 
-            self.like.writeXml()
-            return self.like
+        self.like.writeXml()
+        return self.like
 
 
     def set_likelihood_external_model(self, path_model):
@@ -488,9 +650,9 @@ class AnalysisConfig:
         self.likeobj = pyLike.NewMinuit(self.like.logLike)
         self.loglike_inversed = self.like()
         self.retcode = None
-
-        self.like.reset_ebounds(self.energies)
-        logger.info('Energy bound has changed to {0}'.format(self.like.energies))
+        if self.binned==False:
+            self.like.reset_ebounds(self.energies)
+            logger.info('Energy bound has changed to {0}'.format(self.like.energies))
 
 
     def fit(self, bredo=True):
@@ -505,6 +667,11 @@ class AnalysisConfig:
                 logger.debug('Prefactor of {0}: {1}'.format(self.target.name, self.like.normPar(self.target.name).getValue()))
             except RuntimeError:
                 logger.error('RuntimeError!!')
+                logger.info('Normalization value: {0}'.format(self.like.normPar(self.target.name).getValue()))
+                if self.like.normPar(self.target.name).getValue() != self.like.normPar(self.target.name).getValue():
+                    self.remove_other_sources()
+                    sys.exit(0)
+
                 logger.warning('Tolerance is relaxed from {tol0} to {tol1}'.format(tol0=self.like.tol, tol1=self.like.tol*10.))
                 logger.info('Resetting likelihood.')
                 self.set_likelihood()
@@ -517,7 +684,11 @@ class AnalysisConfig:
                 logger.debug('Prefactor of {0}: {1}'.format(self.target.name, self.like.normPar(self.target.name).getValue()))
                 logger.info('Fitting again...')
                 #self.like.normPar(self.target.name).setTrueValue(1E-12)
-                self.dofit(tol=self.like.tol*10.)
+                try:
+                    self.dofit(tol=self.like.tol*10.)
+                except RuntimeError:
+                    self.remove_other_sources()
+                    sys.exit(0)
         else:
             self.dofit()
 
@@ -584,12 +755,27 @@ class AnalysisConfig:
 """)
 
 
+    def remove_other_sources(self):
+        for source in self.like.sourceNames():
+            if not source in (self.target.name, self.galdiff_name, self.isodiff_name):
+                logger.info("Deleting {0}... ".format(source))
+                self.like.deleteSource(source)
+        norm_name = 'Prefactor'
+        norm_idx = self.like.par_index(self.target.name, norm_name)
+        self.like[norm_idx] = self.target.spectralpars['Prefactor']
+        self.path_model_xml_new = self.path_model_xml.replace('.xml', '_new.xml')
+        self.like.writeXml(self.path_model_xml_new)
+        logger.info('Simpified source model is saved as {0}'.format(self.path_model_xml_new))
+
+
     def summarize_fit_results(self):
         """Summarize the results after fitting and return a dictonary. The contents are the model parameters, photon flux, TS, return code.
 """
         # Model parameters
         if self.target.spectraltype=='PowerLaw':
             model_pars = ('Prefactor', 'Index', 'Scale')
+        elif self.target.spectraltype=='PowerLaw2':
+            model_pars = ('Integral', 'Index', 'LowerLimit', 'UpperLimit')
         elif self.target.spectraltype=='ExpCutoff':
             model_pars = ('Prefactor', 'Index', 'Scale', 'Ebreak', 'P1', 'P2', 'P3')
         for name_param in model_pars:
@@ -638,15 +824,19 @@ class AnalysisConfig:
     def eval_limits_powerlaw(self, emin=None, emax=None, eref=None, str_index_fixed=['best', 'free']):
         e0 = emin if emin is not None else self.emin_eval
         e1 = emax if emax is not None else self.emax_eval
-        e2 = eref if eref is not None else self.target.spectralpars['Scale']
+        e2 = eref if (eref is not None or self.target.spectraltype!='PowerLaw') else self.target.spectralpars['Scale']
 
         # Normalization parameter
-        norm_name = 'Prefactor'
+        if self.target.spectraltype=='PowerLaw':
+            norm_name = 'Prefactor'
+        elif self.target.spectraltype=='PowerLaw2':
+            norm_name = 'Integral'
+
         norm_value = self.like.model[self.target.name].funcs['Spectrum'].getParam(norm_name).value()
         norm_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(norm_name).error()
         norm_idx = self.like.par_index(self.target.name, norm_name)
         logx_lowest = -4.0
-        logx_highest = 4.0 #max(2.0, 2*norm_error/norm_value)
+        logx_highest = max(4.0, 1+np.log10(norm_error/norm_value))
         nx = min(100, 10 * (logx_highest-logx_lowest))
         xvals = max(norm_value, norm_error) * 10 ** np.linspace(logx_lowest, logx_highest, nx)
         logger.info('Normarization = {0} +/- {1}'.format(norm_value, norm_error))
@@ -655,8 +845,10 @@ class AnalysisConfig:
             xvals = 10 ** np.linspace(-20, 0, 100)
         #xvals = np.insert(xvals, 0, 0.0)
         if norm_value<min(xvals):
-            xvals = np.insert(xvals, 0, norm_value)
-            xvals = np.insert(xvals, 0, norm_value*0.1)
+            xvals_inter = 10 ** np.linspace(np.log(norm_value), np.log10(min(xvals)), (np.log10(min(xvals))-np.log(norm_value))*5.+1 )
+            xvals_infra = 10 ** np.linspace(np.log(norm_value)-2, np.log(norm_value), 11)
+            xvals = np.insert(xvals, 0, xvals_inter[:-1])
+            xvals = np.insert(xvals, 0, xvals_infra[:-1])
         if norm_value>max(xvals):
             xvals = np.insert(xvals, len(xvals), norm_value)
             xvals = np.insert(xvals, len(xvals), norm_value*10)
@@ -696,22 +888,23 @@ class AnalysisConfig:
         for str_index_assumed in str_index_fixed:
             logger.info('Index = {idxa} ({st}) is assumed.'.format(idxa=index_values[str_index_assumed], st=str_index_assumed))
 
-            cl_1sigma = 1.
-            cl_2sigma = 4.
+            cl_1sigma = 0.6827 #1.
+            cl_2sigma = 0.9545#4.
             if str_index_assumed=='free':
                 cl_1sigma = 0.87063
                 cl_2sigma = 0.96821
                 
-            v0['dnde'] = norm_value * (e2 / self.target.spectralpars['Scale']) ** index_values[str_index_assumed]
-            v0['e2dnde'] = v0['dnde'] * e2 * e2
-            if not index_values[str_index_assumed]==index_values[str_index_assumed]:
-                logger.error('Index value is NOT valid!!! {0}'.format(index_values[str_index_assumed]))
-                sys.exit(1)
-            self.like[index_idx] = index_values[str_index_assumed]
-            if str_index_assumed == 'free':
-                self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[index_idx:index_idx+1], value=1)
-            else:
-                self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[index_idx:index_idx+1], value=0)
+            if self.target.spectraltype=='PowerLaw':
+                v0['dnde'] = norm_value * (e2 / self.target.spectralpars['Scale']) ** index_values[str_index_assumed]
+                v0['e2dnde'] = v0['dnde'] * e2 * e2
+                if not index_values[str_index_assumed]==index_values[str_index_assumed]:
+                    logger.error('Index value is NOT valid!!! {0}'.format(index_values[str_index_assumed]))
+                    sys.exit(1)
+                self.like[index_idx] = index_values[str_index_assumed]
+                if str_index_assumed == 'free':
+                    self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[index_idx:index_idx+1], value=1)
+                else:
+                    self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[index_idx:index_idx+1], value=0)
             o[str_index_assumed] = {'xvals': xvals,
                                     'dloglike': np.zeros(len(xvals)),
                                     'loglike': np.zeros(len(xvals))
@@ -719,7 +912,6 @@ class AnalysisConfig:
             limits[str_index_assumed] = {}
             # Loop for profiling of normalization
             for i, x in enumerate(xvals):
-                logger.debug('No.{ip} normalization factor = {xval}'.format(ip=i, xval=x))
                 self.like[norm_idx] = x
                 self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[norm_idx:norm_idx+1], value=0)
                 #index_fit = index_values[str_index_assumed]
@@ -733,6 +925,7 @@ class AnalysisConfig:
                         sys.exit(1)
                 else:
                     loglike1 = -self.like()
+                logger.debug('No.{ip} normalization factor = {xval:.3E}, expected count = {nph}, loglikelihood = {ll:.3E}'.format(ip=i, xval=x, nph=self.like._npredValues(), ll=loglike1)) #NpredValue(self.target.name)))
                 o[str_index_assumed]['dloglike'][i] = loglike1 - loglike0
                 o[str_index_assumed]['loglike'][i] = loglike1
 
@@ -740,14 +933,15 @@ class AnalysisConfig:
             if str_index_assumed=='free' and failed_freeIndex==True:
                 break
             limits[str_index_assumed]['norm'] = get_parameter_limits(xval=xvals, loglike=o[str_index_assumed]['dloglike'], cl_limit=cl_2sigma, cl_err=cl_1sigma)
-            for item in ('flux', 'eflux', 'dnde', 'e2dnde'):
-                limits[str_index_assumed][item] = {}
-                limits[str_index_assumed][item]['x0'] = v0[item] * limits[str_index_assumed]['norm']['x0'] / norm_value
-                limits[str_index_assumed][item]['err_lo'] = v0[item] * limits[str_index_assumed]['norm']['err_lo'] / norm_value
-                limits[str_index_assumed][item]['err_hi'] = v0[item] * limits[str_index_assumed]['norm']['err_hi'] / norm_value
-                limits[str_index_assumed][item]['ul'] = v0[item] * limits[str_index_assumed]['norm']['ul'] / norm_value
-                limits[str_index_assumed][item]['ll'] = v0[item] * limits[str_index_assumed]['norm']['ll'] / norm_value
-                limits[str_index_assumed][item]['err'] = v0[item] * limits[str_index_assumed]['norm']['err'] / norm_value
+            if self.target.spectraltype=='PowerLaw':
+                for item in ('flux', 'eflux', 'dnde', 'e2dnde'):
+                    limits[str_index_assumed][item] = {}
+                    limits[str_index_assumed][item]['x0'] = v0[item] * limits[str_index_assumed]['norm']['x0'] / norm_value
+                    limits[str_index_assumed][item]['err_lo'] = v0[item] * limits[str_index_assumed]['norm']['err_lo'] / norm_value
+                    limits[str_index_assumed][item]['err_hi'] = v0[item] * limits[str_index_assumed]['norm']['err_hi'] / norm_value
+                    limits[str_index_assumed][item]['ul'] = v0[item] * limits[str_index_assumed]['norm']['ul'] / norm_value
+                    limits[str_index_assumed][item]['ll'] = v0[item] * limits[str_index_assumed]['norm']['ll'] / norm_value
+                    limits[str_index_assumed][item]['err'] = v0[item] * limits[str_index_assumed]['norm']['err'] / norm_value
 
         self.dct_summary_results['limits'] = limits
         return limits
@@ -755,14 +949,14 @@ class AnalysisConfig:
 
 
 class GRBConfig(AnalysisConfig):
-    def __init__(self, target, phase, tstop=10000., emin=100., emax=100000., evclass=128, evtype=3, ft2interval=None, deg_roi=12., zmax=100., index_fixed=None, suffix='', tmin_special=None, tmax_special=None, emin_fit=None, emax_fit=None, emin_eval=None, emax_eval=None, psForce=False):
+    def __init__(self, target, phase, tstop=10000., emin=100., emax=100000., evclass=128, evtype=3, ft2interval=None, deg_roi=12., zmax=100., index_fixed=None, suffix='', tmin_special=None, tmax_special=None, emin_fit=None, emax_fit=None, emin_eval=None, emax_eval=None, binned=False, psForce=False):
 
         self.phase = phase
         # Set FT2 interval
         if not ft2interval in ('1s', '30s'):
-            if self.phase in ('prompt', 'lightcurve'):
+            if self.phase in ('prompt', 'lightcurve', 'primary', 'intermittent'):
                 ft2interval = '1s'
-            elif self.phase in ('afterglow', 'unified', 'earlyAG', 'lateAG', 'farAG'):
+            elif self.phase in ('afterglow', 'unified', 'earlyAG', 'lateAG', 'farAG', 'T95to01ks', 'T95to03ks', '01ksto10ks', '03ksto10ks'):
                 ft2interval = '30s'
             elif self.phase in ('special', 'lightcurve'):
                 if tmin_special==None or tmax_special==None:
@@ -780,17 +974,23 @@ class GRBConfig(AnalysisConfig):
         else:
             print 'Target T90:', target.t90
             tphase = define_timephase(target, self.phase, tstop)
+            if tphase is (None, None):
+                logger.warning('Time phase is NOT valid!')
+                tphase = (0,0)
+            elif  self.phase=='intermittent' and tphase[0]+10.>=tphase[1]:
+                logger.warning('Time phase ("intermittent") is shorter than 10s!')
+                tphase = (0,0)
             logger.debug('Time window:{0}'.format(tphase))
             tmin, tmax = tphase
 
-        AnalysisConfig.__init__(self, target, emin=emin, emax=emax, tmin=tmin, tmax=tmax, evclass=128, evtype=3, ft2interval=ft2interval, deg_roi=deg_roi, zmax=zmax, index_fixed=index_fixed, suffix=suffix, emin_fit=emin_fit, emax_fit=emax_fit, emin_eval=emin_eval, emax_eval=emax_eval, psForce=psForce)
+        AnalysisConfig.__init__(self, target, emin=emin, emax=emax, tmin=tmin, tmax=tmax, evclass=128, evtype=3, ft2interval=ft2interval, deg_roi=deg_roi, zmax=zmax, index_fixed=index_fixed, suffix=suffix, emin_fit=emin_fit, emax_fit=emax_fit, emin_eval=emin_eval, emax_eval=emax_eval, binned=binned, psForce=psForce)
 
         # Reassign work directory
         self.str_time = 'T{0:0>9.0f}-{1:0>9.0f}ms'.format(self.tmin*1000, self.tmax*1000)
         if self.phase in ('lightcurve', 'special'):
-            self.dir_work = '{base}/{target}/{energy}/{roi}/{phase}/{time}/{spectype}/{index}'.format(base=PATH_BASEDIR, target=self.target.name, energy=self.str_energy, roi=self.str_roi, phase=self.phase, time=self.str_time, spectype=self.target.spectraltype, index=self.str_index)
+            self.dir_work = '{base}/{target}/{energy}/{roi}/{phase}/{time}/{spectype}/{binned}'.format(base=PATH_BASEDIR, target=self.target.name, energy=self.str_energy, roi=self.str_roi, phase=self.phase, time=self.str_time, spectype=self.target.spectraltype, binned=self.str_binned) #index=self.str_index)
         else:
-            self.dir_work = '{base}/{target}/{energy}/{roi}/{phase}/{spectype}/{index}'.format(base=PATH_BASEDIR, target=self.target.name, energy=self.str_energy, roi=self.str_roi, phase=self.phase, spectype=self.target.spectraltype, index=self.str_index)
+            self.dir_work = '{base}/{target}/{energy}/{roi}/{phase}/{spectype}/{binned}'.format(base=PATH_BASEDIR, target=self.target.name, energy=self.str_energy, roi=self.str_roi, phase=self.phase, spectype=self.target.spectraltype, binned=self.str_binned)#, index=self.str_index)
 
 
     def download(self, bforce=False):
@@ -837,7 +1037,14 @@ class GRBConfig(AnalysisConfig):
         ax_cspec_fit[0].loglog(x_cspec_fit, y_model_all,label='Total model')
         ax_cspec_fit[0].loglog(x_cspec_fit, y_model_target,label=self.target.name)
         ax_cspec_fit[0].loglog(x_cspec_fit, y_model_others,label='Sum of other sources')
-        ax_cspec_fit[0].errorbar(x_cspec_fit, self.like._Nobs(),yerr=np.sqrt(self.like._Nobs()), fmt='o',label='Counts')
+        if self.binned==True:
+            fccube = fits.open(self.path_ccube)
+            tbccube = fccube[0].data
+            y_obs = np.array([ sum(sum(tbe)) for tbe in tbccube ])
+        else:
+            y_obs = self.like._Nobs()
+        yerr_obs = np.sqrt(y_obs)
+        ax_cspec_fit[0].errorbar(x_cspec_fit, y_obs, yerr=yerr_obs, fmt='o',label='Counts')
         ax_cspec_fit[0].legend(loc=0, fontsize=12, fancybox=True, framealpha=0.5)
         ax_cspec_fit[0].set_xlabel('Energy [MeV]')
         ax_cspec_fit[0].set_ylabel('[counts]')
@@ -869,13 +1076,20 @@ def define_timephase(target, phase, tstop=10000.):
     print 'Target T90:', target.t90
     print 'Target T95:', target.t95
     # Check phase argement
-    if not phase in ("unified", "prompt", "afterglow", "earlyAG", "lateAG", "farAG"):
-        logger.critical('Phase {0} is NOT avalable!!! Use "unified", "prompt", "afterglow", "earlyAG", "lateAG", "farAG".')
+    if not phase in ("unified", "prompt", "primary", "intermittent", "afterglow", "earlyAG", "lateAG", "farAG", "T95to01ks", "01ksto10ks", "T95to03ks", "03ksto10ks"):
+        logger.critical('Phase {0} is NOT avalable!!! Use "unified", "prompt", "afterglow", "earlyAG", "lateAG", "farAG", "T95to01ks", "01ksto10ks", "T95to03ks", "03ksto10ks".')
         sys.exit(1)
     logger.debug(phase)
     tmid_afterglow = target.t95+2.*target.t90
     if phase == 'prompt':
         return (0., target.t95)
+    elif phase == 'primary':
+        return (0., target.t25+1.5*target.t50)
+    elif phase == 'intermittent':
+        if target.t25+1.5*target.t50 < target.t95:
+            return (target.t25+1.5*target.t50, target.t95)
+        else:
+            return (None, None)
     elif phase == 'afterglow':
         return (target.t95, tstop)
     elif phase == 'earlyAG':
@@ -888,5 +1102,13 @@ def define_timephase(target, phase, tstop=10000.):
             sys.exit(1)
     elif phase == 'farAG':
         return (tstop, 100000.)
+    elif phase == "T95to01ks":
+        return (target.t95, target.t95+1000.)
+    elif phase == "01ksto10ks":
+        return (target.t95+1000., 10000.)
+    elif phase == "T95to03ks":
+        return (target.t95, target.t95+3000.)
+    elif phase == "03ksto10ks":
+        return (target.t95+3000., 10000.)
     elif phase == 'unified':
         return (0., tstop)
