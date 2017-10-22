@@ -19,6 +19,7 @@ import pickle_utilities
 import pMatplot
 from pLsList import ls_list
 import ReadLTFCatalogueInfo
+import ReadGBMCatalogueInfo
 from STLikelihoodAnalysis import get_module_logger
 
 
@@ -52,12 +53,17 @@ def plot_grbs_deviation(lst_path_pickle, path_table, path_out):
     # string for x/y-axis label
     #str_allgrbs = '{phs} of {nall} long-GRBs'.format(phs=PHASE.capitalize(), nall=lst_ngrb_valid[0])
     str_fluence_gbm = r'GBM fluence $[\mathrm{{erg/cm^2}}]$'
+    str_flux1024_gbm = r'GBM flux for 1024 ms $[\mathrm{{erg/cm^2/s}}]$'
+    str_flux64_gbm = r'GBM flux for 64 ms $[\mathrm{{erg/cm^2/s}}]$'
     str_index_lower_energies = 'Index in {emin:3.3f} - {emax:3.3f} GeV'.format(emin=EMIN_FIT/1000, emax=EMAX_FIT/1000)
     str_t90_gbm = 'GBM T90 [s]'
+    str_t50_gbm = 'GBM T50 [s]'
     str_index_whole_energies = 'Index in {emin:3.3f} - {emax:3.3f} GeV'.format(emin=EMIN_FIT/1000, emax=EMAX_EXTRA/1000)
     str_deviation = r'Deviation in {emin:3.0f} - {emax:3.0f} GeV $\mathrm{{[\sigma]}}$'.format(emin=EMIN_EXTRA/1000, emax=EMAX_EXTRA/1000)
+    str_flux_lower_energies = r'Flux in {emin:3.3f} - {emax:3.3f} GeV $\mathrm{{[/cm^2 s]}}$'.format(emin=EMIN_FIT/1000, emax=EMAX_FIT/1000)
     str_flux_whole_energies = r'Flux in {emin:3.3f} - {emax:3.0f} GeV $\mathrm{{[/cm^2 s]}}$'.format(emin=EMIN_FIT/1000, emax=EMAX_EXTRA/1000)
     str_flux_highest_energies = r'Flux in {emin:3.0f} - {emax:3.0f} GeV $\mathrm{{[/cm^2 s]}}$'.format(emin=EMIN_EXTRA/1000, emax=EMAX_EXTRA/1000)
+    str_hardnessratio = r'Hardness ratio between {hemin:3.0f}-{hemax:3.0f}GeV / {lemin:3.1f}-{lemax:3.1f} GeV'.format(hemin=EMIN_EXTRA/1000, hemax=EMAX_EXTRA/1000, lemin=EMIN_FIT/1000, lemax=EMAX_FIT/1000)
     str_nobs_highest_energies = 'Observed photon number in {emin:3.0f} - {emax:3.0f} GeV [counts]'.format(emin=EMIN_EXTRA/1000, emax=EMAX_EXTRA/1000)
     str_npred_all_highest_energies = 'Predicted photon number in {emin:3.0f} - {emax:3.0f} GeV [counts]'.format(emin=EMIN_EXTRA/1000, emax=EMAX_EXTRA/1000)
     str_flux_highest_energies_per_fluence_gbm = 'Flux in {emin:3.0f} - {emax:3.0f} GeV / GBM fluence'.format(emin=EMIN_EXTRA/1000, emax=EMAX_EXTRA/1000)
@@ -71,11 +77,20 @@ def plot_grbs_deviation(lst_path_pickle, path_table, path_out):
     lst_fluence_gbm = []
     lst_fluence_gbm_err = []
 
+    lst_flux1024_gbm = []
+    lst_flux1024_gbm_err = []
+
+    lst_flux64_gbm = []
+    lst_flux64_gbm_err = []
+
     lst_t90_gbm = []
     lst_t90_gbm_err = []
 
     lst_index_lower_energies = []
     lst_index_err_lower_energies = []
+
+    lst_flux_lower_energies = []
+    lst_flux_err_lower_energies = []
 
     lst_index_whole_energies = []
     lst_index_err_whole_energies = []
@@ -90,6 +105,11 @@ def plot_grbs_deviation(lst_path_pickle, path_table, path_out):
     lst_flux_ul_highest_energies = []
     lst_flux_err_lo_highest_energies = []
     lst_flux_err_hi_highest_energies = []
+
+    # lst_hardnessratio = []
+    # lst_hardnessratio_err_lo = []
+    # lst_hardnessratio_err_hi = []
+    # lst_hardnessratio_ul = []
 
     lst_nobs_highest_energies = []
     lst_npred_all_highest_energies = []
@@ -110,11 +130,20 @@ def plot_grbs_deviation(lst_path_pickle, path_table, path_out):
         lst_fluence_gbm.append([])
         lst_fluence_gbm_err.append([])
 
+        lst_flux1024_gbm.append([])
+        lst_flux1024_gbm_err.append([])
+
+        lst_flux64_gbm.append([])
+        lst_flux64_gbm_err.append([])
+
         lst_t90_gbm.append([])
         lst_t90_gbm_err.append([])
 
         lst_index_lower_energies.append([])
         lst_index_err_lower_energies.append([])
+
+        lst_flux_lower_energies.append([])
+        lst_flux_err_lower_energies.append([])
 
         lst_index_whole_energies.append([])
         lst_index_err_whole_energies.append([])
@@ -129,6 +158,11 @@ def plot_grbs_deviation(lst_path_pickle, path_table, path_out):
         lst_flux_ul_highest_energies.append([])
         lst_flux_err_lo_highest_energies.append([])
         lst_flux_err_hi_highest_energies.append([])
+
+        # lst_hardnessratio.append([])
+        # lst_hardnessratio_ul.append([])
+        # lst_hardnessratio_err_lo.append([])
+        # lst_hardnessratio_err_hi.append([])
 
         lst_nobs_highest_energies.append([])
         lst_npred_all_highest_energies.append([])
@@ -178,11 +212,20 @@ def plot_grbs_deviation(lst_path_pickle, path_table, path_out):
                 lst_fluence_gbm[icat].append(tb1['FLUENCE'])
                 lst_fluence_gbm_err[icat].append(tb1['FLUENCE_ERROR'])
 
+                lst_flux1024_gbm[icat].append(tb1['FLUX_1024'])
+                lst_flux1024_gbm_err[icat].append(tb1['FLUX_1024_ERROR'])
+
+                lst_flux64_gbm[icat].append(tb1['FLUX_64'])
+                lst_flux64_gbm_err[icat].append(tb1['FLUX_64_ERROR'])
+
                 lst_t90_gbm[icat].append(tb1['T90'])
                 lst_t90_gbm_err[icat].append(tb1['T90_ERROR'])
 
                 lst_index_lower_energies[icat].append(d['lower_energies']['Index']['value'])
                 lst_index_err_lower_energies[icat].append(d['lower_energies']['Index']['error'])
+
+                lst_flux_lower_energies[icat].append(d['lower_energies']['flux']['value'])
+                lst_flux_err_lower_energies[icat].append(d['lower_energies']['flux']['error'])
 
                 lst_index_whole_energies[icat].append(d['whole_energies']['Index']['value'])
                 lst_index_err_whole_energies[icat].append(d['whole_energies']['Index']['error'])
@@ -202,15 +245,14 @@ def plot_grbs_deviation(lst_path_pickle, path_table, path_out):
                 xmesh, ymesh = np.meshgrid(xscan, yscan)
                 lst_index_scanned[icat].append(xmesh)
                 lst_dev_scanned[icat].append(d['scan']['highest_energies']['TS']*d['scan']['highest_energies']['sign'])
-                logger.debug("""
-TS of deviation from power-law:""")
-                logger.debug(lst_dev_scanned[icat][-1])
+                #logger.debug("""TS of deviation from power-law:""")
+                #logger.debug(lst_dev_scanned[icat][-1])
 
                 # Load light curve
-                if 'index' in lc['fit']['flux']['afterglow']:
+                if 'index' in lc['fit']['flux']['lightcurve']:
                     lst_bool_lightcurve[icat].append(1)
-                    lst_lightcurve_index[icat].append(lc['fit']['flux']['afterglow']['index']['value'])
-                    lst_lightcurve_index_err[icat].append(lc['fit']['flux']['afterglow']['index']['error'])
+                    lst_lightcurve_index[icat].append(lc['fit']['flux']['lightcurve']['index']['value'])
+                    lst_lightcurve_index_err[icat].append(lc['fit']['flux']['lightcurve']['index']['error'])
                 else:
                     lst_bool_lightcurve[icat].append(0)
 
@@ -218,10 +260,17 @@ TS of deviation from power-law:""")
                     lst_flux_highest_energies[icat].append(d['highest_energies']['flux']['value'])
                     lst_flux_err_lo_highest_energies[icat].append(d['highest_energies']['limits']['best']['flux']['err_lo']-d['highest_energies']['limits']['best']['flux']['x0']+d['highest_energies']['flux']['value'])
                     lst_flux_err_hi_highest_energies[icat].append(d['highest_energies']['limits']['best']['flux']['err_hi']-d['highest_energies']['limits']['best']['flux']['x0']+d['highest_energies']['flux']['value'])
+
                     lst_bool_flux_finite_highest_energies[icat].append(1)
+
+                    #lst_hardnessratio[icat].append(d['highest_energies']['flux']['value'])
+                    #lst_hardnessratio_err_lo[icat].append(d['highest_energies']['limits']['best']['flux']['err_lo']-d['highest_energies']['limits']['best']['flux']['x0']+d['highest_energies']['flux']['value'])
+                    #lst_hardnessratio_err_hi[icat].append(d['highest_energies']['limits']['best']['flux']['err_hi']-d['highest_energies']['limits']['best']['flux']['x0']+d['highest_energies']['flux']['value'])
+
                 elif d['highest_energies']['limits']['best']['flux']['ul']==d['highest_energies']['limits']['best']['flux']['ul']:
                     lst_flux_ul_highest_energies[icat].append(d['highest_energies']['limits']['best']['flux']['ul'])
                     lst_bool_flux_finite_highest_energies[icat].append(0)
+                    #lst_hardnessratio_ul[icat].append(d['highest_energies']['limits']['best']['flux']['ul'])
                 else:
                     logger.warning('GRB{name} does NOT have valid flux value or UL!!'.format(name=name))
 
@@ -241,6 +290,9 @@ TS of deviation from power-law:""")
     indices_lower_energies = []
     indices_err_lower_energies = []
 
+    fluxes_lower_energies = []
+    fluxes_err_lower_energies = []
+
     indices_whole_energies = []
     indices_err_whole_energies = []
 
@@ -253,6 +305,12 @@ TS of deviation from power-law:""")
     #fluences_gbm_hiEu = []
     #fluences_gbm_err_hiEu = []
 
+    flux1024_gbm = []
+    flux1024_gbm_err = []
+
+    flux64_gbm = []
+    flux64_gbm_err = []
+
     t90_gbm = []
     t90_gbm_err = []
 
@@ -264,6 +322,11 @@ TS of deviation from power-law:""")
     fluxes_err_lo_highest_energies = []
     fluxes_err_hi_highest_energies = []
     fluxes_ul_highest_energies = []
+
+    # hardnessratio = []
+    # hardnessratio_err_lo = []
+    # hardnessratio_err_hi = []
+    # hardnessratio_ul = []
 
     nobs_highest_energies = []
     npred_all_highest_energies = []
@@ -287,16 +350,26 @@ TS of deviation from power-law:""")
     dp_flux_ul_highest_energies_per_fluence_gbm_vs_fluence_gbm = []
     dp_index_whole_energies = []
     dp_index_whole_energies_vs_t90_gbm = []
+    dp_index_whole_energies_vs_flux1024_gbm = []
     dp_deviation_vs_fluence_gbm_vs_index_lower_energies = []
     dp_index_whole_energies_vs_nobs_highest_energies_vs_flux_whole_energies_vs_fluence_gbm = []
     dp_index_whole_energies_vs_nobs_highest_energies_vs_npred_all_highest_energies = []
     dp_index_whole_energies_vs_fluence_gbm_vs_nobs_highest_energies_vs_npred_all_highest_energies = []
     dp_index_whole_energies_vs_fluence_gbm = []
     dp_flux_whole_energies_vs_fluence_gbm = []
+    dp_flux_whole_energies_vs_flux1024_gbm = []
     dp_lightcurve_index = []
     dp_lightcurve_index_vs_spectral_index = []
     dp_flux_highest_energies_vs_lightcurve_index = []
     dp_flux_ul_highest_energies_vs_lightcurve_index = []
+    dp_flux_highest_energies_vs_flux1024_gbm = []
+    dp_flux_ul_highest_energies_vs_flux1024_gbm = []
+    dp_flux_highest_energies_vs_flux_lower_energies = []
+    dp_flux_ul_highest_energies_vs_flux_lower_energies = []
+    dp_hardnessratio_vs_fluence_gbm = []
+    dp_hardnessratio_ul_vs_fluence_gbm = []
+    dp_hardnessratio_vs_flux1024_gbm = []
+    dp_hardnessratio_ul_vs_flux1024_gbm = []
 #    dp_nobs_highest_energies_vs_npred_all_highest_energies_vs_
     #dp_ts_scanned = []
 
@@ -305,6 +378,9 @@ TS of deviation from power-law:""")
         indices_lower_energies.append(np.array(lst_index_lower_energies[icat]))
         indices_err_lower_energies.append(np.array(lst_index_err_lower_energies[icat]))
 
+        fluxes_lower_energies.append(np.array(lst_flux_lower_energies[icat]))
+        fluxes_err_lower_energies.append(np.array(lst_flux_err_lower_energies[icat]))
+
         indices_whole_energies.append(np.array(lst_index_whole_energies[icat]))
         indices_err_whole_energies.append(np.array(lst_index_err_whole_energies[icat]))
 
@@ -312,6 +388,12 @@ TS of deviation from power-law:""")
 
         fluences_gbm.append(np.array(lst_fluence_gbm[icat]))
         fluences_gbm_err.append(np.array(lst_fluence_gbm_err[icat]))
+
+        flux1024_gbm.append(np.array(lst_flux1024_gbm[icat]))
+        flux1024_gbm_err.append(np.array(lst_flux1024_gbm_err[icat]))
+
+        flux64_gbm.append(np.array(lst_flux64_gbm[icat]))
+        flux64_gbm_err.append(np.array(lst_flux64_gbm_err[icat]))
 
         t90_gbm.append(np.array(lst_t90_gbm[icat]))
         t90_gbm_err.append(np.array(lst_t90_gbm_err[icat]))
@@ -324,6 +406,11 @@ TS of deviation from power-law:""")
         fluxes_err_lo_highest_energies.append(np.array(lst_flux_err_lo_highest_energies[icat]))
         fluxes_err_hi_highest_energies.append(np.array(lst_flux_err_hi_highest_energies[icat]))
         fluxes_ul_highest_energies.append(np.array(lst_flux_ul_highest_energies[icat]))
+
+        # hardnessratio.append(np.array(lst_flux_highest_energies[icat]))
+        # hardnessratio_err_lo.append(np.array(lst_flux_err_lo_highest_energies[icat]))
+        # hardnessratio_err_hi.append(np.array(lst_flux_err_hi_highest_energies[icat]))
+        # hardnessratio_ul.append(np.array(lst_flux_ul_highest_energies[icat]))
 
         nobs_highest_energies.append(np.array(lst_nobs_highest_energies[icat]))
         npred_all_highest_energies.append(np.array(lst_npred_all_highest_energies[icat]))
@@ -340,6 +427,8 @@ TS of deviation from power-law:""")
         dp_deviation_vs_fluence_gbm.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', xdata=fluences_gbm[icat], ydata=deviations_ts[icat], xdata_err=fluences_gbm_err[icat]))
 
         dp_flux_whole_energies_vs_fluence_gbm.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', xdata=fluences_gbm[icat], ydata=fluxes_whole_energies[icat], xdata_err=fluences_gbm_err[icat], ydata_err=[fluxes_err_lo_whole_energies[icat], fluxes_err_hi_whole_energies[icat]]))
+
+        dp_flux_whole_energies_vs_flux1024_gbm.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', xdata=flux1024_gbm[icat], ydata=fluxes_whole_energies[icat], xdata_err=flux1024_gbm_err[icat], ydata_err=[fluxes_err_lo_whole_energies[icat], fluxes_err_hi_whole_energies[icat]]))
 
         dp_deviation_vs_fluence_gbm_vs_index_lower_energies.append(pMatplot.Data_plotted(label=str_category, gr_type='scatter', xdata=indices_lower_energies[icat], ydata=fluences_gbm[icat], zdata=deviations_ts[icat]))
 
@@ -358,15 +447,18 @@ TS of deviation from power-law:""")
 
         dp_deviation.append(pMatplot.Data_plotted(label=str_category, gr_type='hist', xdata=deviations_ts[icat]))
 
-        dp_flux_highest_energies_vs_fluence_gbm.append(pMatplot.Data_plotted(label=str_category, 
-                                                                             gr_type='errorbar', 
-                                                                             xdata=np.array([f for f in bools_flux_finite_highest_energies[icat]*fluences_gbm[icat] if f>0]), ydata=fluxes_highest_energies[icat], xdata_err=np.array([f for f in bools_flux_finite_highest_energies[icat]*fluences_gbm_err[icat] if f>0]), 
-                                                                             ydata_err=[fluxes_err_lo_highest_energies[icat], fluxes_err_hi_highest_energies[icat]]))
-        dp_flux_ul_highest_energies_vs_fluence_gbm.append(pMatplot.Data_plotted(label=str_category+' UL', 
-                                                                                gr_type='errorbar', 
-                                                                                xdata=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*fluences_gbm[icat] if f>0]), 
-                                                                                ydata=fluxes_ul_highest_energies[icat], xdata_err=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*fluences_gbm_err[icat] if f>0]), 
-                                                                                ul=True))
+        dp_flux_highest_energies_vs_fluence_gbm.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', xdata=np.array([f for f in bools_flux_finite_highest_energies[icat]*fluences_gbm[icat] if f>0]), ydata=fluxes_highest_energies[icat], xdata_err=np.array([f for f in bools_flux_finite_highest_energies[icat]*fluences_gbm_err[icat] if f>0]), ydata_err=[fluxes_err_lo_highest_energies[icat], fluxes_err_hi_highest_energies[icat]]))
+        dp_flux_ul_highest_energies_vs_fluence_gbm.append(pMatplot.Data_plotted(label=str_category+' UL', gr_type='errorbar', xdata=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*fluences_gbm[icat] if f>0]), ydata=fluxes_ul_highest_energies[icat], xdata_err=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*fluences_gbm_err[icat] if f>0]), ul=True))
+
+        dp_flux_highest_energies_vs_flux_lower_energies.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', xdata=np.array([f for f in bools_flux_finite_highest_energies[icat]*fluxes_lower_energies[icat] if f>0]), ydata=fluxes_highest_energies[icat], xdata_err=np.array([f for f in bools_flux_finite_highest_energies[icat]*fluxes_err_lower_energies[icat] if f>0]), ydata_err=[fluxes_err_lo_highest_energies[icat], fluxes_err_hi_highest_energies[icat]]))
+        dp_flux_ul_highest_energies_vs_flux_lower_energies.append(pMatplot.Data_plotted(label=str_category+' UL', gr_type='errorbar', xdata=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*fluxes_lower_energies[icat] if f>0]), ydata=fluxes_ul_highest_energies[icat], xdata_err=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*fluxes_err_lower_energies[icat] if f>0]), ul=True))
+
+        dp_hardnessratio_vs_fluence_gbm.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', xdata=np.array([f for f in bools_flux_finite_highest_energies[icat]*fluences_gbm[icat] if f>0]), ydata=fluxes_highest_energies[icat]/np.array([f for f in bools_flux_finite_highest_energies[icat]*fluxes_lower_energies[icat] if f>0]), xdata_err=np.array([f for f in bools_flux_finite_highest_energies[icat]*fluences_gbm_err[icat] if f>0]), ydata_err=[fluxes_err_lo_highest_energies[icat]/np.array([f for f in bools_flux_finite_highest_energies[icat]*fluxes_lower_energies[icat] if f>0]), fluxes_err_hi_highest_energies[icat]/np.array([f for f in bools_flux_finite_highest_energies[icat]*fluxes_lower_energies[icat] if f>0])]))
+        dp_hardnessratio_ul_vs_fluence_gbm.append(pMatplot.Data_plotted(label=str_category+' UL', gr_type='errorbar', xdata=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*fluences_gbm[icat] if f>0]), ydata=fluxes_ul_highest_energies[icat]/np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*fluxes_lower_energies[icat] if f>0]), xdata_err=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*fluences_gbm_err[icat] if f>0]), ul=True))
+
+        dp_hardnessratio_vs_flux1024_gbm.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', xdata=np.array([f for f in bools_flux_finite_highest_energies[icat]*flux1024_gbm[icat] if f>0]), ydata=fluxes_highest_energies[icat]/np.array([f for f in bools_flux_finite_highest_energies[icat]*fluxes_lower_energies[icat] if f>0]), xdata_err=np.array([f for f in bools_flux_finite_highest_energies[icat]*flux1024_gbm_err[icat] if f>0]), ydata_err=[fluxes_err_lo_highest_energies[icat]/np.array([f for f in bools_flux_finite_highest_energies[icat]*fluxes_lower_energies[icat] if f>0]), fluxes_err_hi_highest_energies[icat]/np.array([f for f in bools_flux_finite_highest_energies[icat]*fluxes_lower_energies[icat] if f>0])]))
+        dp_hardnessratio_ul_vs_flux1024_gbm.append(pMatplot.Data_plotted(label=str_category+' UL', gr_type='errorbar', xdata=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*flux1024_gbm[icat] if f>0]), ydata=fluxes_ul_highest_energies[icat]/np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*fluxes_lower_energies[icat] if f>0]), xdata_err=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*flux1024_gbm_err[icat] if f>0]), ul=True))
+
         dp_index_whole_energies.append(pMatplot.Data_plotted(label=str_category, gr_type='hist', xdata=indices_whole_energies[icat]))
 
         fluences_gbm_finite_flux_highest_energies = np.array([f for f in bools_flux_finite_highest_energies[icat]*fluences_gbm[icat] if f>0])
@@ -403,6 +495,12 @@ TS of deviation from power-law:""")
 
         dp_flux_ul_highest_energies_vs_lightcurve_index.append(pMatplot.Data_plotted(label='Flux UL', gr_type='errorbar', ydata=np.array([h for h in np.array([f for f, g in zip(bools_lightcurve[icat], bools_non_flux_finite_highest_energies[icat]) if g==1])*fluxes_ul_highest_energies[icat] if h!=0]), xdata=np.array([h for h in np.array([g for f, g in zip(bools_lightcurve[icat], bools_non_flux_finite_highest_energies[icat]) if f==1])*lightcurve_indices[icat] if h!=0]), xdata_err=np.array([h for h in np.array([g for f, g in zip(bools_lightcurve[icat], bools_non_flux_finite_highest_energies[icat]) if f==1])*lightcurve_indices_err[icat] if h!=0]), ul=True))
 
+        dp_flux_highest_energies_vs_flux1024_gbm.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', xdata=np.array([f for f in bools_flux_finite_highest_energies[icat]*flux1024_gbm[icat] if f>0]), ydata=fluxes_highest_energies[icat], xdata_err=np.array([f for f in bools_flux_finite_highest_energies[icat]*flux1024_gbm_err[icat] if f>0]), ydata_err=[fluxes_err_lo_highest_energies[icat], fluxes_err_hi_highest_energies[icat]]))
+        dp_flux_ul_highest_energies_vs_flux1024_gbm.append(pMatplot.Data_plotted(label=str_category+' UL', gr_type='errorbar', xdata=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*flux1024_gbm[icat] if f>0]), ydata=fluxes_ul_highest_energies[icat], xdata_err=np.array([f for f in (np.ones_like(bools_flux_finite_highest_energies[icat])-bools_flux_finite_highest_energies[icat])*flux1024_gbm_err[icat] if f>0]), ul=True))
+    #print 'Flux 1024:'
+    #print flux1024_gbm
+
+        dp_index_whole_energies_vs_flux1024_gbm.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', xdata=flux1024_gbm[icat], ydata=indices_whole_energies[icat], xdata_err=flux1024_gbm_err[icat], ydata_err=indices_err_whole_energies[icat]))
 #        dp_flux_ul_highest_energies_vs_lightcurve_index.append(pMatplot.Data_plotted(label=str_category, gr_type='errorbar', ydata=np.array([f for f in bools_lightcurve[icat]*bools_non_flux_finite_highest_energies[icat]*fluxes_ul_highest_energies[icat] if f!=0]), xdata=np.array([f for f in lightcurve_indices[icat]*bools_non_flux_finite_highest_energies[icat] if f!=0]), xdata_err=np.array([f for f in bools_non_flux_finite_highest_energies[icat]*lightcurve_indices_err[icat] if f!=0]), ul=True))
 
     # Fit index
@@ -428,6 +526,9 @@ TS of deviation from power-law:""")
 
     ps_flux_whole_energies_vs_fluence_gbm = pMatplot.Plot_single(dp_flux_whole_energies_vs_fluence_gbm[1:], xtitle=str_fluence_gbm, ytitle=str_flux_whole_energies, xlog=True, ylog=True)
     ps_flux_whole_energies_vs_fluence_gbm.plot(path_save='{dire}/fig_flux_whole_energies_vs_fluence_gbm'.format(dire=path_out))
+
+    ps_flux_whole_energies_vs_flux1024_gbm = pMatplot.Plot_single(dp_flux_whole_energies_vs_flux1024_gbm[1:], xtitle=str_flux1024_gbm, ytitle=str_flux_whole_energies, xlog=True, ylog=True)
+    ps_flux_whole_energies_vs_flux1024_gbm.plot(path_save='{dire}/fig_flux_whole_energies_vs_flux1024_gbm'.format(dire=path_out))
 
     ps_deviation_vs_fluence_gbm_vs_index_lower_energies = pMatplot.Plot_single((dp_deviation_vs_fluence_gbm_vs_index_lower_energies[0],), title=str_deviation, xtitle=str_index_lower_energies, ytitle=str_fluence_gbm, ylog=True)
     ps_deviation_vs_fluence_gbm_vs_index_lower_energies.plot(path_save='{dire}/fig_deviation_vs_fluence_gbm_vs_index_lower_energies'.format(dire=path_out))
@@ -456,6 +557,21 @@ TS of deviation from power-law:""")
     ps_flux_highest_energies_vs_fluence_gbm = pMatplot.Plot_single((dp_flux_highest_energies_vs_fluence_gbm[0], dp_flux_ul_highest_energies_vs_fluence_gbm[0]), xtitle=str_fluence_gbm, ytitle=str_flux_highest_energies, xlog=True, ylog=True)
 #    ps_flux_highest_energies_vs_fluence_gbm.plot(ylim=(1E-9, 2E-6), path_save='{dire}/fig_flux_highest_energies_vs_fluence_gbm'.format(dire=path_out))
     ps_flux_highest_energies_vs_fluence_gbm.plot(ylim=(0.1*min(fluxes_highest_energies[0]), min(1e-3, 2.*max(fluxes_ul_highest_energies[0]))), path_save='{dire}/fig_flux_highest_energies_vs_fluence_gbm'.format(dire=path_out))
+
+    ps_flux_highest_energies_vs_flux_lower_energies = pMatplot.Plot_single((dp_flux_highest_energies_vs_flux_lower_energies[0], dp_flux_ul_highest_energies_vs_flux_lower_energies[0]), xtitle=str_flux_lower_energies, ytitle=str_flux_highest_energies, xlog=True, ylog=True)
+    ps_flux_highest_energies_vs_flux_lower_energies.plot(ylim=(0.1*min(fluxes_highest_energies[0]), min(1e-3, 2.*max(fluxes_ul_highest_energies[0]))), path_save='{dire}/fig_flux_highest_energies_vs_flux_lower_energies'.format(dire=path_out))
+
+    ps_hardnessratio_vs_fluence_gbm = pMatplot.Plot_single((dp_hardnessratio_vs_fluence_gbm[0], dp_hardnessratio_ul_vs_fluence_gbm[0]), xtitle=str_fluence_gbm, ytitle=str_hardnessratio, xlog=True, ylog=True)
+    ps_hardnessratio_vs_fluence_gbm.plot(path_save='{dire}/fig_hardnessratio_vs_fluence_gbm'.format(dire=path_out))
+
+    ps_hardnessratio_vs_flux1024_gbm = pMatplot.Plot_single((dp_hardnessratio_vs_flux1024_gbm[0], dp_hardnessratio_ul_vs_flux1024_gbm[0]), xtitle=str_flux1024_gbm, ytitle=str_hardnessratio, xlog=True, ylog=True)
+    ps_hardnessratio_vs_flux1024_gbm.plot(path_save='{dire}/fig_hardnessratio_vs_flux1024_gbm'.format(dire=path_out))
+
+    ps_flux_highest_energies_vs_flux1024_gbm = pMatplot.Plot_single((dp_flux_highest_energies_vs_flux1024_gbm[0], dp_flux_ul_highest_energies_vs_flux1024_gbm[0]), xtitle=str_flux1024_gbm, ytitle=str_flux_highest_energies, xlog=True, ylog=True)
+    ps_flux_highest_energies_vs_flux1024_gbm.plot(path_save='{dire}/fig_flux_highest_energies_vs_flux1024_gbm'.format(dire=path_out))
+
+    ps_index_whole_energies_vs_flux1024_gbm = pMatplot.Plot_single((dp_index_whole_energies_vs_flux1024_gbm[0],), xtitle=str_flux1024_gbm, ytitle=str_index_whole_energies, xlog=True)
+    ps_index_whole_energies_vs_flux1024_gbm.plot(path_save='{dire}/fig_index_whole_energies_vs_flux1024_gbm'.format(dire=path_out))
 
     ps_index_whole_energies = pMatplot.Hist_single(dp_index_whole_energies[1:], xtitle=str_index_whole_energies)
     ps_index_whole_energies.plot(bins=25, range=(-3.5, -1), path_save='{dire}/fig_index_whole_energies'.format(dire=path_out))
