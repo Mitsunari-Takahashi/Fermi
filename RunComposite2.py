@@ -21,6 +21,7 @@ import numpy as np
 import itertools
 import gc
 import ReadLTFCatalogueInfo
+import ReadLATCatalogueInfo
 import ReadGBMCatalogueInfo
 from pLsList import ls_list
 import pickle_utilities
@@ -51,7 +52,7 @@ def judge_category_fluence(tb, name, lst_cut):
     return ncategory
 
 
-def get_category(chara, ncategory, path_dct='/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/LongGRBs/QuantiledGRBs.pickle'):
+def get_category(chara, ncategory, path_dct='/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/LongGRBs/QuantiledGRBs_longonly3_LC.pickle'):
     print 'Loading {0}...'.format(path_dct)
     dct = pickle_utilities.load(path_dct)
     if ncategory==0:
@@ -79,13 +80,15 @@ def correlate_external_pars(extpars, like, norm_value, targets_analyzed, npred, 
         tb_ltf_one = ReadLTFCatalogueInfo.select_one_by_name(tb_ltf, target)
         name_gbm = tb_ltf_one['GBM_assoc_key']
         tb_gbm_one = ReadGBMCatalogueInfo.select_one_by_name(tb_gbm, name_gbm)
+        tb_lat = ReadLATCatalogueIndo.open_table()
+        tb_lat_one = ReadLATCatalogueInfo.select_one_by_name(tb_gbm, target, tb_gbm)
 
         path_lat_result = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/{name}/Summary_{name}_afterglow_ver4.pickle'.format(name=target)
         lat_result = pickle_utilities.load(path_lat_result)
         if len(extpars)==1:
             extpar = extpars[0]
             if extpar in ('gbm_fluence', 'gbm_t90', 'gbm_flux1024', 'gbm_flux64', 'epeak_band'):
-                par_values[target] = tb_gbm_one[dct_col_gbm_catarogue[extpar]]
+                par_values[target] = tb_lat_one['GBM'][dct_col_gbm_catarogue[extpar]]
             elif extpar in ('lat_flux_lowE'):
                 try:
                     par_values[target] = lat_result['lower_energies']['flux']['value']
@@ -97,7 +100,7 @@ def correlate_external_pars(extpars, like, norm_value, targets_analyzed, npred, 
             for extpar in extpars:
            #if extpars in itertools.product(('gbm_fluence', 'gbm_t90', 'gbm_flux1024', 'gbm_flux64', 'epeak_band'), repeat=2):
                 if extpar in ('gbm_fluence', 'gbm_t90', 'gbm_flux1024', 'gbm_flux64', 'epeak_band'):
-                    vpar = tb_gbm_one[dct_col_gbm_catarogue[extpar]] * tb_gbm_one[dct_col_gbm_catarogue[extpar]]
+                    vpar = tb_lat_one['GBM'][dct_col_gbm_catarogue[extpar]] * tb_lat_one['GBM'][dct_col_gbm_catarogue[extpar]]
                 elif extpar=='lat_flux_lowE':
                     try:
                         vpar = lat_result['lower_energies']['flux']['value']
@@ -124,12 +127,21 @@ def correlate_external_pars(extpars, like, norm_value, targets_analyzed, npred, 
     return loglike_sum
 
 
-def run_composite2(chara_cat, lst_inputs, path_outdir, names_params_tied_universal=['Index'], names_params_tied_category=['Prefactor'], ncat_analyzed=0, str_suffix='', eedges=None, escale=1000., binned=False, path_dct_category='/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/LongGRBs/QuantiledGRBs.pickle', fig_forms=('png', 'pdf')):
+def run_composite2(chara_cat, path_input, path_outdir, names_params_tied_universal=['Prefactor', 'Index'], ncat_analyzed=0, str_suffix='', eedges=None, escale=1000., binned=False, longonly=False, tolerr=180., path_dct_category='/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/QuantiledGRBs_longonly3_LC.pickle', fig_forms=('png', 'pdf')):
+
     # Open table
-    tb_ltf = ReadLTFCatalogueInfo.open_table()
-    tb_ltf = ReadLTFCatalogueInfo.select_long(tb_ltf)
+    #tb_ltf = ReadLTFCatalogueInfo.open_table()
+    #if longonly==True:
+    #    tb_ltf = ReadLTFCatalogueInfo.select_long(tb_ltf)
     tb_gbm = ReadGBMCatalogueInfo.open_table()
-    tb_gbm = ReadGBMCatalogueInfo.select_long(tb_gbm)
+    #if longonly==True:
+    #    tb_gbm = ReadGBMCatalogueInfo.select_long(tb_gbm)
+    tb_lat = ReadLATCatalogueInfo.open_table()
+    lst_lat = ReadLATCatalogueInfo.read_all(tb_lat, tb_gbm)
+    if longonly==True:
+        lst_lat = ReadLATCatalogueInfo.select_long(lst_lat)
+    lst_lat = ReadLATCatalogueInfo.select_small_error(lst_lat, tolerr)
+
     # Definition of GBM fluence categories
     FLUENCE_CUT = [1.09e-04, 3.06e-05] #[1.45E-4, 3.70E-5] # Top 10%, 35%
     NCATEGORIES_FLUENCE = len(FLUENCE_CUT)+1
@@ -137,7 +149,7 @@ def run_composite2(chara_cat, lst_inputs, path_outdir, names_params_tied_univers
 #    rh_fluence_weightNobs = ROOT.TH1D('roohtg', 'GBM Fluence', 100, -7, -2)
 
     path_base = os.getcwd()
-    os.chdir(path_outdir)
+    #os.chdir(path_outdir)
     lst_name_subdir = ['plots', 'xml', 'fits']
     for name_subdir in lst_name_subdir:
         path_subdir = '{0}/{1}'.format(path_outdir, name_subdir)
@@ -156,27 +168,31 @@ def run_composite2(chara_cat, lst_inputs, path_outdir, names_params_tied_univers
     #lst_nobs_lat = []
     targets_analyzed = []
     lst_ncat_analyzed = get_category(chara_cat, ncat_analyzed, path_dct_category)
-    dct_chara_title = {'gbm_fluence':'Prompt fluence in GBM', 
-                       'gbm_fluence_per_t50':'Prompt fluence / T50 in GBM', 
-                       'gbm_t90':'GBM T90', 
-                       'gbm_flux1024':'Prompt flux in GBM (1024ms)', 
-                       'gbm_flux64':'Prompt flux in GBM (64ms)', 
-                       'epeak_band':'Peak energy of prompt Band component', 
-                       'gbm_intermittent':'GBM intermittent duration',
-                       'spec_index':'Spectral index in 0.178 - 5.62 GeV', 
-                       'flux_gev':'Flux in 0.178 - 5.62 GeV', 
-                       'lc_index':'Light curve index in 0.178 - 5.62 GeV'}
+    dct_chara_title = {'GBM_FLUENCE':'Prompt fluence in GBM', 
+                       #'gbm_fluence_per_t50':'Prompt fluence / T50 in GBM', 
+                       #'gbm_t90':'GBM T90', 
+                       'GBM_FLUX_1024':'Prompt peak flux in GBM for 1024ms', 
+                       'GBM_FLUX_64':'Prompt peak flux in GBM for 64ms',
+                       #'epeak_band':'Peak energy of prompt Band component', 
+                       #'gbm_intermittent':'GBM intermittent duration',
+                       #'spec_index':'Spectral index in 0.178 - 5.62 GeV', 
+                       #'flux_gev':'Flux in 0.178 - 5.62 GeV', 
+                       'LC_INDEX':'Light curve index in 0.1 - 100 GeV'
+                       }
     if isinstance(chara_cat, int):
         dct_chara_title[chara_cat] = 'Simulation No.{0:0>5}'.format(chara_cat)
     print dct_chara_title[chara_cat], 'Category No.', ncat_analyzed-1
     print lst_ncat_analyzed
+    print len(lst_ncat_analyzed), 'GRBs.'
 
     nenergies = int(np.log10(eedges[1]/eedges[0])*4+0.5)
     energies = 10 ** np.linspace(np.log10(eedges[0]), np.log10(eedges[1]), nenergies+1)
 
-    for (itarget, path_target) in enumerate(lst_inputs):
+    for (itarget, target_info) in enumerate(lst_lat):
+#    for (itarget, path_target) in enumerate(lst_inputs):
+        target = target_info['GRBNAME'] #name_base[3:12]
+        path_target = '{0}/{1}/GRB{0}_P8_P302_BASE_T00-999-101000_r030'.format(target, path_input)
         path_base, name_base = os.path.split(path_target)
-        target = name_base[3:12]
         targets.append(target)
         print '##### No.{0} {1} #####'.format(itarget, target)
         #dct_category_fluence[target] = judge_category_fluence(tb, target, FLUENCE_CUT) 
@@ -190,9 +206,9 @@ def run_composite2(chara_cat, lst_inputs, path_outdir, names_params_tied_univers
         expMap = '/'.join((path_base, name_base+'_ft1_expMap.fits'))
         srcMap = '/'.join((path_base, name_base+'_ft1_srcmap.fits'))
         ccube = '/'.join((path_base, name_base+'_ft1_ccube.fits'))
-        srcModel = '/'.join((path_base, name_base+'_ft1_model.xml'))
-#        srcModel = '/'.join((path_base, name_base+'_ft1_model_new.xml'))
-        evt = '/'.join((path_base, name_base+'_ft1_filtered.fits'))
+        #srcModel = '/'.join((path_base, name_base+'_ft1_model.xml'))
+        srcModel = '/'.join((path_base, name_base+'_ft1_model_new.xml'))
+        evt = '/'.join((path_base, name_base+'_ft1_filtered_gti.fits'))
         sc = '/'.join((path_base, '../../../../..', name_base.replace('_P8_P302_BASE_T00-999-101000_r030', '_T00-999-101000_ft2-30s.fits')))
         if itarget==0:
             print 'Files of the first target.'
@@ -258,10 +274,10 @@ def run_composite2(chara_cat, lst_inputs, path_outdir, names_params_tied_univers
         # like[target].params()[norm_idx].parameter.setScale(gbm_flux*1e-12)
         # print 'Normalization scale is set to', like[target].params()[norm_idx].parameter.getScale()
 
-        escale_idx = like[target].par_index(target, 'Scale')
-        like[target].params()[escale_idx].parameter.setBounds(100, 100000)
-        like[target][escale_idx] = escale
-        like[target].freeze(escale_idx)
+        #escale_idx = like[target].par_index(target, 'Scale')
+        #like[target].params()[escale_idx].parameter.setBounds(100, 100000)
+        #like[target][escale_idx] = escale
+        #like[target].freeze(escale_idx)
 
         for source in like[target].sourceNames():
             if source not in (target):
@@ -316,12 +332,12 @@ def run_composite2(chara_cat, lst_inputs, path_outdir, names_params_tied_univers
     print '== Fitting result =='
     print fit_result
 
-    norm_value = like[targets_analyzed[0]].model[targets_analyzed[0]].funcs['Spectrum'].getParam('Prefactor').value()
-    norm_error = like[targets_analyzed[0]].model[targets_analyzed[0]].funcs['Spectrum'].getParam('Prefactor').error()
-    print 'Prefactor: {v} +/- {e}'.format(v=norm_value, e=norm_error)
-    index_value = like[targets_analyzed[0]].model[targets_analyzed[0]].funcs['Spectrum'].getParam('Index').value()
-    index_error = like[targets_analyzed[0]].model[targets_analyzed[0]].funcs['Spectrum'].getParam('Index').error()
-    print 'Index: {v} +/- {e}'.format(v=index_value, e=index_error)
+    dct_params = {}
+    for tiedpar in names_params_tied_universal:
+        dct_params[tiedpar] = {}
+        dct_params[tiedpar]['value'] = like[targets_analyzed[0]].model[targets_analyzed[0]].funcs['Spectrum'].getParam(tiedpar).value()
+        dct_params[tiedpar]['error'] = like[targets_analyzed[0]].model[targets_analyzed[0]].funcs['Spectrum'].getParam(tiedpar).error()
+        print '{n}: {v} +/- {e}'.format(n=tiedpar, v=dct_params[tiedpar]['value'], e=dct_params[tiedpar]['error'])
     print ''
     #print minuit.getRetCode()
 
@@ -498,7 +514,7 @@ def run_composite2(chara_cat, lst_inputs, path_outdir, names_params_tied_univers
         for ff in fig_forms:
             fig_stacked.savefig('{0}/plots/StackedSpectrum{1}_category{2}.{3}'.format(path_outdir, str_suffix, ncat_analyzed, ff))
 
-    dct_summary = {'dloglike_inv':fit_result, 'targets':targets_analyzed, 'parameters':{'Prefactor':{'value':norm_value, 'error':norm_error}, 'Index':{index_value, index_error} }, 'npred':npred }
+    dct_summary = {'dloglike_inv':fit_result, 'targets':targets_analyzed, 'parameters':dct_params, 'npred':npred }
     pickle_utilities.dump('{0}/Summary_StackedAnalysis{1}_category{2}.pickle'.format(path_outdir, str_suffix, ncat_analyzed), dct_summary)
 
     # print 'Check Correlation of parameters...'
@@ -511,7 +527,7 @@ def run_composite2(chara_cat, lst_inputs, path_outdir, names_params_tied_univers
     #for k, v in loglike_sum.items():
     #    print '{0}: dloglike={1}'.format(k, max(loglike_sum.values())-v)
 
-    return (fit_result, (norm_value, norm_error), (index_value, index_error), npred)
+    return (fit_result, dct_params, npred)
 
 
 @click.command()
@@ -519,18 +535,26 @@ def run_composite2(chara_cat, lst_inputs, path_outdir, names_params_tied_univers
 @click.option('--pathout', '-o', type=str, default='.')
 @click.option('--suffix', '-s', type=str, default='')
 @click.option('--tieuniv', multiple=True, type=str)
-@click.option('--tiecat', multiple=True, type=str)
+#@click.option('--tiecat', multiple=True, type=str)
 @click.option('--category', type=click.Choice(['0', '1', '2', '3']), help='0: all GRBs 1,2,3: only GRBs of each category')
-@click.option('--chara', type=click.Choice(['gbm_fluence', 'gbm_t90', 'spec_index', 'flux_gev', 'lc_index', 'gbm_intermittent', 'gbm_flux1024', 'gbm_flux64', 'epeak_band', 'gbm_fluence_per_t50']), help='GRB characterristics which categorize them.')
+@click.option('--chara', type=click.Choice(['GBM_FLUENCE', 'GBM_FLUX_1024', 'GBM_FLUX_64', 'LC_INDEX']), help='GRB characterristics which categorize them.')
+#@click.option('--chara', type=click.Choice(['gbm_fluence', 'gbm_t90', 'spec_index', 'flux_gev', 'lc_index', 'gbm_intermittent', 'gbm_flux1024', 'gbm_flux64', 'epeak_band', 'gbm_fluence_per_t50']), help='GRB characterristics which categorize them.')
 @click.option('--energies', '-e', type=(float, float), default=(100., 100000.))
 @click.option('--escale', type=float, default=1000.)
+@click.option('--longonly', '-l', is_flag=True)
+@click.option('--tolerr', '-t', type=float, default=180.)
 @click.option('--binned', '-b', is_flag=True)
-def main(chara, inputs, pathout, category, tieuniv, tiecat, suffix, energies, escale, binned):
-    with open(inputs, "r") as filein:
-        str_paths = filein.read()
-        input_paths = str_paths.split('\n')[:-1]
-        #print input_paths
-        run_composite2(chara, input_paths, pathout, tieuniv, tiecat, int(category), suffix, energies, escale, binned)
+@click.option('--quantile', '-q', type=str, default='/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/QuantiledGRBs_longonly3_LC.pickle')
+def main(chara, inputs, pathout, category, tieuniv, suffix, energies, escale, binned, longonly, tolerr, quantile):
+        if category==None:
+            categories = [0,1,2,3]
+        else:
+            categories = [int(category)]
+
+        for category in categories:
+            print '##### Category {0} #####'.format(category)
+            run_composite2(chara, inputs, '{0}/Category{1}'.format(pathout, category), tieuniv, category, suffix, energies, escale, binned, longonly, tolerr, path_dct_category=quantile)
+            print ''
 
 
 if __name__ == '__main__':
