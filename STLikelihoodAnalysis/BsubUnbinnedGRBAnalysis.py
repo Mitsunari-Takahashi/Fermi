@@ -17,7 +17,7 @@ import ReadLTFCatalogueInfo
 @click.option('--namemax', type=str, default='200000000')
 @click.option('--emin', type=float, default=100.0)
 @click.option('--emax', type=float, default=100000.)
-@click.option('--mode', '-m', type=click.Choice(['unified', 'prompt', 'afterglow', 'earlyAG', 'lateAG', 'farAG', 'lightcurve', 'special']))
+@click.option('--mode', '-m', type=click.Choice(['unified', 'prompt', 'primary', 'intermittent', 'afterglow', 'earlyAG', 'lateAG', 'farAG', 'lightcurve', 'special']))
 @click.option('--roi', type=float, default=12.)
 @click.option('--spectraltype', type=click.Choice(['PowerLaw', 'ExpCutoff']), default='PowerLaw')
 @click.option('--refit', '-r', is_flag=True)
