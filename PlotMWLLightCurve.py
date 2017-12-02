@@ -20,6 +20,7 @@ import csv
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
+import pickle_utilities
 import pMatplot
 import pMETandMJD
 
@@ -92,6 +93,15 @@ class SourceObject:
                         self.datasets[row[0]][col].append(float(row[icol+1]))
 
 
+    def load_pickle(self, path_pickle, nindex, lcindex):
+        slots = pickle_utilities.load(path_pickle)
+        for islot, slot in enumerate(slots):
+            print '===== {0} - {1} s ====='.format(slot['period'][0], slot['period'][1])
+            print 'Normalization: {0}'.format(slot['normalization'][nindex][lcindex])
+            print 'E^2 dN/dE: {0}'.format(slot['normalization'][nindex][lcindex]*4.4723E-6*10000*MEVtoERG)
+            print 'Energy flux: {0}'.format(slot['eflux'][nindex][lcindex]*MEVtoERG)
+
+
     def plot(self, pathout, figform):
         fig = plt.figure(figsize=(8, 5))
         ax = fig.add_axes((0.07, 0.15, 0.9, 0.75))
@@ -136,6 +146,7 @@ class SourceObject:
 def main(name, csv, suffix, pathout, figform):
     src = SourceObject(name, suffix)
     src.load_csv(csv)
+    src.load_pickle('/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/140928437/E0010000-0100000MeV/r01deg/briefslots/LightCurve_140928437_ScaleFactor::PowerLaw2_IndexFree_400x180_count.pickle', 111, 79)
     src.plot(pathout, figform)
     
 
