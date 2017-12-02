@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import itertools
 from scipy.optimize import curve_fit
 from scipy import optimize
 from scipy.odr import Model, Data, RealData, ODR
@@ -15,6 +16,29 @@ import logging
 
 TPL_MARKER = ('.', 'D', 's', 'o', 'x', '*', 'p', 'h', '8')
 TPL_COLOR = ("r", "g", "b", "c", "m")
+TPL_LINE = ('-', '--', ':', '-.')
+
+
+def find_range_shown(x, y, f):
+    nxmax_shown = 0 
+    nymax_shown = 0
+    nxmin_shown = x.shape[1]-1 #len(x)-1
+    nymin_shown = y.shape[0]-1 #len(y)-1
+    #print 'Shape of X: {0}'.format(x.shape)
+    #print 'Shape of Y: {0}'.format(y.shape)
+    for ix, iy in itertools.product(range(x.shape[1]), range(y.shape[0])):
+        if f(iy, ix)==True:
+            if ix>nxmax_shown:
+                nxmax_shown = ix
+            if ix<nxmin_shown:
+                nxmin_shown = ix
+            if iy>nymax_shown:
+                nymax_shown = iy
+            if iy<nymin_shown:
+                nymin_shown = iy
+    return ((x[0][nxmin_shown], x[0][nxmax_shown]), (y[nymin_shown][0], y[nymax_shown][0]))
+
+
 
 class Data_plotted():
     def __init__(self, label, gr_type, xdata, ydata=None, zdata=None, wdata=None, xdata_err=None, ydata_err=None, ul=False, ll=False):
