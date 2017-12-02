@@ -43,9 +43,10 @@ def main(e, bep, filecut, filebdt, fileout, htgcut, bdt):
     htgCut = fileCutBDT.Get(htgcut)
     for iEvt in range(nEvt):
         trAG.GetEntry(iEvt)
-        if trAG.Cal1MomZCrossSide840>=0.0 and trAG.Cal1MomNumIterations>0 and trAG.Cal1TransRms>=10 and trAG.Cal1TransRms<70 and trAG.Acd2Cal1VetoSigmaHit>0 and trAG.Cal1MomZDir>=0.2 and -log10(1.0-(1.0+bdtR.value)/2.)>=htgCut.GetBinContent(htgCut.GetXaxis().FindBin(trAG.EvtJointLogEnergy),htgCut.GetYaxis().FindBin(trAG.Cal1MomZDir)) and trAG.Cal1RawEnergySum>=20000 and (trAG.TkrNumTracks==0 or (math.log10(max(trAG.CalTrackAngle,1E-4)) > (0.529795)*(trAG.EvtJointLogEnergy < 3.000000)  + ((1.0)*((0.529795)*(1.0)+(-1.379791)*(math.pow((trAG.EvtJointLogEnergy-3.000000)/0.916667,1))+(0.583401)*(math.pow((trAG.EvtJointLogEnergy-3.000000)/0.916667,2))+(-0.075555)*(math.pow((trAG.EvtJointLogEnergy-3.000000)/0.916667,3))))*(trAG.EvtJointLogEnergy >= 3.000000 and trAG.EvtJointLogEnergy <= 5.750000) + (-0.398962)*(trAG.EvtJointLogEnergy >  5.750000))) and abs((trAG.WP8CalOnlyBEPCaseE_myBDT+1.)/2.-bep)<0.01 and trAG.FswGamState==0: #and (trAG.GltGemSummary&0x20)==0):
+        if trAG.Cal1MomZCrossSide840>=0.0 and trAG.Cal1MomNumIterations>0 and trAG.Cal1TransRms>=10 and trAG.Cal1TransRms<70 and trAG.Acd2Cal1VetoSigmaHit>0 and trAG.Cal1MomZDir>=0.2 and -log10(1.0-(1.0+bdtR.value)/2.)>=htgCut.GetBinContent(htgCut.GetXaxis().FindBin(trAG.EvtJointLogEnergy),htgCut.GetYaxis().FindBin(trAG.Cal1MomZDir)) and trAG.Cal1RawEnergySum>=20000 and (trAG.TkrNumTracks==0 or (math.log10(max(trAG.CalTrackAngle,1E-4)) > (0.529795)*(trAG.EvtJointLogEnergy < 3.000000)  + ((1.0)*((0.529795)*(1.0)+(-1.379791)*(math.pow((trAG.EvtJointLogEnergy-3.000000)/0.916667,1))+(0.583401)*(math.pow((trAG.EvtJointLogEnergy-3.000000)/0.916667,2))+(-0.075555)*(math.pow((trAG.EvtJointLogEnergy-3.000000)/0.916667,3))))*(trAG.EvtJointLogEnergy >= 3.000000 and trAG.EvtJointLogEnergy <= 5.750000) + (-0.398962)*(trAG.EvtJointLogEnergy >  5.750000))) and trAG.FswGamState==0 and abs((trAG.WP8CalOnlyBEPCaseE_myBDT+1.)/2.-bep)<0.05:# and abs((trAG.WP8CalOnlyBEPCaseE_myBDT+1.)/2.-bep)<0.01: #and (trAG.GltGemSummary&0x20)==0):
             for pi in aPowIndex:
-                dictHtg2D[pi].Fill(trAG.McLogEnergy-e, trAG.EvtJointLogEnergy-e, pow(10, (-pi+1)*trAG.McEnergy/pow(10, e)))
+                dictHtg2D[pi].Fill(trAG.McLogEnergy-trAG.EvtJointLogEnergy, trAG.EvtJointLogEnergy-e, pow(10, (-pi+1)*trAG.McEnergy/pow(10, e)))
+                #dictHtg2D[pi].Fill(trAG.McLogEnergy-e, trAG.EvtJointLogEnergy-e, pow(10, (-pi+1)*trAG.McEnergy/pow(10, e)))
     aPos = [0.68, 0.95]
     aPosLeft = array('d', [1.-aPos[0], 1-aPos[1]])
     aPosRight = array('d', [aPos[0], aPos[1]])
@@ -55,8 +56,8 @@ def main(e, bep, filecut, filebdt, fileout, htgcut, bdt):
     for pi in aPowIndex:
         print '=====  Index:', pi, '  ====='
         dictHtg2D[pi].Write()
-        nBinCutLowY = dictHtg2D[pi].GetYaxis().FindBin(-0.005)
-        nBinCutUpY = dictHtg2D[pi].GetYaxis().FindBin(0.005)
+        nBinCutLowY = dictHtg2D[pi].GetYaxis().FindBin(-0.05) #(-0.005)
+        nBinCutUpY = dictHtg2D[pi].GetYaxis().FindBin(0.05) #(0.005)
         print 'Bin:', nBinCutLowY, '-', nBinCutUpY
         dictHtgProjX[pi] = dictHtg2D[pi].ProjectionX('htgProjX_{0}'.format(int(pi*10)), nBinCutLowY, nBinCutUpY)
         dictHtgProjX[pi].Write()
@@ -72,7 +73,8 @@ def main(e, bep, filecut, filebdt, fileout, htgcut, bdt):
         hRight.GetQuantiles(len(aPos), aQuantRight, aPosRight)
         print aQuantRight              
         for (iPos, nPos) in enumerate(aPos):
-            print '{0}% Error: {1}-{2}+{3} GeV'.format(int(nPos*100), eLin, eLin-pow(10, e+aQuantLeft[iPos]-3), pow(10, e+aQuantRight[iPos]-3)-eLin)
+            print '{0}% range of {1:.1f} GeV: {2:.1f} - {3:.1f} GeV, Error: {1:.1f} -{4:.1f}+{5:.1f} GeV'.format(int(nPos*100), eLin, pow(10, e+aQuantLeft[iPos]-3), pow(10, e+aQuantRight[iPos]-3), (eLin-pow(10, e+aQuantLeft[iPos]-3)), (pow(10, e+aQuantRight[iPos]-3)-eLin))
+            #print '{0}% Error: {1}-{2}+{3} GeV'.format(int(nPos*100), eLin, eLin-pow(10, e+aQuantLeft[iPos]-3), pow(10, e+aQuantRight[iPos]-3)-eLin)
         
 
 if __name__ == '__main__':
