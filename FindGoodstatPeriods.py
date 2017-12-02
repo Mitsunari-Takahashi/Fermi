@@ -60,11 +60,11 @@ def get_entries_roi(pathFileEvt, tStart=None, tStop=None, rlim=0.0, ra=0, dec=0,
 def get_event_time_and_energy(pathFileEvt, tStart=None, tStop=None, rlim=0.0, ra=0, dec=0, torigin=0.0, emin=0, emax=sys.maxint, zmax=100., z=0.):
     """Return entry number between tStart - tStop from torigin, and within rlim degrees from (ra, dec).
 """
-    metStart = tStart + torigin if tStop is not None else -sys.maxint
+    metStart = tStart + torigin if tStart is not None else -sys.maxint
     metStop = tStop + torigin if tStop is not None else sys.maxint
     hdulistEVT = fits.open(pathFileEvt)
     tbdataEVT = hdulistEVT[1].data
-    aTIME = tbdataEVT.field('TIME')
+    aTIME = tbdataEVT.field('TIME') / (1.0+z)
     aENERGY = tbdataEVT.field('ENERGY') * (1.0+z)
     aRA = tbdataEVT.field('RA')
     aDEC = tbdataEVT.field('DEC')
@@ -89,8 +89,8 @@ def get_event_time_and_energy(pathFileEvt, tStart=None, tStop=None, rlim=0.0, ra
                 print 'x',
                 lst_time.append(aTIME[iEVT]-torigin)
                 lst_energy.append(aENERGY[iEVT])
-                if aENERGY[iEVT]>=20000.:
-                    print '{0} GeV at {1} s'.format(aENERGY[iEVT]/1000., aTIME[iEVT]-torigin)
+                if aENERGY[iEVT]>=10000.:
+                    print '{0} GeV at {1} s, separation: {2:1.2f} deg'.format(aENERGY[iEVT]/1000., aTIME[iEVT]-torigin, sep_deg)
         time_prev = aTIME[iEVT]
     print ''
     return (np.array(lst_time), np.array(lst_energy))
