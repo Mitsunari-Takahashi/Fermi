@@ -21,6 +21,9 @@ def unbinned_grb_analysis(name, mode, emin, emax, roi, spectraltype, refit, forc
         sys.exit(1)
     grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectraltype=spectraltype, spectralpars=spectralpars)
     ana = pLATLikelihoodConfig.GRBConfig(grb, mode, emin=emin, emax=emax, deg_roi=roi, psForce=masifps)
+    if ana.tmin == ana.tmax:
+        logger.warning('Time range of GRB config is NOT valid!')
+        sys.exit(1)
     ana.setup(force={'download':False, 'filter':force, 'maketime':force, 'livetime':force, 'exposure':force, 'model_3FGL_sources':True, 'diffuse_responses':force})
     if modelonly==True:
         esl = ana.set_likelihood()
@@ -33,7 +36,7 @@ def unbinned_grb_analysis(name, mode, emin, emax, roi, spectraltype, refit, forc
 @click.command()
 @click.argument('name', type=str)
 @click.option('--grbcatalogue', '-c', type=str, default=pLATLikelihoodConfig.GRB_CATALOGUE_LTF)
-@click.option('--mode', '-m', type=click.Choice(['unified', 'prompt', 'afterglow', 'earlyAG', 'lateAG', 'farAG', 'lightcurve', 'special']))
+@click.option('--mode', '-m', type=click.Choice(['unified', 'prompt', 'primary', 'intermittent', 'afterglow', 'earlyAG', 'lateAG', 'farAG', 'lightcurve', 'special']))
 @click.option('--emin', type=float, default=100.)
 @click.option('--emax', type=float, default=100000.)
 @click.option('--roi', type=float, default=12.)
