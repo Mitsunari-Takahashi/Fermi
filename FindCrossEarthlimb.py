@@ -88,7 +88,7 @@ def find_cross_earthlimb(pathFileScAll, ra, dec, tStart, tStop, zcut, thcut=65.,
                     else:
                         validtimes.append([max(metStart, aSTART[iTI])-torigin])
                 elif degZenith>=zcut and degZenith_prev<zcut: # entering Earthlimb
-                    print 'Your target is entring Earthlimb (Z>{4}deg). ({0},{1})->({2},{3})'.format(start_prev, degZenith_prev, aSTART[iTI]-torigin, degZenith, zcut)
+                    print 'Your target is entring Earthlimb (Z>{4}deg). ({0},{1})->({2},{3})'.format(start_prev-torigin, degZenith_prev, aSTART[iTI]-torigin, degZenith, zcut)
                     if len(validtimes)>0 and len(validtimes[-1])<2: #degSCZ<thcut:
                         if stop_prev==aSTART[iTI]:
                             tcross = aSTART[iTI] + (aSTART[iTI]-start_prev)/(degZenith-degZenith_prev)*(zcut-degZenith)
@@ -97,7 +97,7 @@ def find_cross_earthlimb(pathFileScAll, ra, dec, tStart, tStop, zcut, thcut=65.,
                         print 'Crossing time:', tcross
                         validtimes[-1].append(tcross-torigin)
                     else:
-                        print 'Your target is still outside of FoV (theta>={4}deg). ({0},{1})->({2},{3})'.format(start_prev, degSCZ_prev, aSTART[iTI]-torigin, degSCZ, thcut)
+                        print 'Your target is still outside of FoV (theta>={4}deg). ({0},{1})->({2},{3})'.format(start_prev-torigin, degSCZ_prev, aSTART[iTI]-torigin, degSCZ, thcut)
                 elif degSCZ>=thcut and degSCZ_prev<thcut: # exiting FoV
                     print 'Your target is exiting FoV (theta>{4}deg). ({0},{1})->({2},{3})'.format(start_prev, degSCZ_prev, aSTART[iTI]-torigin, degSCZ, thcut)
                     if len(validtimes)>0 and len(validtimes[-1])<2: #degZenith_prev<zcut:
@@ -108,7 +108,7 @@ def find_cross_earthlimb(pathFileScAll, ra, dec, tStart, tStop, zcut, thcut=65.,
                         print 'Crossing time:', tcross
                         validtimes[-1].append(tcross-torigin)
                     else:
-                        print 'Your target is still within Earthlimb (Z>{4}deg). ({0},{1})->({2},{3})'.format(start_prev, degZenith_prev, aSTART[iTI]-torigin, degZenith, zcut)
+                        print 'Your target is still within Earthlimb (Z>{4}deg). ({0},{1})->({2},{3})'.format(start_prev-torigin, degZenith_prev, aSTART[iTI]-torigin, degZenith, zcut)
                 elif degZenith<zcut and degZenith_prev>=zcut: # exiting Earthlimb
                     print 'Your target is exiting Earthlimb (Z>{4}deg). ({0},{1})->({2},{3})'.format(start_prev, degZenith_prev, aSTART[iTI]-torigin, degZenith, zcut)
                     if len(validtimes)==0 or len(validtimes[-1])==2: #degSCZ<thcut:
@@ -119,7 +119,7 @@ def find_cross_earthlimb(pathFileScAll, ra, dec, tStart, tStop, zcut, thcut=65.,
                         print 'Crossing time:', tcross
                         validtimes.append([aSTART[iTI]-torigin])
                     else:
-                        print 'Your target is still outside of FoV (theta>={4}deg). ({0},{1})->({2},{3})'.format(start_prev, degSCZ_prev, aSTART[iTI]-torigin, degSCZ, thcut)
+                        print 'Your target is still outside of FoV (theta>={4}deg). ({0},{1})->({2},{3})'.format(start_prev-torigin, degSCZ_prev, aSTART[iTI]-torigin, degSCZ, thcut)
                 elif degSCZ<thcut and degSCZ_prev>=thcut: # entering FoV
                     print 'Your target is entering FoV (theta<{4}deg). ({0},{1})->({2},{3})'.format(start_prev, degSCZ_prev, aSTART[iTI]-torigin, degSCZ, thcut)
                     if len(validtimes)==0 or len(validtimes[-1])==2: #degZenith<zcut:
@@ -130,7 +130,7 @@ def find_cross_earthlimb(pathFileScAll, ra, dec, tStart, tStop, zcut, thcut=65.,
                         print 'Crossing time:', tcross
                         validtimes.append([aSTART[iTI]-torigin])
                     else:
-                        print 'Your target is still within Earthlimb (Z>{4}deg). ({0},{1})->({2},{3})'.format(start_prev, degZenith_prev, aSTART[iTI]-torigin, degZenith, zcut)
+                        print 'Your target is still within Earthlimb (Z>{4}deg). ({0},{1})->({2},{3})'.format(start_prev-torigin, degZenith_prev, aSTART[iTI]-torigin, degZenith, zcut)
                 degZenith_prev = degZenith
                 degSCZ_prev = degSCZ
                 start_prev = aSTART[iTI]
