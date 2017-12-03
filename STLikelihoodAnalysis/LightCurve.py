@@ -86,9 +86,9 @@ class LightCurve:
 
 
 class LightCurveGRB(LightCurve):
-    def __init__(self, name, tmin=0.0, tmax=10000.0, emin=100.0, emax=100000.0, evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, suffix='', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, psForce=False, rlim_goodstat=2.0, ngoodstat=10, refit=True, force=False, outdir=None, phase='lightcurve', norm=1e-10, index=-2.0, scalefactor=1.0):
+    def __init__(self, name, tmin=0.0, tmax=10000.0, emin=100.0, emax=100000.0, evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, suffix='', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, psForce=False, rlim_goodstat=2.0, ngoodstat=10, refit=True, force=False, outdir=None, phase='lightcurve', spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2, 'Scale':50000}):
         # Target GRB
-        self.grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2, 'Scale':50000})
+        self.grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectraltype=spectraltype, spectralpars=spectralpars)
         #self.grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectraltype='ScaleFactor::PowerLaw2', spectralpars={'Integral':norm, 'Index':index, 'LowerLimit':emin, 'UpperLimit':emax, 'ScaleFactor':scalefactor})
 
         # Light curve instance
@@ -187,26 +187,28 @@ class LightCurveGRB(LightCurve):
             self.summary_results[ip].update(self.analyses[ip].dct_summary_results)
 
 
-    def scan_parameters(self, lcintegrals=None, lcindices=None):
+    def scan_parameters(self, lcintegrals=None, lcindices=None, tnorm=10., rescaler=1.):
         lst_periods = []
         for ip, pds in enumerate(self.periods_goodstat):
             logger.info('==========')
             logger.info(pds)
             lst_periods.append({'period':pds,
                                 'duration':self.analyses[ip].duration,
+                                'tref':np.zeros(shape=(len(lcintegrals), len(lcindices))),
                                 'loglike':np.zeros(shape=(len(lcintegrals), len(lcindices))),
                                 'normalization':np.zeros(shape=(len(lcintegrals), len(lcindices))),
                                 'flux':np.zeros(shape=(len(lcintegrals), len(lcindices))),
                                 'eflux':np.zeros(shape=(len(lcintegrals), len(lcindices))),
                                 'fluence':np.zeros(shape=(len(lcintegrals), len(lcindices))),
                                 'efluence':np.zeros(shape=(len(lcintegrals), len(lcindices))),
-                                'conversion':{'flux':None, 'eflux':None},
+                                'conversion':{'flux':np.zeros(shape=(len(lcintegrals), len(lcindices))), 
+                                              'eflux':np.zeros(shape=(len(lcintegrals), len(lcindices)))},
                                 'nobs':0,
                                 'npred':{'target':np.zeros(shape=(len(lcintegrals), len(lcindices))),
                                          'others':np.zeros(shape=(len(lcintegrals), len(lcindices)))}
                                 })
             for ilcintegral, jlcindex in itertools.product(range(len(lcintegrals)), range(len(lcindices))):
-                lst_periods[ip]['normalization'][ilcintegral][jlcindex] = lightcurve_prefactor(pds[0], pds[1], lcintegrals[ilcintegral], lcindices[jlcindex], self.grb.t95, 100000)
+                lst_periods[ip]['normalization'][ilcintegral][jlcindex], lst_periods[ip]['tref'][ilcintegral][jlcindex] = lightcurve_prefactor(pds[0], pds[1], lcintegrals[ilcintegral], lcindices[jlcindex], tnorm, rescaler) #, self.grb.t95, 100000
             if self.analyses[ip].duration<=0:
                 continue
 
@@ -223,9 +225,19 @@ class LightCurveGRB(LightCurve):
             for ilcintegral, jlcindex in itertools.product(range(len(lcintegrals)), range(len(lcindices))):
                 norm_factor = lst_periods[ip]['normalization'][ilcintegral][jlcindex]
                 logger.debug('  Normalization factor: {0}'.format(norm_factor))
-                self.analyses[ip].like.normPar(self.analyses[ip].target.name).setValue(norm_factor)
+                try:
+                    self.analyses[ip].like.normPar(self.analyses[ip].target.name).setValue(norm_factor)
+                except RuntimeError:
+                    logger.critical('Setting normalization factor {0} ({1},{2}) failed!!!'.format(norm_factor, ilcintegral, jlcindex))
+                    sys.exit(1)
 
-                norm_idx = self.analyses[ip].like.par_index(self.analyses[ip].target.name, 'Integral')
+                if self.analyses[ip].target.spectraltype[-8:]=='PowerLaw':
+                    norm_idx = self.analyses[ip].like.par_index(self.analyses[ip].target.name, 'Prefactor')
+                elif self.analyses[ip].target.spectraltype[-9:]=='PowerLaw2':
+                    norm_idx = self.analyses[ip].like.par_index(self.analyses[ip].target.name, 'Integral')
+                else:
+                    logger.critical('Spectral function must be PowerLaw or PowerLaw2!!!')
+                    sys.exit(1)
                 self.analyses[ip].like.freeze(norm_idx)
                 index_idx = self.analyses[ip].like.par_index(self.analyses[ip].target.name, 'Index')
                 self.analyses[ip].like.freeze(index_idx)
@@ -235,7 +247,9 @@ class LightCurveGRB(LightCurve):
                 logger.debug('  log Likelihood: {0}'.format(lst_periods[ip]['loglike'][ilcintegral][jlcindex]))
                # Current values
                 lst_periods[ip]['flux'][ilcintegral][jlcindex] = self.analyses[ip].like[self.analyses[ip].target.name].flux(self.config['energy']['min'], self.config['energy']['max'])
+                lst_periods[ip]['conversion']['flux'][ilcintegral][jlcindex] = lst_periods[ip]['flux'][ilcintegral][jlcindex] / norm_factor
                 lst_periods[ip]['eflux'][ilcintegral][jlcindex] = self.analyses[ip].like[self.analyses[ip].target.name].energyFlux(self.config['energy']['min'], self.config['energy']['max'])
+                lst_periods[ip]['conversion']['eflux'][ilcintegral][jlcindex] = lst_periods[ip]['eflux'][ilcintegral][jlcindex] / norm_factor
 
                 lst_periods[ip]['fluence'][ilcintegral][jlcindex] = lst_periods[ip]['flux'][ilcintegral][jlcindex] * self.analyses[ip].duration
                 lst_periods[ip]['efluence'][ilcintegral][jlcindex] = lst_periods[ip]['eflux'][ilcintegral][jlcindex] * self.analyses[ip].duration
@@ -260,16 +274,19 @@ class LightCurveGRB(LightCurve):
         logger.info('Result summary has been serialized as {0}'.format(path_pickle))
 
         
-def lightcurve_prefactor(tmin, tmax, integral, index, torigin=0, tend=100000):
+def lightcurve_prefactor(tmin, tmax, integral, index, tnorm=10., rescaler=1.): #, torigin=0): #, tend=100000
     logger.debug('Integral:{0}'.format(integral))
     logger.debug('LC index:{0}'.format(index))
     if index!=-1:
-        return integral * (pow(tmax, index+1) - pow(tmin, index+1)) / (pow(tend, index+1) - pow(torigin, index+1)) / (tmax - tmin)
-    elif tmin>0 and torigin>0:
-        return integral * (np.log(tmax)-np.log(tmin)) / (np.log(tend)-np.log(torigin)) / (tmax - tmin)
+        tref = (index+1) / (index+2) * (pow(tmax, index+2)-pow(tmin, index+2)) / (pow(tmax, index+1)-pow(tmin, index+1))
+        #return integral * (pow(tmax, index+1) - pow(tmin, index+1)) / (pow(tend, index+1) - pow(torigin, index+1)) / (tmax - tmin)
+    elif tmin>0: #and torigin>0:
+        tref = (tmax-tmin) / (np.log(tmax)-np.log(tmin))
+        #return integral * (np.log(tmax)-np.log(tmin)) / (np.log(tend)-np.log(torigin)) / (tmax - tmin)
     else:
         logger.critical('tmin and torigin should larger than zero!!!')
         sys.exit(1)
+    return (integral * pow(tref/tnorm, index) * rescaler), tref
 
 
 def make_lightcurves(name, emin, emax, roi, ngoodstat, rgoodstat, suffix, grbcatalogue, refit, force, outdir, index, tmin=0, addphoton=None):
