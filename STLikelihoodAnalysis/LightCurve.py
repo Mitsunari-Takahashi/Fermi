@@ -2,6 +2,8 @@
 """Module for making light curves of LAT data.
 The main class LightCurve is a chain of another module pLATLikelihoodConfig.py.
 The authour: Mitsunari Takahashi
+* Version: 2.0 (2017.12.09) 
+  Can set start time
 * Version: 1.8 (2017.10.02) 
   Parameter limits with ndf=2 for free index
 * Version: 1.7 (2017.09.27) 
@@ -56,7 +58,7 @@ mpl.rcParams['text.usetex'] = True
 mpl.rcParams['text.latex.preamble'] = [r'\usepackage{amsmath}']
 
 ##### VERSION OF THIS MACRO #####
-VERSION = 1.8 # 2017.10.02
+VERSION = 2.0 # 2017.12.09
 
 
 ##### Logger #####
@@ -89,7 +91,7 @@ class LightCurve:
 
 
 class LightCurveGRB(LightCurve):
-    def __init__(self, name, tmin=0.0, tmax=10000.0, emin=100.0, emax=100000.0, evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, suffix='', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, psForce=False, rlim_goodstat=2.0, ngoodstat=10, ntbinperdecade=4, refit=True, force=False, outdir=None, phase='lightcurve', spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2, 'Scale':50000}):
+    def __init__(self, name, wholephase='special', tmin=0.0, tmax=10000.0, emin=100.0, emax=100000.0, evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, suffix='', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, psForce=False, rlim_goodstat=2.0, ngoodstat=10, ntbinperdecade=4, refit=True, force=False, outdir=None, phase='lightcurve', spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2, 'Scale':50000}):
         # Target GRB
         self.grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectraltype=spectraltype, spectralpars=spectralpars)
         #self.grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectraltype='ScaleFactor::PowerLaw2', spectralpars={'Integral':norm, 'Index':index, 'LowerLimit':emin, 'UpperLimit':emax, 'ScaleFactor':scalefactor})
@@ -98,6 +100,7 @@ class LightCurveGRB(LightCurve):
         LightCurve.__init__(self, name=name, met0=self.grb.met0, tmin=tmin, tmax=tmax, emin=emin, emax=emax, evclass=evclass, evtype=evtype, ft2interval=ft2interval, deg_roi=deg_roi, rad_margin=rad_margin, zmax=zmax, index_fixed=index_fixed, suffix=suffix, psForce=psForce, refit=True, force=False, phase=phase)
         self.config['goodstat'] = {'n':ngoodstat, 'r':rlim_goodstat}
         self.config['ntbinperdecade'] = ntbinperdecade
+        self.config['wholephase'] = wholephase
         self.periods_goodstat = []
         self.analyses = []
         self.counts_time = None
@@ -106,8 +109,7 @@ class LightCurveGRB(LightCurve):
 
     def setup(self):
         # Analysis instance which covers the whole time range
-        self.analysis_whole = pLATLikelihoodConfig.GRBConfig(target=self.grb, phase='unified', tstop=self.config['time']['max'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], deg_roi=self.config['roi']['radius'], zmax=self.config['zenith']['max'], suffix=self.config['suffix'])
-        #self.analysis_whole = pLATLikelihoodConfig.GRBConfig(target=self.grb, phase='unified', tstop=self.config['time']['max'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], deg_roi=self.config['roi']['radius'], zmax=self.config['zenith']['max'], suffix=self.config['suffix'])
+        self.analysis_whole = pLATLikelihoodConfig.GRBConfig(target=self.grb, phase=self.config['wholephase'], tstop=self.config['time']['max'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], deg_roi=self.config['roi']['radius'], zmax=self.config['zenith']['max'], suffix=self.config['suffix'], tmin_special=self.config['time']['min'], tmax_special=self.config['time']['max'], ft2interval='30s')
         self.analysis_whole.download()
         self.analysis_whole.set_directories()
         self.analysis_whole.filter(False)
@@ -137,9 +139,9 @@ class LightCurveGRB(LightCurve):
 {vt}""".format(nth=self.config['goodstat']['n'], rlim=self.config['goodstat']['r'], vt=self.periods_goodstat))
 
         else:
-            logtmin = max(10, np.log10(self.config['time']['min']))
+            logtmin = max(0, np.log10(self.config['time']['min'])) # Minimum: 1 sec
             logtmax = np.log10(self.config['time']['max'])
-            tedges = 10**np.linspace(logtmin, logtmax, self.config['ntbinperdecade'])
+            tedges = 10**np.linspace(logtmin, logtmax, self.config['ntbinperdecade']*(logtmax-logtmin)+1)
             nt_filled_last = 0
             nv_filled_last = 0
             self.periods_goodstat = []
@@ -148,13 +150,14 @@ class LightCurveGRB(LightCurve):
                 if vt==validtimes[0] or tedges[min(len(tedges),nt_filled_last+1)]-tedges[min(len(tedges)-1,nt_filled_last)]<5400.*2:
                     if vt[1]-vt[0]>tedges[nt_filled_last+1]-tedges[nt_filled_last]:
                         pgs = []
-                        for it, (t1, t2) in enumerate(zip(tedges[:-1], tedges[1:])):
-                            if t1>=self.grb.t95:
-                                t0 = t1
-                            elif t1<self.grb.t95 and t2>=self.grb.t95:
-                                t0 = self.grb.t95
-                            else:
-                                continue
+                        for it, (t0, t2) in enumerate(zip(tedges[:-1], tedges[1:])):
+                        #for it, (t1, t2) in enumerate(zip(tedges[:-1], tedges[1:])):
+                            # if t1>=self.grb.t95:
+                            #     t0 = t1
+                            # elif t1<self.grb.t95 and t2>=self.grb.t95:
+                            #     t0 = self.grb.t95
+                            # else:
+                            #     continue
                             if t0>=vt[0] and t2<=vt[1]:
                                 pgs.append([t0, t2])
                                 nt_filled_last = it
@@ -163,6 +166,9 @@ class LightCurveGRB(LightCurve):
                                 nt_filled_last = it
                             elif t2<=vt[1] and t2>=vt[0]:
                                 pgs.append([vt[0], t2])
+                                nt_filled_last = it
+                            elif t0<=vt[0] and t2>=vt[1]:
+                                pgs.append([vt[0], vt[1]])
                                 nt_filled_last = it
                         self.periods_goodstat += pgs
                     else:
@@ -174,8 +180,10 @@ class LightCurveGRB(LightCurve):
                                 break
                 else:
                     break
+            logger.debug('Currently the good-stat period is {0}'.format(self.periods_goodstat))
             for jt, t2 in enumerate(tedges[1:]):
                 if t2>self.periods_goodstat[-1][1]:
+                    logger.debug('Checking {0} - {1} s...'.format(self.periods_goodstat[-1][1], t2))
                     pds1 = t2
                     pds2 = self.periods_goodstat[-1][1]
                     for ut in validtimes:
@@ -184,6 +192,7 @@ class LightCurveGRB(LightCurve):
                         if ut[1] < t2 and ut[1]>=pds2:
                             pds2 = ut[1]
                     self.periods_goodstat.append([pds1, pds2]) #[self.periods_goodstat[-1][1], t2])
+                    logger.debug('{0} has been filled.'.format(self.periods_goodstat[-1]))
                     nt_filled_last = jt
             
             #self.periods_goodstat = [[self.grb.t95]]
@@ -341,8 +350,8 @@ def lightcurve_prefactor(tmin, tmax, integral, index, tnorm=10., rescaler=1.): #
     return (integral * pow(tref/tnorm, index) * rescaler), tref
 
 
-def make_lightcurves(name, emin, emax, roi, ngoodstat, rgoodstat, ntbinperdecade, suffix, grbcatalogue, refit, force, outdir, index, tmin=0, addphoton=None):
-    lc = LightCurveGRB(name=name, tmin=tmin, emin=emin, emax=emax, deg_roi=roi, ngoodstat=ngoodstat, rlim_goodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=None)
+def make_lightcurves(name, wholephase, emin, emax, roi, ngoodstat, rgoodstat, ntbinperdecade, suffix, grbcatalogue, refit, force, outdir, index, tmin=0, tmax=10000, addphoton=None):
+    lc = LightCurveGRB(name=name, wholephase=wholephase, tmin=tmin, tmax=tmax, emin=emin, emax=emax, deg_roi=roi, ngoodstat=ngoodstat, rlim_goodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=None)
     lc.setup()
     lc.count_energy()
     lc.run_analysis()
@@ -575,10 +584,12 @@ $\rm{{ \alpha = {alpha:.2E} \pm {alphaerr:.2E} }}$""".format(f0=params[0][0], f0
 @click.option('--grbcatalogue', '-c', type=str, default=pLATLikelihoodConfig.GRB_CATALOGUE_LAT)
 @click.option('--emin', type=float, default=100.)
 @click.option('--emax', type=float, default=100000.)
+@click.option('--tmin', type=float, default=0.)
+@click.option('--tmax', type=float, default=10000.)
 @click.option('--roi', type=float, default=12.)
 @click.option('--ngoodstat', type=int, default=10)
 @click.option('--rgoodstat', type=int, default=2)
-@click.option('--tbinperdecade', type=float, default=4.0, help='Number of time bins in onde decade. Priority is lower than goodstat')
+@click.option('--ntbinperdecade', type=float, default=4.0, help='Number of time bins in onde decade. Set --ngoodstat 0.')
 @click.option('--index', type=click.Choice(['free', 'best']), default='free')
 @click.option('--suffix', '-s', type=str, default='')
 @click.option('--force', '-f', is_flag=True)
@@ -586,7 +597,13 @@ $\rm{{ \alpha = {alpha:.2E} \pm {alphaerr:.2E} }}$""".format(f0=params[0][0], f0
 @click.option('--outdir', '-o', type=str, default='')
 @click.option('--plotonly', '-p', type=str, default=None, help='Path of result pickle file if you skip analyses.')
 @click.option('--bsub', '-b', is_flag=True)
-def main(namemin, namemax, emin, emax, roi, ngoodstat, rgoodstat, ntbinperdecade, refit, force, suffix, grbcatalogue, outdir, plotonly, index, bsub):
+@click.option('--loglevel', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'CRITICAL']), default='INFO')
+def main(namemin, namemax, emin, emax, tmin, tmax, roi, ngoodstat, rgoodstat, ntbinperdecade, refit, force, suffix, grbcatalogue, outdir, plotonly, index, bsub, loglevel):
+    ##### Logger #####
+    handler.setLevel(loglevel)
+    logger.setLevel(loglevel)
+    logger.addHandler(handler)
+
     tb_lat = ReadLATCatalogueInfo.open_table(grbcatalogue)
     tb_gbm = ReadGBMCatalogueInfo.open_table()
     if bsub==True:
@@ -599,7 +616,7 @@ def main(namemin, namemax, emin, emax, roi, ngoodstat, rgoodstat, ntbinperdecade
             print '##### No.{0} GRB{1} #####'.format(irow, name)
             if not os.path.exists(name):
                 os.mkdir(name)
-            acmd = ['bsub', '-o','{0}/GRB{0}_lightcurve{1}.log'.format(name, suffix if suffix=='' else '_'+suffix), '-J','lc{0}'.format(name[:-3]), '-W','300', 'python', '/u/gl/mtakahas/work/PythonModuleMine/Fermi/STLikelihoodAnalysis/LightCurve.py', '--emin', str(emin), '--emax', str(emax), '-s', suffix, '--index', 'free', '--roi', str(roi), '--ngoodstat', str(ngoodstat), '--rgoodstat', str(rgoodstat), '--tbinperdecade', str(tbinperdecade), '--grbcatalogue', grbcatalogue, '--namemin', name]
+            acmd = ['bsub', '-o','{0}/GRB{0}_lightcurve{1}.log'.format(name, suffix if suffix=='' else '_'+suffix), '-J','lc{0}'.format(name[:-3]), '-W','300', 'python', '/u/gl/mtakahas/work/PythonModuleMine/Fermi/STLikelihoodAnalysis/LightCurve.py', '--emin', str(emin), '--emax', str(emax), '--tmin', str(tmin), '--tmax', str(tmax), '-s', suffix, '--index', 'free', '--roi', str(roi), '--ngoodstat', str(ngoodstat), '--rgoodstat', str(rgoodstat), '--tbinperdecade', str(tbinperdecade), '--grbcatalogue', grbcatalogue, '--namemin', name]
             if force==True:
                 acmd.append('--force')
             if refit==True:
@@ -619,7 +636,7 @@ def main(namemin, namemax, emin, emax, roi, ngoodstat, rgoodstat, ntbinperdecade
             addphoton={'time': (2035.85387415,5757.82151717), 'energy':(115.829539063*1000.,63.1624726562*1000.)}
 
         if plotonly==None:
-            make_lightcurves(namemin, emin, emax, roi, ngoodstat, rgoodstat, ntbinperdecade, suffix, grbcatalogue, refit, force, outdir, index, addphoton=addphoton)#, tmin=tb_lat['LAT_TRIGGER_TIME']-tb_lat['TRIGGER_TIME'])
+            make_lightcurves(name=namemin, wholephase='unified', emin=emin, emax=emax, tmin=tmin, tmax=tmax, roi=roi, ngoodstat=ngoodstat, rgoodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=outdir, index=index, addphoton=addphoton)#, tmin=tb_lat['LAT_TRIGGER_TIME']-tb_lat['TRIGGER_TIME'])
         else:
             plot_lightcurves(plotonly, index=index, addphoton=addphoton) #, addphoton={'time': (422.7,), 'energy':(50.49609375*1000.,)})
             dataframe(plotonly, index=index)
