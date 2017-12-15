@@ -131,13 +131,17 @@ def find_cross_earthlimb(pathFileScAll, ra, dec, tStart, tStop, zcut, thcut=65.,
                         validtimes.append([aSTART[iTI]-torigin])
                     else:
                         print 'Your target is still within Earthlimb (Z>{4}deg). ({0},{1})->({2},{3})'.format(start_prev-torigin, degZenith_prev, aSTART[iTI]-torigin, degZenith, zcut)
+                elif degSCZ<thcut and degZenith<zcut and aSTART[iTI]-stop_prev>1:
+                    print 'Gap in observation from {0} - {1}'.format(stop_prev-torigin, aSTART[iTI]-torigin)
+                    validtimes[-1].append(stop_prev-torigin)
+                    validtimes.append([aSTART[iTI]-torigin])
                 degZenith_prev = degZenith
                 degSCZ_prev = degSCZ
                 start_prev = aSTART[iTI]
                 stop_prev = aSTOP[iTI]
                 iTIR +=1
 
-                if iTI%10==0:
+                if iTI%300==0:
                     print iTI, 'Time:', aSTART[iTI]-torigin, 'RA:', aRA_SCZ[iTI], 'DEC:', aDEC_SCZ[iTI], 'Zenith:', degZenith, 'Inclination:', degSCZ, 'LAT_MODE:', tbdataSC.field('LAT_MODE')[iTI]#math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), degZenith, math.degrees(radSCY)
                 sys.stdout.flush()
         if len(validtimes[-1])<2:
