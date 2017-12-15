@@ -15,19 +15,39 @@ import logging
 
 
 TPL_MARKER = ('.', 'D', 's', 'o', 'x', '*', 'p', 'h', '8')
-TPL_COLOR = ("r", "g", "b", "c", "m")
+TPL_COLOR = ("k", "r", "g", "b", "c", "hotpink", "brown", "purple", "gold", "olive", "orange")
 TPL_LINE = ('-', '--', ':', '-.')
 
 
-def find_range_shown(x, y, f):
+def find_range_shown(x, y, f, nx_restricted=None, ny_restricted=None):
+    indexrange = find_indexrange(x, y, f, nx_restricted=nx_restricted, ny_restricted=ny_restricted)
+    return ((x[0][indexrange[0][0]], x[0][indexrange[0][1]]), (y[indexrange[1][0]][0], y[indexrange[1][1]][0]))
+    # nxmax_shown = 0 
+    # nymax_shown = 0
+    # nxmin_shown = x.shape[1]-1 #len(x)-1
+    # nymin_shown = y.shape[0]-1 #len(y)-1
+    # #print 'Shape of X: {0}'.format(x.shape)
+    # #print 'Shape of Y: {0}'.format(y.shape)
+    # for ix, iy in itertools.product(range(x.shape[1]), range(y.shape[0])):
+    #     if f(iy, ix)==True:
+    #         if ix>nxmax_shown:
+    #             nxmax_shown = ix
+    #         if ix<nxmin_shown:
+    #             nxmin_shown = ix
+    #         if iy>nymax_shown:
+    #             nymax_shown = iy
+    #         if iy<nymin_shown:
+    #             nymin_shown = iy
+    # return ((x[0][nxmin_shown], x[0][nxmax_shown]), (y[nymin_shown][0], y[nymax_shown][0]))
+
+
+def find_indexrange(x, y, f, nx_restricted=None, ny_restricted=None):
     nxmax_shown = 0 
     nymax_shown = 0
-    nxmin_shown = x.shape[1]-1 #len(x)-1
-    nymin_shown = y.shape[0]-1 #len(y)-1
-    #print 'Shape of X: {0}'.format(x.shape)
-    #print 'Shape of Y: {0}'.format(y.shape)
+    nxmin_shown = x.shape[1]-1
+    nymin_shown = y.shape[0]-1
     for ix, iy in itertools.product(range(x.shape[1]), range(y.shape[0])):
-        if f(iy, ix)==True:
+        if f(iy, ix)==True and (nx_restricted is None or ix in nx_restricted) and (ny_restricted is None or iy in ny_restricted):
             if ix>nxmax_shown:
                 nxmax_shown = ix
             if ix<nxmin_shown:
@@ -36,8 +56,7 @@ def find_range_shown(x, y, f):
                 nymax_shown = iy
             if iy<nymin_shown:
                 nymin_shown = iy
-    return ((x[0][nxmin_shown], x[0][nxmax_shown]), (y[nymin_shown][0], y[nymax_shown][0]))
-
+    return ((nxmin_shown, nxmax_shown), (nymin_shown, nymax_shown))    
 
 
 class Data_plotted():
@@ -179,7 +198,7 @@ class Curve:
     def set_point(self, x, y, xerr=0, yerr=0):
         self.lst_xdata.append(x)
         self.lst_ydata.append(y)
-        if True: #self.xerr_asym:
+        if self.xerr_asym:
             self.lst_xerr['hi'].append(xerr['hi'])
             self.lst_xerr['lo'].append(xerr['lo'])
         else:
@@ -228,7 +247,7 @@ class Curve:
     def get_yerr(self):
         logging.info('{0} data points.'.format(self.get_n()))
         if self.get_n()<=2:
-            logging.warning('Fitting is skipped!')
+            logging.info('Fitting is skipped!')
         if self.yerr_asym:
             return [np.array(self.lst_yerr['lo']), np.array(self.lst_yerr['hi'])]
         else:
@@ -258,7 +277,7 @@ class Curve:
         ydata = np.array(ydata)
         yerr = np.array(yerr)
         if len(xdata)<3:
-            logging.warning('Only {0} data points. Fitting is skipped.'.format(len(xdata)))
+            logging.info('Only {0} data points. Fitting is skipped.'.format(len(xdata)))
             return 1
         params_optimal, cov = curve_fit(powerlaw, xdata, ydata, sigma=yerr/ydata, absolute_sigma=False, p0=params_initial)
         logging.info("""Opimized parameters: {0}
@@ -301,7 +320,7 @@ Covariance: {1}""".format(params_optimal, cov))
         ydata = np.array(ydata)
         yerr = np.array(yerr)
         if len(xdata)<3:
-            logging.warning('Only {0} data points. Fitting is skipped.'.format(len(xdata)))
+            logging.info('Only {0} data points. Fitting is skipped.'.format(len(xdata)))
             return 1
         mydata = RealData(x=xdata, y=ydata, sy=yerr)
         myodr = ODR(mydata, powerlaw, beta0=params_initial)
@@ -340,7 +359,7 @@ Covariance: {1}""".format(params_optimal, cov))
         ydata = np.array(ydata)
         yerr = np.array(yerr)
         if len(xdata)<3:
-            logging.warning('Only {0} data points. Fitting is skipped.'.format(len(xdata)))
+            logging.info('Only {0} data points. Fitting is skipped.'.format(len(xdata)))
             return 1
         logx = np.log10(xdata)
         logy = np.log10(ydata)
@@ -375,6 +394,5 @@ Covariance: {1}""".format(params_optimal, cov))
         logyerr_draw = np.zeros_like(logy_draw)
         for ix, logx in enumerate(logx_draw):
             logy_draw[ix] = fitfunc(pfinal, logx) #fitfunc(params_optimal, logx)
-            #logyerr_draw[ix] = powerlaw_err(x, params_optimal[0], params_optimal[1], params_err[0], params_err[1], cov[1][1])
 
         return ((params_optimal, params_err), (10**logx_draw, 10**logy_draw, logyerr_draw))
