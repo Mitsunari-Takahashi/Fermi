@@ -7,10 +7,214 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import click
 import ReadGBMCatalogueInfo
+import ReadSwiftCatalogueInfo
 
 # Catalogue Path
 PATH_CATALOGUE = "/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LATBurstCatalogue.xml"
 PATH_CATALOGUE_GBM = "/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/GBMcatalogue20171005.fits"
+
+def open_table(path=PATH_CATALOGUE):
+    """Open your XML file and return its root.
+"""
+    if path in (None, ""):
+        path=PATH_CATALOGUE
+    f = ET.parse(path)
+    rtXml = f.getroot()
+    return rtXml
+
+
+def read_one_row(grb, tb_gbm=None):
+    #print 'Reading {0}...'.format(grb)
+    dct_info = {}
+    dct_info['GRBNAME'] = grb.findtext("./GRBNAME")
+    #print dct_info['GRBNAME']
+    dct_info['GCNNAME'] = grb.findtext("./GCNNAME")
+    dct_info['LAT_TRIGGER_TIME'] = float(grb.findtext("./MET"))
+    dct_info['TRIGGER_TIME'] = dct_info['LAT_TRIGGER_TIME']
+    dct_info['ZENITH'] = float(grb.findtext("./ZENITH"))
+    if not grb.findtext("./TS") in ("--", "", "NA"):
+        dct_info['LAT_TS'] = float(grb.findtext("./TS"))
+    else:
+        dct_info['LAT_TS'] = 0
+
+    if not grb.findtext("./ERROR") in ("--", "","NA") and not grb.findtext("./LATERROR") in ("--", "", "NA"):
+        if float(grb.findtext("./ERROR"))<=float(grb.findtext("./LATERROR")):
+            dct_info['ERROR'] = float(grb.findtext("./ERROR"))
+            dct_info['RA'] = float(grb.findtext("./RA"))
+            dct_info['DEC'] = float(grb.findtext("./DEC"))
+        else:
+            dct_info['ERROR'] = float(grb.findtext("./LATERROR")) 
+            dct_info['RA'] = float(grb.findtext("./LATRA"))
+            dct_info['DEC'] = float(grb.findtext("./LATDEC"))
+    elif not grb.findtext("./ERROR") in ("--", "", "NA"):
+        dct_info['ERROR'] = float(sys.maxint)
+        dct_info['RA'] = float(grb.findtext("./RA"))
+        dct_info['DEC'] = float(grb.findtext("./DEC"))
+    elif not grb.findtext("./LATERROR") in ("--", "", "NA"):
+        dct_info['ERROR'] = float(grb.findtext("./LATERROR")) 
+        dct_info['RA'] = float(grb.findtext("./LATRA"))
+        dct_info['DEC'] = float(grb.findtext("./LATDEC"))
+    else:
+        dct_info['ERROR'] = sys.maxint
+        dct_info['RA'] = float(grb.findtext("./RA"))
+        dct_info['DEC'] = float(grb.findtext("./DEC"))
+        
+    if tb_gbm is not None:
+        if not dct_info['GRBNAME'] in DCT_GBM_NAME_ASSOC:
+            print 'No GBM association in the dictionary!'
+        elif DCT_GBM_NAME_ASSOC[dct_info['GRBNAME']] is not None:
+            dct_info['GBM'] = ReadGBMCatalogueInfo.select_one_by_name(tb_gbm, DCT_GBM_NAME_ASSOC[dct_info['GRBNAME']])
+            dct_info['TRIGGER_TIME'] = dct_info['GBM']['TRIGGER_TIME']
+        else:
+            print dct_info['GRBNAME'], ': NO GBM observation!!'
+    # Redshift is not implemented yet.
+    dct_info['REDSHIFT'] = 0
+    return dct_info
+
+
+def read_all(root_xml, tb_gbm=None):
+    lst_info = []
+    dct_info = {}
+    for grb in root_xml:
+        dct_info[grb.findtext("./GRBNAME")] = read_one_row(grb, tb_gbm)
+    for k, v in sorted(dct_info.items()):
+        lst_info.append(v)
+    return lst_info
+
+
+def select_one_by_name(root_xml, grbname, tb_gbm=None):
+    """Return a masked table consists of one paticular GRB.
+"""
+    dct_info = {}
+    for grb in root_xml:
+        if grb.findtext("./GRBNAME")==grbname: 
+            one_grb = read_one_row(grb, tb_gbm)
+            return one_grb
+    print 'No data of {0} in the LAT list!!'.format(grbname)
+    return 1
+
+
+def select_by_name(root_xml, name_min, name_max='999999999', tb_gbm=None):
+    """Return a masked table consists of several GRBs.
+"""
+    lst_info = []
+    dct_info = {}
+    for grb in root_xml:
+        if float(grb.findtext("./GRBNAME")) >= float(name_min) and float(grb.findtext("./GRBNAME")) <= float(name_max):
+            dct_info[grb.findtext("./GRBNAME")] = read_one_row(grb, tb_gbm)
+    for k, v in sorted(dct_info.items()):
+        lst_info.append(v)
+    print 'Selected', len(lst_info), 'GRBs by name.' 
+    return lst_info
+
+
+def remove_by_name(lst_grbs, excludes):
+    if excludes is None:
+        return lst_grbs
+    lst_new = []
+    for grb in lst_grbs:
+        if not grb['GRBNAME'] in excludes:
+            lst_new.append(grb)
+    print 'Updated list after removing {0}:'.format(excludes)
+    print lst_new
+    return lst_new
+
+
+def select_gbm_exist(lst_grbs):
+    """Return a masked table consists of GRBs with GBM catalogue.
+"""
+    lst_info = []
+    dct_info = {}
+    for grb in lst_grbs:
+        if 'GBM' in grb:
+            dct_info[grb["GRBNAME"]] = grb
+    for k, v in sorted(dct_info.items()):
+        lst_info.append(v)
+    print 'Selected', len(lst_info), 'GRBs by existance of GBM data.' 
+    return lst_info
+
+
+def select_small_error(lst_grbs, rad_tol=0.3):
+    """Return a masked table consists of long-GRBs based on GBM catalogue.
+"""
+    lst_info = []
+    dct_info = {}
+    for grb in lst_grbs:
+        if grb['ERROR']<rad_tol:
+            dct_info[grb["GRBNAME"]] = grb
+    for k, v in sorted(dct_info.items()):
+        lst_info.append(v)
+    print 'Selected', len(lst_info), 'GRBs with localization error smaller than', rad_tol, 'deg.' 
+    return lst_info
+
+
+def select_zenith_angle(lst_grbs, zmax=100.):
+    """Return a masked table consists of long-GRBs based on GBM catalogue.
+"""
+    lst_info = []
+    dct_info = {}
+    for grb in lst_grbs:
+        if grb['ZENITH']<zmax:
+            dct_info[grb["GRBNAME"]] = grb
+    for k, v in sorted(dct_info.items()):
+        lst_info.append(v)
+    print 'Selected', len(lst_info), 'GRBs with zenith angle smaller than', zmax, 'deg.' 
+    return lst_info
+
+
+def select_long(lst_grbs):
+    """Return a masked table consists of long-GRBs based on GBM catalogue.
+"""
+    lst_info = []
+    dct_info = {}
+    for grb in lst_grbs:
+        if 'GBM' in grb and grb['GBM']['T90']>=2.0:
+            #lst_info.append(o)
+            dct_info[grb["GRBNAME"]] = grb
+    for k, v in sorted(dct_info.items()):
+        lst_info.append(v)
+    print 'Selected', len(lst_info), 'long-GRBs.' 
+    return lst_info
+
+
+def select_short(lst_grbs):
+    """Return a masked table consists of short-GRBs based on GBM catalogue.
+"""
+    lst_info = []
+    dct_info = {}
+    for grb in lst_grbs:
+        if 'GBM' in grb and grb['GBM']['T90']<2.0:
+            dct_info[grb["GRBNAME"]] = grb
+    for k, v in sorted(dct_info.items()):
+        lst_info.append(v)
+    print 'Selected', len(lst_info), 'short-GRBs.' 
+    return lst_info
+
+
+def select_by_swift(lst_grbs, swift_dframe, columns=[]):
+    """Return a masked table consists of GRBs with Swift data table's column you want.
+GRB Time XRTRA XRTDec XRT90%ErrorRadius XRTTimetoFirstObservation XRTEarlyFlux XRT11HourFlux XRT24HourFlux XRTInitialTemporalIndex XRTSpectralIndex
+"""
+    lst_info = []
+    dct_info = {}
+    for grb in lst_grbs:
+        if not grb['GCNNAME'] in swift_dframe['GRB'].values:
+            print '{0} is not found.'.format(grb['GCNNAME'])
+            continue
+        dseries = ReadSwiftCatalogueInfo.read_one_row(swift_dframe, grb['GCNNAME'])
+        flag_nan = False
+        for col in columns:
+            if dseries[col] == 'n/a':
+                flag_nan = True
+        if flag_nan is False:
+            dct_info[grb["GRBNAME"]] = grb
+
+    for k, v in sorted(dct_info.items()):
+        lst_info.append(v)
+    print 'Selected {0} GRBs with Swift {1}.'.format(len(lst_info), columns)
+    return lst_info
+
+
 # GBM name association
 DCT_GBM_NAME_ASSOC = {"080818945" : "GRB080818945",
                       "080825593" : "GRB080825593",
@@ -191,168 +395,6 @@ DCT_GBM_NAME_ASSOC = {"080818945" : "GRB080818945",
                       "160509374" : "GRB160509374",
                       "160503567" : "GRB160503567"
                       }
-
-def open_table(path=PATH_CATALOGUE):
-    """Open your XML file and return its root.
-"""
-    if path in (None, ""):
-        path=PATH_CATALOGUE
-    f = ET.parse(path)
-    rtXml = f.getroot()
-    return rtXml
-
-
-def read_one_row(grb, tb_gbm=None):
-    #print 'Reading {0}...'.format(grb)
-    dct_info = {}
-    dct_info['GRBNAME'] = grb.findtext("./GRBNAME")
-    #print dct_info['GRBNAME']
-    dct_info['GCNNAME'] = grb.findtext("./GCNNAME")
-    dct_info['LAT_TRIGGER_TIME'] = float(grb.findtext("./MET"))
-    dct_info['TRIGGER_TIME'] = dct_info['LAT_TRIGGER_TIME']
-    if not grb.findtext("./TS") in ("--", "", "NA"):
-        dct_info['LAT_TS'] = float(grb.findtext("./TS"))
-    else:
-        dct_info['LAT_TS'] = 0
-
-    if not grb.findtext("./ERROR") in ("--", "","NA") and not grb.findtext("./LATERROR") in ("--", "", "NA"):
-        if float(grb.findtext("./ERROR"))<=float(grb.findtext("./LATERROR")):
-            dct_info['ERROR'] = float(grb.findtext("./ERROR"))
-            dct_info['RA'] = float(grb.findtext("./RA"))
-            dct_info['DEC'] = float(grb.findtext("./DEC"))
-        else:
-            dct_info['ERROR'] = float(grb.findtext("./LATERROR")) 
-            dct_info['RA'] = float(grb.findtext("./LATRA"))
-            dct_info['DEC'] = float(grb.findtext("./LATDEC"))
-    elif not grb.findtext("./ERROR") in ("--", "", "NA"):
-        dct_info['ERROR'] = float(sys.maxint)
-        dct_info['RA'] = float(grb.findtext("./RA"))
-        dct_info['DEC'] = float(grb.findtext("./DEC"))
-    elif not grb.findtext("./LATERROR") in ("--", "", "NA"):
-        dct_info['ERROR'] = float(grb.findtext("./LATERROR")) 
-        dct_info['RA'] = float(grb.findtext("./LATRA"))
-        dct_info['DEC'] = float(grb.findtext("./LATDEC"))
-    else:
-        dct_info['ERROR'] = sys.maxint
-        dct_info['RA'] = float(grb.findtext("./RA"))
-        dct_info['DEC'] = float(grb.findtext("./DEC"))
-        
-    if tb_gbm is not None:
-        if not dct_info['GRBNAME'] in DCT_GBM_NAME_ASSOC:
-            print 'No GBM association in the dictionary!'
-        elif DCT_GBM_NAME_ASSOC[dct_info['GRBNAME']] is not None:
-            dct_info['GBM'] = ReadGBMCatalogueInfo.select_one_by_name(tb_gbm, DCT_GBM_NAME_ASSOC[dct_info['GRBNAME']])
-            dct_info['TRIGGER_TIME'] = dct_info['GBM']['TRIGGER_TIME']
-        else:
-            print dct_info['GRBNAME'], ': NO GBM observation!!'
-    # Redshift is not implemented yet.
-    dct_info['REDSHIFT'] = 0
-    return dct_info
-
-
-def read_all(root_xml, tb_gbm=None):
-    lst_info = []
-    dct_info = {}
-    for grb in root_xml:
-        dct_info[grb.findtext("./GRBNAME")] = read_one_row(grb, tb_gbm)
-    for k, v in sorted(dct_info.items()):
-        lst_info.append(v)
-    return lst_info
-
-
-def select_one_by_name(root_xml, grbname, tb_gbm=None):
-    """Return a masked table consists of one paticular GRB.
-"""
-    dct_info = {}
-    for grb in root_xml:
-        if grb.findtext("./GRBNAME")==grbname: 
-            one_grb = read_one_row(grb, tb_gbm)
-            return one_grb
-    print 'No data of {0} in the LAT list!!'.format(grbname)
-    return 1
-
-
-def select_by_name(root_xml, name_min, name_max='999999999', tb_gbm=None):
-    """Return a masked table consists of several GRBs.
-"""
-    lst_info = []
-    dct_info = {}
-    for grb in root_xml:
-        if float(grb.findtext("./GRBNAME")) >= float(name_min) and float(grb.findtext("./GRBNAME")) <= float(name_max):
-            dct_info[grb.findtext("./GRBNAME")] = read_one_row(grb, tb_gbm)
-    for k, v in sorted(dct_info.items()):
-        lst_info.append(v)
-    print 'Selected', len(lst_info), 'GRBs by name.' 
-    return lst_info
-
-
-def remove_by_name(lst_grbs, excludes):
-    if excludes is None:
-        return lst_grbs
-    lst_new = []
-    for grb in lst_grbs:
-        if not grb['GRBNAME'] in excludes:
-            lst_new.append(grb)
-    print 'Updated list after removing {0}:'.format(excludes)
-    print lst_new
-    return lst_new
-
-
-def select_gbm_exist(lst_grbs):
-    """Return a masked table consists of GRBs with GBM catalogue.
-"""
-    lst_info = []
-    dct_info = {}
-    for grb in lst_grbs:
-        if 'GBM' in grb:
-            dct_info[grb["GRBNAME"]] = grb
-    for k, v in sorted(dct_info.items()):
-        lst_info.append(v)
-    print 'Selected', len(lst_info), 'GRBs by existance of GBM data.' 
-    return lst_info
-
-
-def select_small_error(lst_grbs, rad_tol=0.3):
-    """Return a masked table consists of long-GRBs based on GBM catalogue.
-"""
-    lst_info = []
-    dct_info = {}
-    for grb in lst_grbs:
-        if grb['ERROR']<rad_tol:
-            dct_info[grb["GRBNAME"]] = grb
-    for k, v in sorted(dct_info.items()):
-        lst_info.append(v)
-    print 'Selected', len(lst_info), 'GRBs with localization error smaller than', rad_tol, 'deg.' 
-    return lst_info
-
-
-def select_long(lst_grbs):
-    """Return a masked table consists of long-GRBs based on GBM catalogue.
-"""
-    lst_info = []
-    dct_info = {}
-    for grb in lst_grbs:
-        if 'GBM' in grb and grb['GBM']['T90']>=2.0:
-            #lst_info.append(o)
-            dct_info[grb["GRBNAME"]] = grb
-    for k, v in sorted(dct_info.items()):
-        lst_info.append(v)
-    print 'Selected', len(lst_info), 'long-GRBs.' 
-    return lst_info
-
-
-def select_short(lst_grbs):
-    """Return a masked table consists of short-GRBs based on GBM catalogue.
-"""
-    lst_info = []
-    dct_info = {}
-    for grb in lst_grbs:
-        if 'GBM' in grb and grb['GBM']['T90']<2.0:
-            dct_info[grb["GRBNAME"]] = grb
-    for k, v in sorted(dct_info.items()):
-        lst_info.append(v)
-    print 'Selected', len(lst_info), 'short-GRBs.' 
-    return lst_info
 
 
 @click.command()
