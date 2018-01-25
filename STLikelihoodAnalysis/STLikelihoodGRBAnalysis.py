@@ -28,6 +28,8 @@ def likelihood_grb_analysis(name, mode, emin, emax, eref, roi, spectraltype, ref
         spectralpars = {'Prefactor':1e-10, 'Index':-2.0, 'Scale':eref, 'Ebreak':10.0, 'P1':10000., 'P2':0, 'P3':0}
     elif spectraltype=='BrokenPowerLaw':
         spectralpars = {'Prefactor':1e-12, 'Index1':-2.0, 'Index2':-2.0, 'BreakValue':eref}
+    elif spectraltype=='BrokenPowerLaw2':
+        spectralpars = {'Integral':1e-5, 'Index1':-2.0, 'Index2':-2.0, 'BreakValue':eref, 'LowerLimit':emin, 'UpperLimit':emax}
     else:
         logger.critical("""{0} is NOT available!!! Use PowerLaw or ExpCutoff.""".format(spectraltype))
         sys.exit(1)
@@ -40,7 +42,6 @@ def likelihood_grb_analysis(name, mode, emin, emax, eref, roi, spectraltype, ref
     nrough = ana.setup(force={'download':False, 'filter':force, 'maketime':True, 'evtbin':force, 'livetime':force, 'exposure':force, 'model_3FGL_sources':True, 'diffuse_responses':force, 'srcmaps':force}, skip_zero_data=True)
     if ana.duration<=0:
         ana.dct_summary_results['TS'] = 0
-        #dct_summary_results = {'TS':0}
         pickle_utilities.dump('{0}/Summary{1}.pickle'.format(ana.dir_work, '' if suffix=='' else '_'+suffix), ana.dct_summary_results)
         return ana.dct_summary_results
     #if nrough<1:
@@ -57,6 +58,8 @@ def likelihood_grb_analysis(name, mode, emin, emax, eref, roi, spectraltype, ref
         ana.eval_flux_and_error()
         if spectraltype in ('PowerLaw', 'PowerLaw2', 'ScaleFactor::PowerLaw2'):
             ana.eval_limits_powerlaw(str_index_fixed=['best'])
+            ana.set_likelihood_external_model(ana.path_model_xml_new)
+            ana.eval_limits_powerlaw_index()
     logger.info(ana.dct_summary_results)
 
     ##### Likelihood ratio ordering #####
