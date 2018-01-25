@@ -19,7 +19,7 @@ import click
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
-from FindGoodstatPeriods import find_goodstat_periods, get_entries, get_event_time_and_energy
+from FindGoodstatPeriods import find_goodstat_periods, get_entries, get_event_time_and_energy, get_event_time_energy_angsep
 from FindCrossEarthlimb import find_cross_earthlimb
 #import ReadLTFCatalogueInfo
 import ReadLATCatalogueInfo
@@ -44,6 +44,9 @@ MEVtoERG = 1.6021766208E-6
 
 ##### Refered information #####
 GRB_CATALOGUE = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LAT2CATALOG-v1-LTF.fits'
+
+##### Plot style #####
+lst_markers = ['s', 'o', 'D', 'x']
 
 
 ##### CalOnly photons #####
@@ -72,15 +75,21 @@ class SourceObject:
 
 
     def get_events(self):
-        self.times, self.energies = get_event_time_and_energy(self.config['path_evtfile'], tStart=min(self.config['time']['min'], self.config['time']['min'] + self.gbm['t90_start']), tStop=self.config['time']['max'], rlim=self.config['roi']['radius'], ra=self.target['coord']['ra'], dec=self.target['coord']['dec'], torigin=self.config['met']['o'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], zmax=self.config['zenith']['max'], z=self.target['redshift'])
+        events = get_event_time_and_energy(self.config['path_evtfile'], tStart=min(self.config['time']['min'], self.config['time']['min'] + self.gbm['t90_start']), tStop=self.config['time']['max'], rlim=self.config['roi']['radius'], ra=self.target['coord']['ra'], dec=self.target['coord']['dec'], torigin=self.config['met']['o'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], zmax=self.config['zenith']['max'], z=self.target['redshift'])
         #if self.target['redshift']>0:
         #    self.energies = self.energies * (1.+self.target['redshift'])
+        self.times = events[0]
+        self.energies = events[1]
+
+    def get_events_angsep(self):
+        events = get_event_time_energy_angsep(self.config['path_evtfile'], tStart=min(self.config['time']['min'], self.config['time']['min'] + self.gbm['t90_start']), tStop=self.config['time']['max'], rlim=sqrt(10.), ra=self.target['coord']['ra'], dec=self.target['coord']['dec'], torigin=self.config['met']['o'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], zmax=self.config['zenith']['max'], z=self.target['redshift'])
+        self.angsep = events[2]
 
 
-    def plot(self, ax, nplot=0, addphoton=False):
-        lst_markers = ['s', 'o', 'D', 'x']
-        nmarker = nplot / NMARKER_STYLE
-        p = ax.scatter(self.times, self.energies/1000., alpha=0.75, label=self.config['gcnname'], marker=lst_markers[nmarker])
+    def plot(self, ax, marker, color=None, alpha=0.75, addphoton=False):
+        #nmarker = nplot / NMARKER_STYLE
+        p = ax.scatter(self.times, self.energies/1000., alpha=alpha, label=self.config['gcnname'], marker=marker, c=color)
+        #p = ax.scatter(self.times, self.energies/1000., alpha=0.75, label=self.config['gcnname'], marker=lst_markers[nmarker])
         if addphoton==True and  self.config['gcnname'] in addphoton.keys():
             print 'Additional photons:'
             t_added = np.array(addphoton[self.config['gcnname']]['time'])
@@ -116,9 +125,10 @@ def main(emin, emax, tmin, tmax, roi, redshift, suffix, pathout, figform, longon
     ax.set_xlabel(r'$Time - \rm{ min( T_{0}, T_{0}+T_{05}) [s]}$')
     ax.set_ylabel(r'$Energy \rm{[GeV]}$')
 
+    fig_sep = plt.figure(figsize=(15, 4.5))
+    ax_sep = fig_sep.add_axes((0.07, 0.15, 0.9, 0.75))
+    angsep_stacked_sq = []
 
-    #TB_LTF = ReadLTFCatalogueInfo.open_table(1, GRB_CATALOGUE)
-    #tb_gbm = ReadLTFCatalogueInfo.select_gbm_exist(TB_LTF)
     tb_gbm = ReadGBMCatalogueInfo.open_table()
     tb_lat = ReadLATCatalogueInfo.open_table()
     lst_lat = ReadLATCatalogueInfo.read_all(tb_lat, tb_gbm)
@@ -145,8 +155,11 @@ def main(emin, emax, tmin, tmax, roi, redshift, suffix, pathout, figform, longon
                 os.mkdir(path_dir_data)
             #DownloadFermiData.download_fermi_data_grb(name, lst_ft=[1], path_outdir=path_dir_data)
             src.get_events()
+            src.get_events_angsep()
+            angsep_stacked_sq.append(src.angsep**2)
+
             if len(src.times)>0:
-                src.plot(ax, ngrb_plotted, addphoton)
+                src.plot(ax, lst_markers[ngrb_plotted/NMARKER_STYLE], addphoton=addphoton)
                 ngrb_plotted+=1
     ax.set_xlim([max(0.1,tmin), tmax])
     ax.set_ylim([emin/1000., emax/1000.])
@@ -155,8 +168,14 @@ def main(emin, emax, tmin, tmax, roi, redshift, suffix, pathout, figform, longon
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
     ax.yaxis.set_minor_formatter(FormatStrFormatter('%.0f'))
     ax.legend(loc=0, fancybox=True, framealpha=0.5, fontsize=9, ncol=ngrb_plotted/7+1)
+
+    ax_sep.hist(angsep_stacked_sq, histtype='barstacked', bins=1000)
+
     for ff in figform:
         fig.savefig('{0}{1}{2}.{3}'.format(pathout, suffix if suffix=='' else '_'+suffix, '_redshift' if redshift==True else '', ff))
+        fig_sep.savefig('{0}_separation{1}{2}.{3}'.format(pathout, suffix if suffix=='' else '_'+suffix, '_redshift' if redshift==True else '', ff))
+
+
 
 
 if __name__ == '__main__':
