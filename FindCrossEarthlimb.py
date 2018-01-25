@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import sys
-#import ROOT
 import numpy as np
 import click
 import datetime
@@ -10,14 +9,114 @@ from astropy.coordinates import SkyCoord  # High-level coordinates
 from astropy.coordinates import ICRS, Galactic, FK4, FK5  # Low-level frames
 from astropy.coordinates import Angle, Latitude, Longitude  # Angles
 import astropy.units as u
-#from healpy import pixelfunc as hppf
 from array import array
 import math
 from math import cos, sin, tan, acos, asin, atan, radians, degrees
 from pMETandMJD import *
-#from pAnalysisConfig import *
 import commands
 
+
+def get_good_intervals(pathFileScAll, ra, dec, tsegments, zcut, thcut=65., torigin=0):
+    """Look over spacecraft files and returns start-time list and stop-time list of good intervals.
+"""
+    print pathFileScAll
+    coordsTgt = SkyCoord(ra, dec, unit="deg")
+    print coordsTgt
+
+    cmd = "ls {0}".format(pathFileScAll)
+    ret = commands.getoutput(cmd)
+    aPathFileScAll = ret.split("\n")
+    aFileToI = []
+    for iFileSc in range(len(aPathFileScAll)):
+        strPathFileSc = aPathFileScAll[iFileSc]
+        aFileToI.append(aPathFileScAll[iFileSc])
+
+    for tStart, tStop in zip(tsegments[0], tsegments[1]):
+        metStart = tStart + torigin
+        metStop = tStop + torigin
+        validtimes = []    
+    
+        for fileToI in aFileToI:
+            timeStart = datetime.datetime.now() # For progress bar
+            hdulistSC = fits.open(fileToI)
+            tbdataSC = hdulistSC[1].data
+            aSTART, aSTOP = tbdataSC.field('START'), tbdataSC.field('STOP')
+            aRA_ZENITH = tbdataSC.field('RA_ZENITH')
+            aDEC_ZENITH = tbdataSC.field('DEC_ZENITH')
+            aRA_SCZ, aRA_SCX = tbdataSC.field('RA_SCZ'), tbdataSC.field('RA_SCX')
+            aDEC_SCZ, aDEC_SCX = tbdataSC.field('DEC_SCZ'), tbdataSC.field('DEC_SCX')
+            aLIVETIME = tbdataSC.field('LIVETIME')
+            aDATA_QUAL = tbdataSC.field('DATA_QUAL')
+            aLAT_CONFIG = tbdataSC.field('LAT_CONFIG')
+
+            nTI = len(aSTART)
+            print "  ", fileToI, "(", nTI, "intervals )"
+            gstarts = []
+            gstops = []
+            glivetimes = []
+            stop_prev = 0
+            iTIR = 0
+            for iTI in range(nTI):
+                if aSTART[iTI]<stop_prev:
+                    print 'Odd order!!!'
+                    return 1
+                if not aDATA_QUAL[iTI]>0:
+                    print 'Bad time interval', aSTART[iTI], '-', aSTOP[iTI], ':', aDATA_QUAL[iTI]
+                    continue
+                if not aLAT_CONFIG[iTI]==1:
+                    print 'LAT config:', aSTART[iTI], '-', aSTOP[iTI], ':', aLAT_CONFIG[iTI]
+                    continue
+                if aSTOP[iTI]<metStart or aSTART[iTI]>metStop:
+                    continue
+                else:
+                    coordsSCZ = SkyCoord(aRA_SCZ[iTI], aDEC_SCZ[iTI], unit="deg")
+                    coordsZenith = SkyCoord(aRA_ZENITH[iTI], aDEC_ZENITH[iTI], unit="deg")
+                    angSCZ = coordsSCZ.separation(coordsTgt)
+                    degSCZ = float(angSCZ.to_string(unit=u.deg, decimal=True))
+                    angZenith = coordsZenith.separation(coordsTgt)
+                    degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
+                    if degZenith<zcut and degSCZ<thcut:
+                        if aSTART[iTI]>=metStart and aSTOP[iTI]<=metStop:
+                            tstart_rel = aSTART[iTI]-torigin
+                            tstop_rel = aSTOP[iTI]-torigin
+                            tti = aLIVETIME[iTI]
+                        elif aSTART[iTI]<=metStart and aSTOP[iTI]>=metStop:
+                            tstart_rel = metStart-torigin
+                            tstop_rel = metStop-torigin
+                            tti = metStop-metStart
+                        elif aSTART[iTI]<metStart:
+                            tstart_rel = metStart-torigin
+                            tstop_rel = aSTOP[iTI]-torigin
+                            tti = (tstop_rel-tstart_rel)/(aSTOP[iTI]-aSTART[iTI])*aLIVETIME[iTI]
+                        elif aSTOP[iTI]>metStop:
+                            tstart_rel = aSTART[iTI]-torigin
+                            tstop_rel = metStop-torigin
+                            tti = (tstop_rel-tstart_rel)/(aSTOP[iTI]-aSTART[iTI])*aLIVETIME[iTI]
+
+                        if len(gstops)==0:
+                            gstarts.append(tstart_rel)
+                            gstops.append(tstop_rel)
+                            glivetimes.append(tti)
+                        else:
+                            if tstart_rel==gstops[-1]:
+                                gstops[-1] = tstop_rel
+                                glivetimes[-1] += tti
+                            else:
+                                gstarts.append(tstart_rel)
+                                gstops.append(tstop_rel)
+                                glivetimes.append(tti)
+
+                    if iTI%300==0:
+                        print iTI, 'Time:', aSTART[iTI]-torigin, 'RA:', aRA_SCZ[iTI], 'DEC:', aDEC_SCZ[iTI], 'Zenith:', degZenith, 'Inclination:', degSCZ, 'LAT_MODE:', tbdataSC.field('LAT_MODE')[iTI]
+                    sys.stdout.flush()
+            if not len(gstarts)==len(gstops):
+                print 'Numbers of START and STOP are NOT same!!!'
+                sys.exit(1)
+            if not len(gstarts)==len(glivetimes):
+                print 'Numbers of START and LIVETIME are NOT same!!!'
+                sys.exit(1)
+        validtimes.append[(gstarts, gstops, glivetimes)]
+    return validtimes
 
 def find_cross_earthlimb(pathFileScAll, ra, dec, tStart, tStop, zcut, thcut=65., torigin=0):
     """Look over spacecraft files and find times the target object crosses the Earthlimb.
