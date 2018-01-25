@@ -5,9 +5,11 @@ import sys
 from astropy.io import fits
 import xml.etree.ElementTree as ET
 import numpy as np
+import pandas as pd
 import click
 import ReadGBMCatalogueInfo
 import ReadSwiftCatalogueInfo
+import ReadKonusWindRedshiftCatalogueInfo
 
 # Catalogue Path
 PATH_CATALOGUE = "/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LATBurstCatalogue.xml"
@@ -23,7 +25,7 @@ def open_table(path=PATH_CATALOGUE):
     return rtXml
 
 
-def read_one_row(grb, tb_gbm=None):
+def read_one_row(grb, tb_gbm=None, tbs_kw=None):
     #print 'Reading {0}...'.format(grb)
     dct_info = {}
     dct_info['GRBNAME'] = grb.findtext("./GRBNAME")
@@ -58,7 +60,8 @@ def read_one_row(grb, tb_gbm=None):
         dct_info['ERROR'] = sys.maxint
         dct_info['RA'] = float(grb.findtext("./RA"))
         dct_info['DEC'] = float(grb.findtext("./DEC"))
-        
+
+    ##### GBM #####
     if tb_gbm is not None:
         if not dct_info['GRBNAME'] in DCT_GBM_NAME_ASSOC:
             print 'No GBM association in the dictionary!'
@@ -67,41 +70,59 @@ def read_one_row(grb, tb_gbm=None):
             dct_info['TRIGGER_TIME'] = dct_info['GBM']['TRIGGER_TIME']
         else:
             print dct_info['GRBNAME'], ': NO GBM observation!!'
+    ##### Konus-Wind #####
+        if tbs_kw is not None:
+            for itb, tb_kw in enumerate(tbs_kw):
+                #print 'Table', itb
+                #gcnnamed = dct_info['GCNNAME']#[:-1] if dct_info['GCNNAME'][0]=='0' and dct_info['GCNNAME'][-1]=='A' else dct_info['GCNNAME'] # Tail 'A' is omitted for GRB 08- and 09-
+                kw_dframe = ReadKonusWindRedshiftCatalogueInfo.select_one_by_name(tb_kw, dct_info['GRBNAME'], latname=True)
+                if isinstance(kw_dframe, pd.DataFrame):
+                    kw_series = kw_dframe.iloc[0] #kw_dframe.stack()
+                    kw_dict = kw_series.to_dict()
+                    if isinstance(kw_dict, dict):
+                        #print 'Input:', kw_dict
+                        if 'KonusWind' in dct_info and isinstance(dct_info['KonusWind'], dict):
+                            dct_info['KonusWind'].update(kw_dict)
+                            #print len(dct_info['KonusWind']), 'keys.' 
+                        else:
+                            dct_info['KonusWind'] = kw_dict
+                            #print len(dct_info['KonusWind']), 'keys.' 
+
     # Redshift is not implemented yet.
     dct_info['REDSHIFT'] = 0
     return dct_info
 
 
-def read_all(root_xml, tb_gbm=None):
+def read_all(root_xml, tb_gbm=None, tb_kw=None):
     lst_info = []
     dct_info = {}
     for grb in root_xml:
-        dct_info[grb.findtext("./GRBNAME")] = read_one_row(grb, tb_gbm)
+        dct_info[grb.findtext("./GRBNAME")] = read_one_row(grb, tb_gbm, tb_kw)
     for k, v in sorted(dct_info.items()):
         lst_info.append(v)
     return lst_info
 
 
-def select_one_by_name(root_xml, grbname, tb_gbm=None):
+def select_one_by_name(root_xml, grbname, tb_gbm=None, tb_kw=None):
     """Return a masked table consists of one paticular GRB.
 """
     dct_info = {}
     for grb in root_xml:
         if grb.findtext("./GRBNAME")==grbname: 
-            one_grb = read_one_row(grb, tb_gbm)
+            one_grb = read_one_row(grb, tb_gbm, tb_kw)
             return one_grb
     print 'No data of {0} in the LAT list!!'.format(grbname)
     return 1
 
 
-def select_by_name(root_xml, name_min, name_max='999999999', tb_gbm=None):
+def select_by_name(root_xml, name_min, name_max='999999999', tb_gbm=None, tb_kw=None):
     """Return a masked table consists of several GRBs.
 """
     lst_info = []
     dct_info = {}
     for grb in root_xml:
         if float(grb.findtext("./GRBNAME")) >= float(name_min) and float(grb.findtext("./GRBNAME")) <= float(name_max):
-            dct_info[grb.findtext("./GRBNAME")] = read_one_row(grb, tb_gbm)
+            dct_info[grb.findtext("./GRBNAME")] = read_one_row(grb, tb_gbm, tb_kw)
     for k, v in sorted(dct_info.items()):
         lst_info.append(v)
     print 'Selected', len(lst_info), 'GRBs by name.' 
@@ -127,10 +148,29 @@ def select_gbm_exist(lst_grbs):
     dct_info = {}
     for grb in lst_grbs:
         if 'GBM' in grb:
-            dct_info[grb["GRBNAME"]] = grb
+            if grb['GBM'] is not None:
+                dct_info[grb["GRBNAME"]] = grb
     for k, v in sorted(dct_info.items()):
         lst_info.append(v)
     print 'Selected', len(lst_info), 'GRBs by existance of GBM data.' 
+    return lst_info
+
+
+def select_konuswind_exist(lst_grbs):
+    """Return a masked table consists of GRBs with KonusWind catalogue.
+"""
+    lst_info = []
+    dct_info = {}
+    for grb in lst_grbs:
+        if 'KonusWind' in grb: 
+            if grb['KonusWind'] is not None:
+                #print grb['KonusWind']
+                if 'S' in grb['KonusWind']:
+                    if grb['KonusWind']['S'] is not None:
+                        dct_info[grb["GRBNAME"]] = grb
+    for k, v in sorted(dct_info.items()):
+        lst_info.append(v)
+    print 'Selected', len(lst_info), 'GRBs by existance of Konus-Wind (redshift-known) data.' 
     return lst_info
 
 
