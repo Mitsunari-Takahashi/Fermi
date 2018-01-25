@@ -19,24 +19,20 @@ logger = get_module_logger(__name__)
 handler = StreamHandler()
 
 
-def likelihood_grb_analysis_three_energies(name, mode, roi=None, spectraltype='PowerLaw', refit=True, force=False, suffix='', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, modelonly=False, outdir='.', binned=False, masifps=False, scalefactor=1., gti_external=None):
+def likelihood_grb_analysis_three_energies(name, mode, roi=None, spectraltype='PowerLaw', refit=True, force=False, suffix='', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, modelonly=False, sptmin=None, sptmax=None, outdir='.', binned=False, masifps=False, scalefactor=1., gti_external=None):
     dct_emin = {'whole_energies':100, 'lower_energies':100, 'highest_energies':10000, 'middle_energies': 1000}
     dct_emax = {'whole_energies':100000, 'lower_energies':1000, 'highest_energies':100000, 'middle_energies': 10000}
-    #dct_emin = {'whole_energies':100, 'lower_energies':100, 'highest_energies':10000}
-    #dct_emax = {'whole_energies':100000, 'lower_energies':10**3.75, 'highest_energies':100000}
+    dct_eref = {'whole_energies':1000, 'lower_energies':300, 'highest_energies':30000, 'middle_energies': 3000}
     if roi is not None and roi>0:
         dct_roi = {'whole_energies':roi, 'lower_energies':roi, 'highest_energies':roi, 'middle_energies':roi}
     else:
         dct_roi = {'whole_energies':12., 'lower_energies':12., 'highest_energies':1., 'middle_energies':3.}
     dct_summary = {}
     for erange in ('whole_energies', 'lower_energies', 'highest_energies', 'middle_energies'):
-        # if erange in ('lower_energies', 'highest_energies', 'middle_energies'):
-        #     gti_external = 'E{emin:0>7.0f}-{emax:0>7.0f}MeV/r{roi:0>2.0f}deg'.format(emin=dct_emin['whole_energies'], emax=dct_emax['whole_energies'], roi=dct_roi['whole_energies'])
-        # else:
-        #gti_external = None
-        dct_summary[erange] = likelihood_grb_analysis(name=name, mode=mode, emin=dct_emin[erange], emax=dct_emax[erange], roi=dct_roi[erange], spectraltype=spectraltype, refit=refit, force=force, suffix=suffix, grbcatalogue=grbcatalogue, modelonly=modelonly, outdir=outdir, binned=binned, masifps=masifps, scalefactor=scalefactor, gti_external=gti_external)
+        dct_summary[erange] = likelihood_grb_analysis(name=name, mode=mode, emin=dct_emin[erange], emax=dct_emax[erange], eref=dct_eref[erange], roi=dct_roi[erange], spectraltype=spectraltype, refit=refit, force=force, suffix=suffix, grbcatalogue=grbcatalogue, modelonly=modelonly, sptmin=sptmin, sptmax=sptmax, outdir=outdir, binned=binned, masifps=masifps, scalefactor=scalefactor, gti_external=gti_external)
         dct_summary[erange]['emin'] = dct_emin[erange]
         dct_summary[erange]['emax'] = dct_emax[erange]
+        dct_summary[erange]['eref'] = dct_eref[erange]
     pickle_utilities.dump('{0}/{1}/three_eranges_{2}_{3}{4}.pickle'.format(outdir, name, mode, spectraltype, '' if suffix=='' else '_'+suffix), dct_summary)
 
 
@@ -50,6 +46,8 @@ def likelihood_grb_analysis_three_energies(name, mode, roi=None, spectraltype='P
 @click.option('--suffix', '-s', type=str, default='')
 @click.option('--force', '-f', is_flag=True)
 @click.option('--modelonly', is_flag=True)
+@click.option('--sptmin', type=float, default=None)
+@click.option('--sptmax', type=float, default=None)
 @click.option('--masifps', is_flag=True)
 @click.option('--refit', '-r', is_flag=True)
 @click.option('--binned', '-b', is_flag=True)
@@ -57,7 +55,7 @@ def likelihood_grb_analysis_three_energies(name, mode, roi=None, spectraltype='P
 @click.option('--quanta', '-q', type=str, default='/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/QuantiledGRBs_longonly3_GTI.pickle')
 @click.option('--bsub', is_flag=True)
 @click.option('--loglevel', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'CRITICAL']), default='INFO')
-def main(namemin, namemax, mode, roi, spectraltype, refit, force, suffix, grbcatalogue, modelonly, outdir, binned, masifps, quanta, bsub, loglevel):
+def main(namemin, namemax, mode, roi, spectraltype, refit, force, suffix, grbcatalogue, modelonly, sptmin, sptmax,outdir, binned, masifps, quanta, bsub, loglevel):
     ##### Logger ######
     handler.setLevel(loglevel)
     logger.setLevel(loglevel)
@@ -78,7 +76,7 @@ def main(namemin, namemax, mode, roi, spectraltype, refit, force, suffix, grbcat
         scalefactor = 1
         if spectraltype[:13]=='ScaleFactor::':
             scalefactor = tb['GBM']['FLUENCE'] #scalefactors = dct_quantile['fluence_scaled_gbm']['scaled'][namemin]
-        likelihood_grb_analysis_three_energies(namemin, mode, roi, spectraltype, refit, force, suffix, grbcatalogue, modelonly, outdir, binned, masifps, scalefactor=scalefactor)
+        likelihood_grb_analysis_three_energies(namemin, mode, roi, spectraltype, refit, force, suffix, grbcatalogue, modelonly, sptmin, sptmax, outdir, binned, masifps, scalefactor=scalefactor)
         #for idx, pha in itertools.product(range(len(lc_indices)), range(len(phases))):
             #print lc_indices[idx], phases[pha]
          #   if lc_indices[idx]==-1 and phases[pha]==mode:
@@ -95,7 +93,7 @@ def main(namemin, namemax, mode, roi, spectraltype, refit, force, suffix, grbcat
             print '##### No.{0} GRB{1} #####'.format(irow, name)
             if not os.path.exists(name):
                 os.mkdir(name)
-            acmd = ['bsub', '-o','{0}/{1}/GRB{1}_{2}{3}.log'.format(outdir, name, mode, suffix if suffix=='' else '_'+suffix), '-J','{0}{1}'.format(name[:6], mode[:2]), '-W','600', 'python', '/u/gl/mtakahas/work/PythonModuleMine/Fermi/STLikelihoodAnalysis/STLikelihoodGRBAnalysis_ThreeEnergies.py', '-m', mode, '-s', suffix, '--roi', str(roi), '--spectraltype', spectraltype, '--outdir', '{0}'.format(outdir), '--namemin', name, '--quanta', quanta]
+            acmd = ['bsub', '-o','{0}/{1}/GRB{1}_{2}{3}.log'.format(outdir, name, mode, suffix if suffix=='' else '_'+suffix), '-J','{0}{1}'.format(name[:6], mode[:2]), '-W','600', 'python', '/u/gl/mtakahas/work/PythonModuleMine/Fermi/STLikelihoodAnalysis/STLikelihoodGRBAnalysis_ThreeEnergies.py', '-m', mode, '-s', suffix, '--roi', str(roi), '--spectraltype', spectraltype, '--sptmin', str(sptmin), '--sptmax', str(sptmax), '--outdir', '{0}'.format(outdir), '--namemin', name, '--quanta', quanta]
             if force==True:
                 acmd.append('--force')
             if refit==True:
