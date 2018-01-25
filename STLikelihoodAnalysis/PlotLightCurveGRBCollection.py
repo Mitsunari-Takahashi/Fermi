@@ -85,7 +85,8 @@ class LCCollection:
             if grb['GRBNAME'] in skip:
                 continue
             logger.debug('Loading likelihood valus of {0}'.format(grb['GRBNAME']))
-            path_likelihood = '/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/{name}/{dirs}/LightCurve_{name}_PowerLaw_IndexFree_LAT_N10in2deg.pickle'.format(name=grb['GRBNAME'], dirs=dirs)
+            #path_likelihood = '/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/{name}/{dirs}/LightCurve_{name}_PowerLaw_IndexFree_LAT_N10in2deg.pickle'.format(name=grb['GRBNAME'], dirs=dirs)
+            path_likelihood = '/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/{name}/{dirs}/LightCurve_{name}_PowerLaw_IndexFree_pm3dec_180x090.pickle'.format(name=grb['GRBNAME'], dirs=dirs)
             self.dataset[grb['GRBNAME']] = pickle_utilities.load(path_likelihood)
 
 
@@ -254,7 +255,7 @@ class LCCollection:
 
 @click.command()
 @click.option('--index', '-i', type=click.Choice(['free', 'best']), default='free')
-@click.option('--erange', '-e', type=click.Choice(['whole', 'low', 'mid', 'high']), default='whole')
+@click.option('--erange', '-e', type=click.Choice(['whole', 'low', 'mid', 'high', 'lowmid', 'midhigh']), default='whole')
 @click.option('--suffix', '-s', type=str, default='LAT_N10in2deg')
 @click.option('--outdir', '-o', type=str, default='/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/LongGRBs/Stacking/lightcurve')
 @click.option('--figform', type=str, default=('png','pdf'), multiple=True)
@@ -265,10 +266,16 @@ def main(index, erange, outdir, suffix, figform, loglevel):
     logger.setLevel(loglevel)
     logger.addHandler(handler)
 
-    DICT_DIRS = {'whole':'E0000100-0100000MeV/r12deg/lightcurve',
-                 'low':'E0000100-0001000MeV/r12deg/lightcurve',
-                 'mid':'E0001000-0010000MeV/r03deg/lightcurve',
-                 'high':'E0010000-0100000MeV/r01deg/lightcurve'}
+    DICT_DIRS = {'whole':'E0000100-0100000MeV/r12deg/briefslots',
+                 'low':'E0000100-0001000MeV/r12deg/briefslots',
+                 'mid':'E0001000-0010000MeV/r03deg/briefslots',
+                 'high':'E0010000-0100000MeV/r01deg/briefslots',
+                 'lowmid':'E0000100-0010000MeV/r12deg/briefslots',
+                 'midhigh':'E0001000-0100000MeV/r03deg/briefslots'}
+#    DICT_DIRS = {'whole':'E0000100-0100000MeV/r12deg/lightcurve',
+#                 'low':'E0000100-0001000MeV/r12deg/lightcurve',
+#                 'mid':'E0001000-0010000MeV/r03deg/lightcurve',
+#                 'high':'E0010000-0100000MeV/r01deg/lightcurve'}
 
     ##### Catalogue information #####
     tb_lat = ReadLATCatalogueInfo.read_all(TABLE_LAT, TABLE_GBM)
