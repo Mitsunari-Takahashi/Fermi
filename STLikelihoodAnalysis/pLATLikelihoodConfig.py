@@ -89,6 +89,16 @@ class _AstroTarget:
                 logger.error('Spectral parameters are NOT correct for ScaleFactor::PowerLaw2!!!')
                 logger.error(spectralpars)
                 sys.exit(1)
+        elif self.spectraltype =='BrokenPowerLaw':
+            if not set(spectralpars.keys()) == set(['Prefactor', 'Index1', 'Index2', 'BreakValue', 'LowerLimit', 'UpperLimit']):
+                logger.error('Spectral parameters are NOT correct for BrokenPoweLaw!!!')
+                logger.error(spectralpars)
+                sys.exit(1)
+        elif self.spectraltype =='BrokenPowerLaw2':
+            if not set(spectralpars.keys()) == set(['Integral', 'Index1', 'Index2', 'BreakValue', 'LowerLimit', 'UpperLimit']):
+                logger.error('Spectral parameters are NOT correct for BrokenPoweLaw2!!!')
+                logger.error(spectralpars)
+                sys.exit(1)
 
         # Name of Normalization parameter
         if spectraltype in ('PowerLaw', 'BrokenPowerLaw', 'ExpCutoff'):
@@ -116,7 +126,7 @@ class PointTarget(_AstroTarget):
 
 
 class GRBTarget(PointTarget):
-    def __init__(self, name, path_catalogue=GRB_CATALOGUE_LAT, spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2.0, 'Scale':1000.}):
+    def __init__(self, name, path_catalogue=GRB_CATALOGUE_LAT, spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2.0, 'Scale':1000.}, spectralpars_fixed=None):
 
         tb_gbm = ReadGBMCatalogueInfo.open_table(1, GRB_CATALOGUE_GBM)
         self.path_catalogue = path_catalogue
@@ -131,19 +141,22 @@ class GRBTarget(PointTarget):
             logger.critical('Catalogue {0} is not in readable format!!!'.format(path_catalogue))
         if spectraltype=='PowerLaw':
             spectralpars_scale = {'Prefactor':1, 'Index':1, 'Scale':1}
-            spectralpars_fixed = ['Scale']
+            spectralpars_fixed = spectralpars_fixed if spectralpars_fixed is not None else ['Scale'] 
         elif spectraltype=='PowerLaw2':
             spectralpars_scale = {'Integral':1, 'Index':1, 'LowerLimit':1, 'UpperLimit':1}
-            spectralpars_fixed = ['LowerLimit', 'UpperLimit']
+            spectralpars_fixed = spectralpars_fixed if spectralpars_fixed is not None else ['LowerLimit', 'UpperLimit']
         elif spectraltype=='ScaleFactor::PowerLaw2':
             spectralpars_scale = {'Integral':1, 'Index':1, 'LowerLimit':1, 'UpperLimit':1, 'ScaleFactor':1}
-            spectralpars_fixed = ['LowerLimit', 'UpperLimit', 'ScaleFactor']
+            spectralpars_fixed = spectralpars_fixed if spectralpars_fixed is not None else ['LowerLimit', 'UpperLimit', 'ScaleFactor']
         elif spectraltype=='ExpCutoff':
             spectralpars_scale = {'Prefactor':1, 'Index':1, 'Ebreak':1, 'P1':1, 'P2':1, 'P3':1}
-            spectralpars_fixed = ['Scale', 'P2', 'P3']
+            spectralpars_fixed = spectralpars_fixed if spectralpars_fixed is not None else ['Scale', 'P2', 'P3']
         elif spectraltype=='BrokenPowerLaw':
             spectralpars_scale = {'Prefactor':1, 'Index1':1, 'Index2':1, 'BreakValue':1}
-            spectralpars_fixed = ['BreakValue']
+            spectralpars_fixed = spectralpars_fixed if spectralpars_fixed is not None else ['BreakValue']
+        elif spectraltype=='BrokenPowerLaw2':
+            spectralpars_scale = {'Integral':1, 'Index1':1, 'Index2':1, 'BreakValue':1, 'LowerLimit':1, 'UpperLimit':1}
+            spectralpars_fixed = spectralpars_fixed if spectralpars_fixed is not None else ['LowerLimit', 'UpperLimit']
 
         PointTarget.__init__(self, name, float(tb_one['RA']), float(tb_one['DEC']), spectraltype=spectraltype, spectralpars=spectralpars, spectralpars_scale=spectralpars_scale, spectralpars_fixed=spectralpars_fixed, met0=pMETandMJD.ConvertMjdToMet(float(tb_one['TRIGGER_TIME'])), redshift=(float(tb_one['REDSHIFT']) if float(tb_one['REDSHIFT'])>0 else np.nan))
 
@@ -344,6 +357,9 @@ class AnalysisConfig:
         else:
             logger.info("""Making GTI is starting...""")
 
+        tb_filtered = GetGTI.get_gti_table(self.path_filtered)
+        logger.info('Filtered time: {0} intervals.'.format(len(tb_filtered)))
+
         my_apps.maketime['scfile'] = self.path_ft2
         my_apps.maketime['filter'] = self.gti_filter
         my_apps.maketime['roicut'] = 'yes' if self.roicut==True else 'no'
@@ -516,27 +532,32 @@ class AnalysisConfig:
 """)
 
 
-    def diffuse_responses(self, bforce=False):
+    def diffuse_responses(self, bforce=True, path_model_xml=None):
+        if bforce==False:
+            logger.warning('Calculating diffuse source responses is skipped.')
+            return 0
         logger.info("""Calculating diffuse source responses is starting...""")
-        check_required_files({'FT2':self.path_ft2, 'Filtered GTI event':self.path_filtered_gti, 'Source model':self.path_model_xml})
+        if path_model_xml==None:
+            path_model_xml = self.path_model_xml
+        check_required_files({'FT2':self.path_ft2, 'Filtered GTI event':self.path_filtered_gti, 'Source model':path_model_xml})
 
         my_apps.diffResps['evfile'] = self.path_filtered_gti
         my_apps.diffResps['scfile'] = self.path_ft2
-        my_apps.diffResps['srcmdl'] = self.path_model_xml
+        my_apps.diffResps['srcmdl'] = path_model_xml
         my_apps.diffResps['irfs'] = self.irfs
         my_apps.diffResps.run()
         logger.info("""Calculating diffuse source responses finished.
 """)
 
 
-    def setup(self, force={'download':False, 'filter':False, 'maketime':False, 'evtbin':False, 'livetime':False, 'exposure':False, 'model_3FGL_sources':False, 'diffuse_responses':False, 'srcmaps':False}, skip_zero_data=False):
+    def setup(self, force={'download':False, 'filter':False, 'maketime':True, 'evtbin':False, 'livetime':False, 'exposure':False, 'model_3FGL_sources':False, 'diffuse_responses':True, 'srcmaps':False}, skip_zero_data=False):
         """Perform all preparation before fitting. Namely, downloading, filtering, making GTI, calculating livetime and exposure, modeling 3FGL sources, making diffuse source responses.
 """
         self.set_directories()
         self.download(bforce=force['download'])
         self.filter(bforce=force['filter'])
         self.maketime(bforce=force['maketime'])
-        logger.info('Roughly {0} events.'.format(self.nevt_rough))
+        #logger.info('Roughly {0} events.'.format(self.nevt_rough))
         if self.binned==True:
             self.evtbin(bforce=force['evtbin'])
         if skip_zero_data==False:
@@ -582,6 +603,7 @@ class AnalysisConfig:
             self.like = BinnedAnalysis(self.obs, self.path_model_xml, optimizer='NewMinuit')
         else:
             logger.info("""Setting up Unbinned likelihood...""")
+            #logger.info('{0}, {1}, {2}, {3}, {4}'.format(self.path_filtered_gti, self.path_ft2, self.path_exposure, self.path_livetime, self.irfs))
             self.obs = UnbinnedObs(self.path_filtered_gti, self.path_ft2, expMap=self.path_exposure, expCube=self.path_livetime, irfs=self.irfs)
             self.like = UnbinnedAnalysis(self.obs, self.path_model_xml, optimizer='NewMinuit')
         #self.like.setEnergyRange(self.emin_fit, self.emax_fit)
@@ -623,24 +645,28 @@ class AnalysisConfig:
                 #pl.setParamValues((self.target.spectralpars['Integral'], self.target.spectralpars['Index'], self.target.spectralpars['LowerLimit'], self.target.spectralpars['UpperLimit']))
                #Integral
                 prefactor = pl.getParam("Integral")
-                prefactor.setBounds(0.0, 1e-8)
                 prefactor.setScale(self.target.spectralpars_scale['Integral'])
+                prefactor.setValue(self.target.spectralpars['Integral'])
+                prefactor.setBounds(0.0, 1e-2)
                 pl.setParam(prefactor)
               # Index
                 indexPar = pl.getParam("Index")
-                indexPar.setBounds(-9.0, 3.0)
                 indexPar.setScale(self.target.spectralpars_scale['Index'])
+                indexPar.setValue(self.target.spectralpars['Index'])
+                indexPar.setBounds(-9.0, 3.0)
                 pl.setParam(indexPar)
                #LowerLimit
                 ell = pl.getParam("LowerLimit")
-                ell.setBounds(100., 100000.)
                 ell.setScale(self.target.spectralpars_scale['LowerLimit'])
+                ell.setValue(self.target.spectralpars['LowerLimit'])
+                ell.setBounds(100., 100000.)
                 pl.setParam(ell)
                 pl.setParamAlwaysFixed('LowerLimit')
                #UpperLimit
                 eul = pl.getParam("UpperLimit")
-                eul.setBounds(100., 100000.)
                 eul.setScale(self.target.spectralpars_scale['UpperLimit'])
+                eul.setValue(self.target.spectralpars['UpperLimit'])
+                eul.setBounds(100., 100000.)
                 pl.setParam(eul)
                 pl.setParamAlwaysFixed('UpperLimit')
                 #target_src.setSpectrum(pl)
@@ -703,7 +729,6 @@ class AnalysisConfig:
                 #target_src.setSpectrum(pl)
 
             elif self.target.spectraltype=='BrokenPowerLaw':
-                #pl.setParamValues((self.target.spectralpars['Prefactor'], self.target.spectralpars['Index1'], self.target.spectralpars['Index2'], self.target.spectralpars['BreakValue'])) # Prefactor, Index1, Index2, BreakValue
                 indexPar1 = pl.getParam("Index1")
                 indexPar1.setBounds(-9.0, 3.0)
                 pl.setParam(indexPar1)
@@ -717,6 +742,46 @@ class AnalysisConfig:
                 ebreak = pl.getParam("BreakValue")
                 ebreak.setBounds(100., 100000.)
                 pl.setParam(ebreak)
+
+            elif self.target.spectraltype=='BrokenPowerLaw2':
+               #Integral
+                prefactor = pl.getParam("Integral")
+                prefactor.setScale(self.target.spectralpars_scale['Integral'])
+                prefactor.setValue(self.target.spectralpars['Integral'])
+                prefactor.setBounds(0.0, 1e-2)
+                pl.setParam(prefactor)
+              # Index1
+                indexPar1 = pl.getParam("Index1")
+                indexPar1.setScale(self.target.spectralpars_scale['Index1'])
+                indexPar1.setValue(self.target.spectralpars['Index1'])
+                indexPar1.setBounds(-9.0, 3.0)
+                pl.setParam(indexPar1)
+              # Index2
+                indexPar2 = pl.getParam("Index2")
+                indexPar2.setScale(self.target.spectralpars_scale['Index2'])
+                indexPar2.setValue(self.target.spectralpars['Index2'])
+                indexPar2.setBounds(-9.0, 3.0)
+                pl.setParam(indexPar2)
+              # BreakValue
+                ebreak = pl.getParam("BreakValue")
+                ebreak.setScale(self.target.spectralpars_scale['BreakValue'])
+                ebreak.setValue(self.target.spectralpars['BreakValue'])
+                ebreak.setBounds(300., 30000.)
+                pl.setParam(ebreak)
+               #LowerLimit
+                ell = pl.getParam("LowerLimit")
+                ell.setScale(self.target.spectralpars_scale['LowerLimit'])
+                ell.setValue(self.target.spectralpars['LowerLimit'])
+                ell.setBounds(100., 100000.)
+                pl.setParam(ell)
+                pl.setParamAlwaysFixed('LowerLimit')
+               #UpperLimit
+                eul = pl.getParam("UpperLimit")
+                eul.setScale(self.target.spectralpars_scale['UpperLimit'])
+                eul.setValue(self.target.spectralpars['UpperLimit'])
+                eul.setBounds(100., 100000.)
+                pl.setParam(eul)
+                pl.setParamAlwaysFixed('UpperLimit')
 
             target_src.setSpectrum(pl)
             target_src.setName('{0}'.format(self.target.name))
@@ -742,7 +807,7 @@ class AnalysisConfig:
     def set_likelihood_external_model(self, path_model):
         logger.info("""Setting up likelihood by {0} ...""".format(path_model))
         check_required_files({'FT2':self.path_ft2, 'Filtered GTI event':self.path_filtered_gti, 'Livetime':self.path_livetime, 'Exposure':self.path_exposure, 'Source model':path_model})
-
+        self.diffuse_responses(bforce=True, path_model_xml=path_model)
         self.obs = UnbinnedObs(self.path_filtered_gti, self.path_ft2, expMap=self.path_exposure, expCube=self.path_livetime, irfs=self.irfs)
         self.like = UnbinnedAnalysis(self.obs, path_model, optimizer='NewMinuit')
         self.path_model_xml = path_model
@@ -879,6 +944,11 @@ class AnalysisConfig:
         logger.info('Simpified source model is saved as {0}'.format(self.path_model_xml_new))
 
 
+    def reset_target_norm(self):
+        norm_idx = self.like.par_index(self.target.name, self.target.norm_name)
+        self.like[norm_idx] = self.target.spectralpars[self.target.norm_name]
+
+
     def summarize_fit_results(self):
         """Summarize the results after fitting and return a dictonary. The contents are the model parameters, photon flux, TS, return code.
 """
@@ -891,6 +961,12 @@ class AnalysisConfig:
             model_pars = ('Integral', 'Index', 'LowerLimit', 'UpperLimit', 'ScaleFactor')
         elif self.target.spectraltype=='ExpCutoff':
             model_pars = ('Prefactor', 'Index', 'Scale', 'Ebreak', 'P1', 'P2', 'P3')
+        elif self.target.spectraltype=='BrokenPowerLaw':
+            model_pars = ('Prefactor', 'Index1', 'Index2', 'BreakValue')
+        elif self.target.spectraltype=='BrokenPowerLaw2':
+            model_pars = ('Integral', 'Index1', 'Index2', 'BreakValue', 'LowerLimit', 'UpperLimit')
+
+
         for name_param in model_pars:
             param = self.like.model[self.target.name].funcs['Spectrum'].getParam(name_param)
             self.dct_summary_results[name_param] = {'value':param.value(), 'error':param.error()}
@@ -943,9 +1019,9 @@ class AnalysisConfig:
         e1 = emax if emax is not None else self.emax_eval
         e2 = eref if (eref is not None or self.target.spectraltype!='PowerLaw') else self.target.spectralpars['Scale']
 
+        norm_idx = self.like.par_index(self.target.name, self.target.norm_name)
         norm_value = self.like.model[self.target.name].funcs['Spectrum'].getParam(self.target.norm_name).value()
         norm_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(self.target.norm_name).error()
-        norm_idx = self.like.par_index(self.target.name, self.target.norm_name)
         logx_lowest = -4.0
         logx_highest = max(4.0, 1+np.log10(norm_error/norm_value))
         nx = min(100, 10 * (logx_highest-logx_lowest))
@@ -963,7 +1039,7 @@ class AnalysisConfig:
         if norm_value>max(xvals):
             xvals = np.insert(xvals, len(xvals), norm_value)
             xvals = np.insert(xvals, len(xvals), norm_value*10)
-        self.like.normPar(self.target.name).setBounds(xvals[0], xvals[-1])
+        self.like.normPar(self.target.name).setBounds(0, max(1e-2, xvals[-1])) #xvals[0], xvals[-1])
         logger.info("""Profile normalization factor: 
 {0}
 {1} points.""".format(xvals, len(xvals)))
@@ -972,13 +1048,7 @@ class AnalysisConfig:
         index_name = 'Index'
         index_idx = self.like.par_index(self.target.name, index_name)
         index_value = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).value()
-        #if not index_value==index_value:
-        #    logger.error('Index value is NOT valid!!! {0}'.format(index_value))
-        #    index_value = -2.0
         index_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).error()
-        #if not index_error==index_error:
-        #    logger.error('Index error is NOT valid!!! {0}'.format(index_value))
-        #    index_error = 0.0
         index_values = {'best':index_value, 'free':index_value}
         index_values['harder'] = index_value + index_error * (1 if index_values<0 else -1)
         index_values['softer'] = index_value + index_error * (-1 if index_values<0 else 1)
@@ -1032,7 +1102,7 @@ class AnalysisConfig:
                         logger.error('RuntimeError!!!')
                         logger.error('Fitting with free index failed!!')
                         failed_freeIndex = True
-                        sys.exit(1)
+                        #sys.exit(1)
                 else:
                     loglike1 = -self.like()
                 logger.debug('No.{ip} normalization factor = {xval:.3E}, expected count = {nph}, loglikelihood = {ll:.3E}'.format(ip=i, xval=x, nph=self.like._npredValues(), ll=loglike1)) #NpredValue(self.target.name)))
@@ -1054,6 +1124,88 @@ class AnalysisConfig:
                     limits[str_index_assumed][item]['err'] = v0[item] * limits[str_index_assumed]['norm']['err'] / norm_value
 
         self.dct_summary_results['limits'] = limits
+        return limits
+
+
+    def eval_limits_powerlaw_index(self, emin=None, emax=None, eref=None):
+        e0 = emin if emin is not None else self.emin_eval
+        e1 = emax if emax is not None else self.emax_eval
+        e2 = eref if (eref is not None or self.target.spectraltype!='PowerLaw') else self.target.spectralpars['Scale']
+
+        norm_idx = self.like.par_index(self.target.name, self.target.norm_name)
+        norm_value = self.like.model[self.target.name].funcs['Spectrum'].getParam(self.target.norm_name).value()
+        norm_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(self.target.norm_name).error()
+        norm_values = {'best':norm_value, 'free':norm_value}
+
+        # Index parameter
+        index_name = 'Index'
+        index_idx = self.like.par_index(self.target.name, index_name)
+        index_value = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).value()
+        index_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).error()
+        logx_lowest = -4.0
+        logx_highest = max(4.0, 1+np.log10(norm_error/norm_value))
+
+        xll = min(-4, index_value - 2.*index_error)
+        xul = max(0, index_value + 2.*index_error)
+        nx = min(400, (xul-xll)*100.)
+        xvals = np.linspace(xll, xul, nx+1)
+        logger.info('Spectral index = {0} +/- {1}'.format(index_value, index_error))
+        #self.like.normPar(self.target.name).setBounds(xvals[0], xvals[-1])
+        logger.info("""Profile spectral index: 
+{0}
+{1} points.""".format(xvals, len(xvals)))
+
+        # Current best loglike
+        loglike0 = -self.like()
+
+        # Profile results
+        o = {}
+        # Limit results
+        limits = {}
+        # Profile normalization
+        failed_freeIndex = False
+        for str_norm_assumed in ('free',):
+            logger.info('Normalization = {na} ({st}) is assumed.'.format(na=norm_values[str_norm_assumed], st=str_norm_assumed))
+            limits[str_norm_assumed] = {}
+
+            cl_1sigma = 0.6827 #1.
+            cl_2sigma = 0.9545#4.
+            if str_norm_assumed=='free':
+                cl_1sigma = 0.87063
+                cl_2sigma = 0.96821
+                
+            if self.target.spectraltype=='PowerLaw':
+                self.like[norm_idx] = norm_value
+                if str_norm_assumed == 'free':
+                    self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[norm_idx:norm_idx+1], value=1)
+                else:
+                    self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[norm_idx:norm_idx+1], value=0)
+            o[str_norm_assumed] = {'xvals': xvals,
+                                   'dloglike': np.zeros(len(xvals)),
+                                   'loglike': np.zeros(len(xvals))
+                                   }
+
+            # Loop for profiling of normalization
+            for i, x in enumerate(xvals):
+                self.like[index_idx] = x
+                self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[index_idx:index_idx+1], value=0)
+                if str_norm_assumed == 'free':
+                    try:
+                        loglike1 = -self.like.fit(verbosity=0,covar=False,optObject=self.likeobj)
+                    except RuntimeError:
+                        logger.error('RuntimeError!!!')
+                        logger.error('Fitting with free normalization failed!!')
+                        failed_freeIndex = True
+                        #sys.exit(1)
+                else:
+                    loglike1 = -self.like()
+                logger.debug('No.{ip} spectral index = {xval:.3E}, loglikelihood = {ll:.3E}'.format(ip=i, xval=x, ll=loglike1)) 
+                #logger.debug('No.{ip} spectral index = {xval:.3E}, expected count = {nph}, loglikelihood = {ll:.3E}'.format(ip=i, xval=x, nph=self.like._npredValues(), ll=loglike1)) 
+                o[str_norm_assumed]['dloglike'][i] = loglike1 - loglike0
+                o[str_norm_assumed]['loglike'][i] = loglike1
+            limits[str_norm_assumed]['index'] = get_parameter_limits(xval=xvals, loglike=o[str_norm_assumed]['dloglike'], cl_limit=cl_2sigma, cl_err=cl_1sigma)
+
+        self.dct_summary_results['index_limit'] = limits
         return limits
 
 
@@ -1096,7 +1248,7 @@ class AnalysisConfig:
             nseries = len(self.like.energies)-1
         norms = self.map_norm_range()
         indices = self.map_index_range()
-        self.like.normPar(self.target.name).setBounds(norms[0], norms[-1])
+        self.like.normPar(self.target.name).setBounds(0, max(1e-2, norms[-1]))
         logger.info("""Profile normalization factor: 
 {0}
 {1} points.""".format(norms, len(norms)))
