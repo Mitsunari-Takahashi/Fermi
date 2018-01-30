@@ -163,8 +163,8 @@ for nameGrb in listNameGrb:
         nameFileSuffix = "_" + nameFileSuffix
     fileRoot = ROOT.TFile("Livetime_GRB{0}_T{1}-{2}{3}.root".format(nameGrb, par[2], par[3], nameFileSuffix), "update")
     aHtgLt = []
-    NBIN_CTH = 40
-    EDGE_CTH_LOW = 0.2
+    NBIN_CTH = 50
+    EDGE_CTH_LOW = 0.0
     EDGE_CTH_UP = 1.0
     NBIN_ZEN = 180
     EDGE_ZEN_LOW = 0
