@@ -184,11 +184,25 @@ def find_goodstat_periods(pathFileEvt, tStart, tStop, nthreshold, rlim=0.0, ra=0
                 periods_goodstat.append([time_fill])
                 nstat = 0
         time_prev = aTIME[iEVT]
-    if len(periods_goodstat)>1:
-        periods_goodstat = periods_goodstat[:-1]
-        periods_goodstat[-1][1] = tStop
+    # Distribute remainder to time bins
+    if len(periods_goodstat[-1])==1:
+        tRemain = tStop - periods_goodstat[-1][0]
+        tBinned = periods_goodstat[-1][0] - tStart
+        tdur_add = 0.
+        for tbin in periods_goodstat[:-1]:
+            tdur = tbin[1] - tbin[0]
+            tbin[0] += tdur_add
+            tdur_add += tdur / tBinned * tRemain 
+            tbin[1] += tdur_add
+        del periods_goodstat[-1]
+        periods_goodstat[-1][1] =  tStop
     else:
-        periods_goodstat[-1].append(tStop)
+        periods_goodstat[-1][1] = tStop
+    # if len(periods_goodstat)>1:
+    #     periods_goodstat = periods_goodstat[:-1]
+    #     periods_goodstat[-1][1] = tStop
+    # else:
+    #     periods_goodstat[-1].append(tStop)
     return periods_goodstat
 
 
