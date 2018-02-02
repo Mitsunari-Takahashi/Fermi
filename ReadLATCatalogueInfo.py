@@ -10,6 +10,8 @@ import click
 import ReadGBMCatalogueInfo
 import ReadSwiftCatalogueInfo
 import ReadKonusWindRedshiftCatalogueInfo
+import pMETandMJD
+
 
 # Catalogue Path
 PATH_CATALOGUE = "/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LATBurstCatalogue.xml"
@@ -64,11 +66,13 @@ def read_one_row(grb, tb_gbm=None, tbs_kw=None):
     ##### GBM #####
     if tb_gbm is not None:
         if not dct_info['GRBNAME'] in DCT_GBM_NAME_ASSOC:
+            dct_info['GBM'] = None
             print 'No GBM association in the dictionary!'
         elif DCT_GBM_NAME_ASSOC[dct_info['GRBNAME']] is not None:
             dct_info['GBM'] = ReadGBMCatalogueInfo.select_one_by_name(tb_gbm, DCT_GBM_NAME_ASSOC[dct_info['GRBNAME']])
-            dct_info['TRIGGER_TIME'] = dct_info['GBM']['TRIGGER_TIME']
+            dct_info['TRIGGER_TIME'] = pMETandMJD.ConvertMjdToMet(float(dct_info['GBM']['TRIGGER_TIME']))
         else:
+            dct_info['GBM'] = None
             print dct_info['GRBNAME'], ': NO GBM observation!!'
     ##### Konus-Wind #####
         if tbs_kw is not None:
