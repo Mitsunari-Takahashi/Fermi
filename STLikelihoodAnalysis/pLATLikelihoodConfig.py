@@ -54,6 +54,10 @@ mpl.rcParams['text.latex.preamble'] = [r'\usepackage{amsmath}']
 plt.rcParams["font.size"] = 15
 
 
+##### d-loglike value for certain signicicance cuts #####
+
+
+
 ##### PATH of Catalogue #####
 GRB_CATALOGUE_LTF = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LAT2CATALOG-v1-LTF.fits'
 GRB_CATALOGUE_LAT = "/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LATBurstCatalogue.xml"
@@ -782,25 +786,35 @@ class AnalysisConfig:
         return (self.retcode, self.loglike_inversed)
 
 
-    def like_with_calonly(self):
+    def like_calonly(self):
         #logger.info('CalOnly likelihood')
-        npred = np.zeros_like(self.calonly.onevt) #htg_onexp.GetZaxis().GetNbins())
-        nobs = self.calonly.onevt #np.zeros(self.calonly.htg_onevt.GetXaxis().GetNbins())
+
+        nobs = self.calonly.onevt
+        #ecalc_min, ecalc_max = log10(self.emin), log10(self.emax)
+        #ecalc = 10 ** np.linspace(ecalc_min, ecalc_max, int((ecalc_max-ecalc_min)*20.+1.5))
+        npred = np.zeros_like(nobs)
+        #for ie,(line0,line1) in enumerate(zip(ecalc[:-1], ecalc[1:])):
         for ie,(loge0,loge1) in enumerate(zip(self.calonly.energies[:-1], self.calonly.energies[1:])):
             # Local gamma
-            exposure = self.calonly.onexp[ie] * 1e4
+            exposure = self.calonly.func_onexp((loge0+loge1)/2.) #self.calonly.onexp[ie] * 1e4
+            #exposure = self.calonly.func_onexp((np.log10(line0)+np.log10(line1))/2.) #self.calonly.onexp[ie] * 1e4
             flux_all = self.like.flux(self.target.name, 10**loge0, 10**loge1) #0.
-            #for source in self.like.sourceNames():
-            #    if not source in (self.isodiff_name,): # Isodiff is already included in CalOnly background
-             #       flux_all += self.like.flux(source, 10**loge0, 10**loge1)
             npred[ie] = flux_all * 0.68 * exposure
+            # if ie==0:
+            #     logger.info('  Exposure: {0}'.format(exposure))
+            #     logger.info('  Flux: {0}'.format(flux_all))
         npred += self.calonly.bkgevt
         npred_total = sum(npred)
-        calonlylike = -np.log(np.exp(-npred_total) * np.prod(pow(npred, nobs)/scipy.misc.factorial(nobs)))
 
-        #logger.info('Nobs: {0}'.format(nobs))
-        #logger.info('Npred: {0}'.format(npred))
-        #logger.info('CalOnly log-likelihood inversed: {0}'.format(calonlylike))
+        calonlylike = -np.log(np.exp(-npred_total) * np.prod(pow(npred, nobs)/scipy.misc.factorial(nobs)))
+        return calonlylike
+
+
+    def like_with_calonly(self):
+        calonlylike = self.like_calonly()
+        # logger.info('Nobs: {0}'.format(nobs))
+        # logger.info('Npred: {0}'.format(npred))
+        # logger.info('CalOnly log-likelihood inversed: {0}'.format(calonlylike))
         return self.like() + calonlylike
 
 
@@ -876,7 +890,8 @@ class AnalysisConfig:
         # Current best loglike
         self.dct_summary_results['loglike_inversed'] = self.like()
         if use_calonly==True:
-            self.dct_summary_results['loglike_calonly_inversed'] = self.like_with_calonly()
+            self.dct_summary_results['loglike_calonly_inversed'] = self.like_calonly()
+            self.dct_summary_results['loglike_with_calonly_inversed'] = self.dct_summary_results['loglike_inversed'] + self.dct_summary_results['loglike_calonly_inversed']
 
         # TS
         name = self.target.name
@@ -1131,11 +1146,11 @@ class AnalysisConfig:
         norm_idx = self.like.par_index(self.target.name, self.target.norm_name)
         if norm_error>0:
             logx_lowest = -3.0
-            logx_highest = max(1.0, 4.*np.log10(norm_error/norm_value))
+            logx_highest = max(2.0, 4.*np.log10(norm_error/norm_value))
             nx = min(500, ndivperdec * (logx_highest-logx_lowest))
             xvals = norm_value * 10 ** np.linspace(logx_lowest, logx_highest, nx)
         else:
-            logx_lowest = -10.0
+            logx_lowest = -8.0
             logx_highest = -2.0
             nx = min(500, ndivperdec * (logx_highest-logx_lowest))
             xvals = 10 ** np.linspace(logx_lowest, logx_highest, nx)
@@ -1159,7 +1174,7 @@ class AnalysisConfig:
         return xvals
 
 
-    def map_index_range(self, ndiv=250, index_range=(-3., 2.)):
+    def map_index_range(self, ndiv=250, index_range=(-5., 3.)):
         # Index parameter
         index_name = 'Index'
         index_idx = self.like.par_index(self.target.name, index_name)
@@ -1182,7 +1197,7 @@ class AnalysisConfig:
                 logger.info('CalOnly data are not used...')
         # Mapping scanned values
         norms = self.map_norm_range(insert_zero=True)
-        indices = self.map_index_range(120, index_range=(-3, 3))
+        indices = self.map_index_range() #120) #, index_range=(-3, 3))
         self.like.normPar(self.target.name).setBounds(0, max(1e-2, norms[-1]))
         logger.info("""Profile normalization factor: 
 {0}
@@ -1192,11 +1207,19 @@ class AnalysisConfig:
         efluxes = np.zeros_like(indices_mesh)
         efluences = np.zeros_like(indices_mesh)
         e2dnde = np.zeros_like(indices_mesh)
+        npreds_caltkr = np.zeros_like(indices_mesh)
+        npreds_calonly = np.zeros_like(indices_mesh)
+        if use_calonly==True:
+            loglikes_calonly = np.zeros_like(indices_mesh)
+            loglikes_without_calonly = np.zeros_like(indices_mesh)
 
         # Indexes in likelihood object
         norm_idx = self.like.par_index(self.target.name, self.target.norm_name)
         index_name = 'Index'
         index_idx = self.like.par_index(self.target.name, index_name)        
+
+        loge_segmented = np.linspace(np.log10(self.like.energies[0]), np.log10(self.like.energies[-1]), int((-np.log10(self.like.energies[0])+np.log10(self.like.energies[-1]))*20+1.5))
+        line_segmented = 10 ** loge_segmented
 
         for inorm, jindex in itertools.product(range(len(norms)), range(len(indices))):
             # Setting model
@@ -1206,12 +1229,22 @@ class AnalysisConfig:
             self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[norm_idx:norm_idx+1], value=0)
             self.like[index_idx] = indices[jindex]
             self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[index_idx:index_idx+1], value=0)
+            # Npred(CalTkr)
             sum_model = np.zeros_like(self.like._srcCnts(self.like.sourceNames()[0]))
             for srcname in self.like.sourceNames():
                 sum_model = sum_model + self.like._srcCnts(srcname)
-
+            npreds_caltkr[inorm][jindex] = sum(sum_model)
+            #Npred(CalOnly)
+            if use_calonly==True:
+                for je in range(len(line_segmented)-1):
+                    npreds_calonly[inorm][jindex] += self.like.flux(self.target.name, line_segmented[je], line_segmented[je+1]) * self.calonly.func_onexp((loge_segmented[je]+loge_segmented[je+1])/2.) * 0.68
+                npreds_calonly[inorm][jindex] += sum(self.calonly.bkgevt)
             # Evaluation
-            loglikes[inorm][jindex] = -self.like() if use_calonly==False else -self.like_with_calonly()
+            loglikes[inorm][jindex] = -self.like() #if use_calonly==False else -self.like_with_calonly()
+            if use_calonly==True:
+                loglikes_without_calonly[inorm][jindex] = loglikes[inorm][jindex]
+                loglikes_calonly[inorm][jindex] = -self.like_calonly()
+                loglikes[inorm][jindex] += loglikes_calonly[inorm][jindex]
             efluxes[inorm][jindex] = self.like.energyFlux(self.target.name, self.emin_eval, self.emax_eval)
             efluences[inorm][jindex] = efluxes[inorm][jindex] * self.duration
             if self.target.spectraltype[-8:]=='PowerLaw':
@@ -1227,25 +1260,56 @@ class AnalysisConfig:
 
         logger.info("""likelihood:
 {0}""".format(loglikes))
-        loglike_inv_best = min((self.dct_summary_results['loglike_inversed'] if use_calonly==False else self.dct_summary_results['loglike_calonly_inversed']), -np.max(loglikes, axis=None))
+        loglike_inv_best = -np.max(loglikes, axis=None) #min((self.dct_summary_results['loglike_inversed'] if use_calonly==False else self.dct_summary_results['loglike_calonly_inversed']), -np.max(loglikes, axis=None))
         logger.info("""Best likelihood: {0}""".format(loglike_inv_best))
         dloglike = -loglikes - loglike_inv_best 
         logger.info("""d-likelihood:
 {0}""".format(dloglike))
         dloglike_doubled = 2.*dloglike
+        # CalOnly
+        if use_calonly==True:
+            loglike_calonly_inv_best = -np.max(loglikes_calonly, axis=None) 
+            loglike_without_calonly_inv_best = -np.max(loglikes_without_calonly, axis=None) 
+            dloglike_calonly = -loglikes_calonly - loglike_calonly_inv_best 
+            dloglike_without_calonly = -loglikes_without_calonly - loglike_without_calonly_inv_best 
+            dloglike_calonly_doubled = 2.*dloglike_calonly
+            dloglike_without_calonly_doubled = 2.*dloglike_without_calonly
 
         # Result storage
         self.dct_summary_results['dloglike'] = {}
         self.dct_summary_results['dloglike']['normalization'] = norms
-        self.dct_summary_results['dloglike']['index'] = indices
+        self.dct_summary_results['dloglike']['Index'] = indices
         self.dct_summary_results['dloglike']['loglike'] = loglikes
+        self.dct_summary_results['dloglike']['npred'] = {'Regular':npreds_caltkr, 'CalOnly':npreds_calonly}
         self.dct_summary_results['dloglike']['dloglike'] = dloglike
+        if use_calonly==True:
+            self.dct_summary_results['dloglike']['loglike_calonly'] = loglikes_calonly
+            self.dct_summary_results['dloglike']['loglike_without_calonly'] = loglikes_without_calonly
+            self.dct_summary_results['dloglike']['dloglike_calonly'] = dloglike_calonly
+            self.dct_summary_results['dloglike']['dloglike_without_calonly'] = dloglike_without_calonly
         self.dct_summary_results['dloglike']['eflux'] = efluxes
         self.dct_summary_results['dloglike']['efluence'] = efluences
         self.dct_summary_results['dloglike']['e2dnde'] = e2dnde
+        arg_bestlike = dloglike.argmin()
+        args_bestlike = zip(np.where(dloglike==dloglike.min())[0], np.where(dloglike==dloglike.min())[1])[0]
+        logger.info('Best likelihood point: {0}'.format(args_bestlike))
+        self.dct_summary_results['dloglike']['best'] = {}
+        self.dct_summary_results['dloglike']['best']['normalization'] = norms[args_bestlike[0]]
+        logger.info('Normalization (best likelihood): {0}'.format(self.dct_summary_results['dloglike']['best']['normalization']))
+        self.dct_summary_results['dloglike']['best']['Index'] = indices[args_bestlike[1]]
+        logger.info('Index (best likelihood): {0}'.format(self.dct_summary_results['dloglike']['best']['Index']))
+        for k,v in self.dct_summary_results['dloglike'].items():
+            if k in ('loglike', 'dloglike', 'eflux', 'efluence', 'e2dnde'):
+                self.dct_summary_results['dloglike']['best'][k] = v.flatten()[arg_bestlike]
+        self.dct_summary_results['dloglike']['TS'] =2. * (self.dct_summary_results['dloglike']['loglike'][0,0] - self.dct_summary_results['dloglike']['best']['loglike'])
+        logger.info('TS of {0}: {1}'.format(self.target.name, self.dct_summary_results['dloglike']['TS']))
+        #logger.info('CalOnly best d-likelihood: {0}'.format(self.dct_summary_results['dloglike']['dloglike'][218,120]))
 
         self.plot_spectrum_scanned2D(name='dloglike', norms_mesh=norms_mesh, e2dnde=e2dnde, efluences=efluences, indices_mesh=indices_mesh, zvalues=dloglike_doubled, cont_levels=[2.30, 6.18, 11.83], shown_map=(dloglike_doubled<=11.83*1.5), eref=eref)
         self.plot_sed_bowtie(name='dloglike', norms_mesh=norms_mesh, indices_mesh=indices_mesh, dict_meshes_shown={'1sigma':dloglike_doubled<=2.30, '2sigma':dloglike_doubled<=6.18})
+        if use_calonly==True:
+            self.plot_spectrum_scanned2D(name='dloglike_calonly', norms_mesh=norms_mesh, e2dnde=e2dnde, efluences=efluences, indices_mesh=indices_mesh, zvalues=dloglike_calonly_doubled, cont_levels=[2.30, 6.18, 11.83], shown_map=(dloglike_calonly_doubled<=11.83*1.5), eref=eref)
+            self.plot_spectrum_scanned2D(name='dloglike_without_calonly', norms_mesh=norms_mesh, e2dnde=e2dnde, efluences=efluences, indices_mesh=indices_mesh, zvalues=dloglike_without_calonly_doubled, cont_levels=[2.30, 6.18, 11.83], shown_map=(dloglike_without_calonly_doubled<=11.83*1.5), eref=eref)
 
 
     def get_sed_bowtie(self, norms_mesh, indices_mesh, dict_meshes_shown, erange=None, neperdec=20):
@@ -1331,7 +1395,10 @@ class AnalysisConfig:
 
         fig, ax = plt.subplots(1, 3, sharex=False, sharey=False, figsize=(15, 5))
         cont = ax[0].contour(indices_mesh, norms_mesh, zvalues, levels=cont_levels) #, colors='black')
-        cont.clabel(fmt='%1.1E', fontsize=12)
+        try:
+            cont.clabel(fmt='%1.1E', fontsize=10)
+        except ValueError:
+            logger.error('Drawing normalization label failed because of ValueError!')
         ax[0].set_xlim((indices_min, indices_max)) #(np.amin(indices_mesh + sys.maxint*unshown_map), np.amax(indices_mesh - sys.maxint*unshown_map)))
         ax[0].set_ylim((norms_min, norms_max)) #(np.amin(norms_mesh + sys.maxint*unshown_map), np.amax(norms_mesh - sys.maxint*unshown_map)))
         ax[0].set_yscale('log')
@@ -1345,7 +1412,10 @@ class AnalysisConfig:
         print 'Min:', e2dnde_min, e2dnde_min*MEVtoERG
         print 'Max:', e2dnde_max, e2dnde_max*MEVtoERG
         cont_eflux = ax[1].contour(indices_mesh, e2dnde*MEVtoERG, zvalues, levels=cont_levels)
-        cont_eflux.clabel(fmt='%1.1E', fontsize=12)
+        try:
+            cont_eflux.clabel(fmt='%1.1E', fontsize=10)
+        except ValueError:
+            logger.error('Drawing eflux label failed because of ValueError!')
         ax[1].set_xlim((indices_min, indices_max)) #(np.amin(indices_mesh + sys.maxint*unshown_map), np.amax(indices_mesh - sys.maxint*unshown_map)))
         ax[1].set_ylim((e2dnde_min*MEVtoERG, e2dnde_max*MEVtoERG)) #(np.amin(e2dnde*MEVtoERG + sys.maxint*unshown_map), np.amax(e2dnde*MEVtoERG - sys.maxint*unshown_map)))
         ax[1].set_yscale('log')
@@ -1355,7 +1425,10 @@ class AnalysisConfig:
         fig.tight_layout() 
 
         cont_efluence = ax[2].contour(indices_mesh, efluences*MEVtoERG, zvalues, levels=cont_levels)
-        cont_efluence.clabel(fmt='%1.1E', fontsize=12)
+        try:
+            cont_efluence.clabel(fmt='%1.1E', fontsize=10)
+        except ValueError:
+            logger.error('Drawing efluence label failed because of ValueError!')
         #ax[2].axhline(self.target.table_grb_catalogue['GBM']['FLUENCE'], alpha=0.5, lw=1.5, c='g', label='GBM (prompt)')
         ax[2].set_xlim((indices_min, indices_max)) #(np.amin(indices_mesh + sys.maxint*unshown_map), np.amax(indices_mesh - sys.maxint*unshown_map)))
         ax[2].set_ylim((efluences_min*MEVtoERG, efluences_max*MEVtoERG)) #(np.amin(efluences*MEVtoERG + sys.maxint*unshown_map), np.amax(efluences*MEVtoERG - sys.maxint*unshown_map)))
@@ -1413,7 +1486,11 @@ class AnalysisConfig:
 
         # CalOnly data
         if use_calonly==True:
-            calonly_on, calonly_bkg = self.calonly.get_rebinned_events(np.log10(self.like.energies))
+            logger.info('CalOnly data have been loaded.')
+            calonly_on, calonly_bkg = self.calonly.get_rebinned_events(np.log10(self.like.energies)) #self.calonly.onevt, self.calonly.bkgevt #
+            logger.info('Energy bins: {0}'.format(self.like.energies))
+            logger.info('ON events: {0}'.format(calonly_on))
+            logger.info('Predicted backgrounds: {0}'.format(calonly_bkg))
             if nseries==1:
                 calonly_on = sum(calonly_on) 
                 calonly_bkg = sum(calonly_bkg)
@@ -1441,8 +1518,8 @@ class AnalysisConfig:
         loglike_possible_ideal_T = loglike_possible_ideal[:, np.newaxis]
 
         for inorm, jindex in itertools.product(range(len(norms)), range(len(indices))):
-            logger.debug('Normalization: No.{0} {1}'.format(inorm, norms_mesh[inorm][jindex]))
-            logger.debug('Spectral index: No.{0} {1}'.format(jindex, indices_mesh[inorm][jindex]))
+            #logger.debug('Normalization: No.{0} {1}'.format(inorm, norms_mesh[inorm][jindex]))
+            #logger.debug('Spectral index: No.{0} {1}'.format(jindex, indices_mesh[inorm][jindex]))
             self.like[norm_idx] = norms[inorm]
             self.like.setFreeFlag(srcName=self.target.name, pars=self.like.params()[norm_idx:norm_idx+1], value=0)
             self.like[index_idx] = indices[jindex]
@@ -1452,22 +1529,34 @@ class AnalysisConfig:
                 sum_model = sum_model + self.like._srcCnts(srcname)
 
             # CalOnly
-            model_calonly = calonly_bkg #np.zeros_like(self.like._Nobs())
+            model_calonly = np.zeros_like(self.like._Nobs()) if nseries>1 else 0
             if use_calonly==True:
                 for ie, (e0,e1) in enumerate(zip(self.like.energies[:-1], self.like.energies[1:])):
+
                     loge_segmented = np.linspace(np.log10(e0), np.log10(e1), int((-np.log10(e0)+np.log10(e1))*20+1.5))
                     line_segmented = 10 ** loge_segmented
+                    #if inorm==50:
+                    #    logger.info('Energy: {0} - {1}'.format(e0, e1))
+                    #    logger.info(loge_segmented)
                     for je in range(len(line_segmented)-1):
-                        for srcname in self.like.sourceNames():
-                            if nseries==1:
-                                model_calonly[ie] += self.like.flux(srcname, line_segmented[je], line_segmented[je+1]) * self.calonly.func_onexp((loge_segmented[je]+loge_segmented[je+1])/2.)
-                            else:
-                                model_calonly += self.like.flux(srcname, line_segmented[je], line_segmented[je+1]) * self.calonly.func_onexp((loge_segmented[je]+loge_segmented[je+1])/2.)
-                            
+                        if nseries>1:
+                            model_calonly[ie] = model_calonly[ie] + ( self.like.flux(self.target.name, line_segmented[je], line_segmented[je+1]) * self.calonly.func_onexp((loge_segmented[je]+loge_segmented[je+1])/2.) * 0.68 )
+                        else:
+                            model_calonly = model_calonly + ( self.like.flux(self.target.name, line_segmented[je], line_segmented[je+1]) * self.calonly.func_onexp((loge_segmented[je]+loge_segmented[je+1])/2.) * 0.68 )
+
+                    # if nseries>1:
+                    #     model_calonly[ie] = self.like.flux(self.target.name, e0, e1) * self.calonly.func_onexp((np.log10(e0)+np.log10(e1))/2.) * 0.68
+                    # else:
+                    #     model_calonly += self.like.flux(self.target.name, e0, e1) * self.calonly.func_onexp((np.log10(e0)+np.log10(e1))/2.) * 0.68
+
+            model_calonly += calonly_bkg
             if nseries==1:
                 npreds[inorm][jindex] = sum(sum_model) + model_calonly
             else:
                 npreds[inorm][jindex] = sum_model + model_calonly
+                if inorm==50:
+                    logger.info('Regular: {0}'.format(sum_model))
+                    logger.info('CalOnly: {0}'.format(model_calonly))
             efluxes[inorm][jindex] = self.like.energyFlux(self.target.name, self.emin_eval, self.emax_eval)
             efluences[inorm][jindex] = efluxes[inorm][jindex] * self.duration
             if self.target.spectraltype[-8:]=='PowerLaw':
@@ -1512,8 +1601,8 @@ class AnalysisConfig:
                 loglikeratio_obs = loglikeratio_sum[int(nobs[0]+0.5)][int(nobs[1]+0.5)][int(nobs[2]+0.5)][int(nobs[3]+0.5)][int(nobs[4]+0.5)]
             loglikeratio_best = np.amax(loglikeratio_sum) #self.dct_summary_results['loglike_inversed']
             
-            bool_likesum_unliker = loglikeratio_sum<loglikeratio_obs 
-            bool_likesum_liker = loglikeratio_sum>=loglikeratio_obs
+            bool_likesum_unliker = loglikeratio_sum<=loglikeratio_obs 
+            bool_likesum_liker = loglikeratio_sum>loglikeratio_obs
             if nseries==1:
                 prob_unliker[inorm][jindex] = np.sum(np.reshape(np.exp(loglike_possible_sum), (len(bool_likesum_unliker),)) * bool_likesum_unliker)
                 prob_liker[inorm][jindex] = np.sum(np.reshape(np.exp(loglike_possible_sum), (len(bool_likesum_liker),)) * bool_likesum_liker)
@@ -1521,43 +1610,41 @@ class AnalysisConfig:
                 prob_unliker[inorm][jindex] = np.sum(np.exp(loglike_possible_sum) * bool_likesum_unliker)
                 prob_liker[inorm][jindex] = np.sum(np.exp(loglike_possible_sum) * bool_likesum_liker)
 
-            if inorm==1 and jindex==5:
-                logger.info('----------')
-                logger.info('bool_likesum_liker: {0}'.format(bool_likesum_liker))
-                if nseries>1:
-                    logger.info('np.exp(loglike_possible_sum) * bool_likesum_liker: {0}'.format(np.exp(loglike_possible_sum) * bool_likesum_liker))
-                else:
-                    logger.info('np.reshape(np.exp(loglike_possible_sum), (len(bool_likesum_liker),)) * bool_likesum_liker: {0}'.format(np.reshape(np.exp(loglike_possible_sum), (len(bool_likesum_liker),)) * bool_likesum_liker))
-                logger.info('bool_likesum_unliker: {0}'.format(bool_likesum_unliker))
-                if nseries>1:
-                    logger.info('np.exp(loglike_possible_sum) * bool_likesum_unliker: {0}'.format(np.exp(loglike_possible_sum) * bool_likesum_unliker))
-                else:
-                    logger.info('np.reshape(np.exp(loglike_possible_sum), (len(bool_likesum_unliker),)) * bool_likesum_unliker: {0}'.format(np.reshape(np.exp(loglike_possible_sum), (len(bool_likesum_unliker),)) * bool_likesum_unliker))
-                # logger.info(np.exp(-npreds[inorm][jindex]))
-                # logger.info(npreds[inorm][jindex])
-                # logger.info(nobs_possible_T)
-                # logger.info(scipy.misc.factorial(nobs_possible_T))
-                logger.info('loglike_possible:')
-                logger.info(loglike_possible)
-                logger.info('loglike_possible_sum:')
-                logger.info(loglike_possible_sum)
-                logger.info('Sum of loglike_possible_sum:')
-                logger.info(np.sum(np.exp(loglike_possible_sum)))
-                logger.info('loglikeratio_sum:')
-                logger.info(loglikeratio_sum)
-                logger.info('loglikeratio_obs:')
-                logger.info(loglikeratio_obs)
-                logger.info('Unliker fraction: {0}'.format(prob_unliker[inorm][jindex]))
-                logger.info('Liker fraction: {0}'.format(prob_liker[inorm][jindex]))
-                logger.info('Sum of Liker and unliker fraction: {0}'.format(prob_liker[inorm][jindex]+prob_unliker[inorm][jindex]))
+            #if inorm==0 and jindex==0: #inorm==1 and jindex==5:
+                #logger.info('----------')
+                #logger.info('loglikeratio_sum: {0}'.format(loglikeratio_sum))
+                #logger.info('loglikeratio_obs: {0}'.format(loglikeratio_obs))
+                #logger.info('bool_likesum_liker: {0}'.format(bool_likesum_liker))
+                #if nseries>1:
+                #    logger.info('np.exp(loglike_possible_sum) * bool_likesum_liker: {0}'.format(np.exp(loglike_possible_sum) * bool_likesum_liker))
+                #else:
+                #    logger.info('np.reshape(np.exp(loglike_possible_sum), (len(bool_likesum_liker),)) * bool_likesum_liker: {0}'.format(np.reshape(np.exp(loglike_possible_sum), (len(bool_likesum_liker),)) * bool_likesum_liker))
+                #logger.info('bool_likesum_unliker: {0}'.format(bool_likesum_unliker))
+                #if nseries>1:
+                #    logger.info('np.exp(loglike_possible_sum) * bool_likesum_unliker: {0}'.format(np.exp(loglike_possible_sum) * bool_likesum_unliker))
+                #else:
+                #    logger.info('np.reshape(np.exp(loglike_possible_sum), (len(bool_likesum_unliker),)) * bool_likesum_unliker: {0}'.format(np.reshape(np.exp(loglike_possible_sum), (len(bool_likesum_unliker),)) * bool_likesum_unliker))
+                # logger.info('loglike_possible:')
+                # logger.info(loglike_possible)
+                # logger.info('loglike_possible_sum:')
+                # logger.info(loglike_possible_sum)
+                # logger.info('Sum of loglike_possible_sum:')
+                # logger.info(np.sum(np.exp(loglike_possible_sum)))
+                # logger.info('loglikeratio_sum:')
+                # logger.info(loglikeratio_sum)
+                # logger.info('loglikeratio_obs:')
+                # logger.info(loglikeratio_obs)
+                # logger.info('Unliker fraction: {0}'.format(prob_unliker[inorm][jindex]))
+                # logger.info('Liker fraction: {0}'.format(prob_liker[inorm][jindex]))
+                # logger.info('Sum of Liker and unliker fraction: {0}'.format(prob_liker[inorm][jindex]+prob_unliker[inorm][jindex]))
 
         logger.info('-----')
         logger.info("""Npreds: 
 {0}""".format(npreds))
         logger.info("""Prob_unliker:
 {0}""".format(prob_unliker))
-        logger.info("""Shown Prob_unliker:
-{0}""".format(prob_unliker[prob_unliker>=0.000063]))
+#        logger.info("""Shown Prob_unliker:
+#{0}""".format(prob_unliker[prob_unliker>=0.000063]))
         self.dct_summary_results['likeratioordering'] = {}
         self.dct_summary_results['likeratioordering']['normalization'] = norms
         self.dct_summary_results['likeratioordering']['index'] = indices
@@ -1567,17 +1654,25 @@ class AnalysisConfig:
         self.dct_summary_results['likeratioordering']['pliker'] = prob_liker
         self.dct_summary_results['likeratioordering']['punliker'] = prob_unliker
 
-        self.plot_spectrum_scanned2D(name='likeratioordering', norms_mesh=norms_mesh, e2dnde=e2dnde, efluences=efluences, indices_mesh=indices_mesh, zvalues=prob_unliker, cont_levels=[2.7e-3, 4.55e-2, 3.173e-1], shown_map=(prob_unliker>=0.000063), eref=eref)
+        self.plot_spectrum_scanned2D(name='likeratioordering', norms_mesh=norms_mesh, e2dnde=e2dnde, efluences=efluences, indices_mesh=indices_mesh, zvalues=prob_unliker, cont_levels=[2.7e-3, 4.55e-2, 3.173e-1], shown_map=(prob_unliker>=0.0000063), eref=eref)
         self.plot_sed_bowtie(name='likeratioordering', norms_mesh=norms_mesh, indices_mesh=indices_mesh, dict_meshes_shown={'2sigma':prob_unliker>=4.55e-2, '1sigma':prob_unliker>=3.173e-1})
 
 
-    def add_calonly(self, path_onevt, path_onexp, path_offevt, path_offexp, nhistogram=0, rclass='R100'):
+    def add_calonly(self, path_onevt, path_onexp, path_bkgevt, nhistogram=0, rclass='R100'):
         file_onevt = ROOT.TFile(path_onevt, "READ")
         tr_onevt = file_onevt.Get('EVENTS_GRB{0}'.format(self.target.name))
         file_onexp = ROOT.TFile(path_onexp, "READ")
-        file_offevt = ROOT.TFile(path_offevt, "READ")
-        file_offexp = ROOT.TFile(path_offexp, "READ")
-        self.calonly = CalOnlyData(tr_onevt=tr_onevt, htg_onexp=file_onexp.Get('htgExp_{0}_scaled'.format(nhistogram)), htg_offevt=file_offevt.Get('htgEvt_GalOffCalOnly_{rcla}'.format(rcla=rclass)), htg_offexp=file_offexp.Get('htgExp_GalacticOFF_yx_CalOnly{rcla}'.format(rcla=rclass)), on_time=(self.target.met0+self.tmin, self.target.met0+self.tmax), on_classes=DICT_EVCLASSES_BIT_CALONLY[rclass], on_zenith=(0., self.zmax), on_theta=(0., self.thetamax))
+        file_bkgevt = ROOT.TFile(path_bkgevt, "READ")
+        dir_bkgevt = file_bkgevt.Get('TimeBin{0}'.format(nhistogram))
+        #file_offexp = ROOT.TFile(path_offexp, "READ")
+        self.calonly = CalOnlyData(tr_onevt=tr_onevt, htg_onexp=file_onexp.Get('htgExp_{0}_yx'.format(nhistogram)), htg_bkgevt=dir_bkgevt.Get('htgExBKG_CalOnly_{rcla}_PSF68_projE'.format(rcla=rclass)), on_energy=(self.emin, self.emax), on_time=(self.target.met0+self.tmin, self.target.met0+self.tmax), on_classes=DICT_EVCLASSES_BIT_CALONLY[rclass], on_zenith=(0., self.zmax), on_theta=(0., self.thetamax)) #, ebins=np.log10(self.energies),
+        if self.calonly.ne_bins<1:
+            logger.warning('No CalOnly data in the energy range.')
+            return 0
+        logger.info('CalOnly data have been added.')
+        logger.info('On event: {0}'.format(self.calonly.onevt))
+        logger.info('On exposure: {0}'.format(self.calonly._onexp))
+        logger.info('Predicted backgrounds: {0}'.format(self.calonly.bkgevt))
 
 
 def get_allowed_intervals(dict_meshes, select_mesh):
@@ -1697,45 +1792,73 @@ class GRBConfig(AnalysisConfig):
 
 
 class CalOnlyData:
-    def __init__(self, tr_onevt, htg_onexp, htg_offevt, htg_offexp, on_time=(0, sys.maxint), on_classes=(4096, 8192, 16384, 32768), on_zenith=(0., 100.), on_theta=(0., 65.)):
+    def __init__(self, tr_onevt, htg_onexp, htg_bkgevt, ebins=None, on_energy=(0, sys.maxint), on_time=(0, sys.maxint), on_classes=(4096, 8192, 16384, 32768), on_zenith=(0., 100.), on_theta=(0., 65.)):
+        logger.info('CalOnly data set is constructing...')
+        logger.info('Energy limit: {0}'.format(on_energy))
         #self.tr_onevt = tr_onevt
         onevt_times = []
         onevt_energies = []
-        self.rebin([htg_onexp, htg_offevt, htg_offexp])
+        self.rebin([htg_onexp])
+        #self.rebin([htg_onexp, htg_bkgevt])
 
-        self.energies = np.array([htg_offevt.GetZaxis().GetBinUpEdge(ie) for ie in range(htg_offevt.GetZaxis().GetNbins()+1)])
-        self.energies_center = (self.energies[:-1]+self.energies[1:])/2.
-        self.ne_bins = len(self.energies)-1
-        
-        self.onexp = np.zeros(self.ne_bins)
-        for ie in range(self.ne_bins):
-            self.onexp[ie] = htg_onexp.Integral(1, htg_onexp.GetXaxis().GetNbins(), 1, htg_onexp.GetYaxis().GetNbins(), ie, ie)
-        self.func_onexp = interpolate.interp1d(self.energies_center, self.onexp, fill_value="extrapolate")
+        if htg_onexp.GetZaxis().GetNbins()!=htg_bkgevt.GetXaxis().GetNbins():
+            logger.critical('Bin Numbers of the histograms {0} and {1} do NOT match!!!'.format(htg_onexp.GetName(), htg_bkgevt.GetName()))
 
-        self.onevt = np.zeros(self.ne_bins) 
-        for evt in tr_onevt:
-            if evt.s in on_classes and evt.FLAG_PSF68==True and (evt.t>=on_time[0] and evt.t<=on_time[1]) and (evt.z>=on_zenith[0] and evt.z<=on_zenith[1]) and (evt.th>=on_theta[0] and evt.th<=on_theta[1]):
-                onevt_times.append(evt.t)
-                onevt_energies.append(evt.e)
-                for iebin, (e0, e1) in enumerate(zip(self.energies[:-1], self.energies[1:])):
-                    if e0<=evt.e and evt.e<e1:
-                        self.onevt[iebin] += 1
-                        break
-        logger.info("""CalOnly ON events:
+        eedges = []
+        ecenters = []
+        nebins_included = []
+        for ie in range(1, htg_onexp.GetZaxis().GetNbins()+1):
+            ecenter = htg_onexp.GetZaxis().GetBinCenter(ie)
+            if ecenter>=np.log10(on_energy[0]) and ecenter<=np.log10(on_energy[1]):
+                eedges.append(htg_onexp.GetZaxis().GetBinLowEdge(ie))
+                ecenters.append(ecenter)
+                nebins_included.append(ie)
+        logger.info('Included bins: {0}'.format(nebins_included))
+        if len(nebins_included)<1:
+            self.energies=None
+            self.energies_center = None
+            self.ne_bins = 0
+            self.onexp = None
+            self.onevt = None
+            self.func_onexp = None
+            self.onevt_unbinned = None
+            self.bkgevt = None
+        else:
+            eedges.append(htg_onexp.GetZaxis().GetBinUpEdge(max(nebins_included)))
+            self.energies = np.array(eedges)
+            self.energies_center = np.array(ecenters) #(self.energies[:-1]+self.energies[1:])/2.
+            self.ne_bins = len(self.energies)-1
+
+            self._onexp = np.zeros(htg_onexp.GetZaxis().GetNbins()) #self.ne_bins)
+            energies_center_original = np.zeros_like(self._onexp)
+            for ie in range(len(self._onexp)):
+                self._onexp[ie] = htg_onexp.Integral(1, htg_onexp.GetXaxis().GetNbins(), 1, htg_onexp.GetYaxis().GetNbins(), ie+1, ie+1) * 1e4
+                energies_center_original[ie] = htg_onexp.GetZaxis().GetBinCenter(ie+1)
+            logger.info('CalOnly exposure: {0}'.format(self._onexp))
+            self.func_onexp = interpolate.interp1d(energies_center_original, self._onexp, fill_value=0, bounds_error=False)
+
+            self.onevt = np.zeros(self.ne_bins) 
+            for evt in tr_onevt:
+                if (evt.e>=np.log10(on_energy[0]) and evt.e<np.log10(on_energy[1])) and evt.s in on_classes and evt.FLAG_PSF68==True and (evt.t>=on_time[0] and evt.t<=on_time[1]) and (evt.z>=on_zenith[0] and evt.z<=on_zenith[1]) and (evt.th>=on_theta[0] and evt.th<=on_theta[1]):
+                    onevt_times.append(evt.t)
+                    onevt_energies.append(evt.e)
+                    for iebin, (e0, e1) in enumerate(zip(self.energies[:-1], self.energies[1:])):
+                        if e0<=evt.e and evt.e<e1:
+                            self.onevt[iebin] += 1
+                            break
+            logger.info("""CalOnly ON events:
 {0}""".format(self.onevt))
 
-        self.onevt_unbinned = {'time':np.array(onevt_times),
-                               'energy': np.array(onevt_energies)}
-
-        htg_expratio = htg_onexp.Clone(htg_onexp.GetName().replace('htgExp', 'htgExpRatio'))
-        htg_expratio.Divide(htg_offexp)
-        htg_bkgevt = htg_offevt.Clone(htg_offevt.GetName().replace('htgEvt', 'htgBkg'))
-        htg_bkgevt.Multiply(htg_expratio)
-        self.bkgevt = np.zeros(htg_offevt.GetZaxis().GetNbins())
-        for ie in range(htg_bkgevt.GetZaxis().GetNbins()):
-            self.bkgevt[ie] = htg_bkgevt.Integral(1, htg_offevt.GetXaxis().GetNbins(), 1, htg_offevt.GetYaxis().GetNbins(), ie+1, ie+1)
-        logger.info("""CalOnly predicted backgrounds:
+            self.onevt_unbinned = {'time':np.array(onevt_times),
+                                   'energy': np.array(onevt_energies)}
+            self.bkgevt = np.zeros_like(self.onevt) #(htg_bkgevt.GetXaxis().GetNbins())
+            for ie,ne in enumerate(nebins_included): #for ie in range(htg_bkgevt.GetXaxis().GetNbins()):
+                self.bkgevt[ie] = htg_bkgevt.GetBinContent(ne)
+            logger.info("""CalOnly predicted backgrounds:
 {0}""".format(self.bkgevt))
+
+            if ebins is not None:
+                self.get_rebinned_events(ebins)
 
 
     def rebin(self, histograms, energy=28, theta=10, zenith=18):
@@ -1762,12 +1885,23 @@ class CalOnlyData:
 
 
     def get_rebinned_events(self, ebins):
+
         onevt_new = np.zeros(len(ebins)-1)
         for e in self.onevt_unbinned['energy']:
             for ie, (e0, e1) in enumerate(zip(ebins[:-1], ebins[1:])):
                 if e0<=e and e<e1:
                     onevt_new[ie] += 1
                     break
+        #self.onevt = onevt_new
+
+        # onexp_new = np.zeros(len(ebins)-1)
+        # for jebin, nexp in enumerate(self.onexp):
+        #     ebin_center = (self.energies[jebin]+self.energies[jebin+1]) / 2.
+        #     for ie, (e0, e1) in enumerate(zip(ebins[:-1], ebins[1:])):
+        #         if e0<=ebin_center and ebin_center<e1:
+        #             onexp_new[ie] += nexp
+        #             break
+        #self.onexp = onexp_new
 
         bkgevt_new = np.zeros(len(ebins)-1)
         for jebin, nevt in enumerate(self.bkgevt):
@@ -1776,7 +1910,11 @@ class CalOnlyData:
                 if e0<=ebin_center and ebin_center<e1:
                     bkgevt_new[ie] += nevt
                     break
-            
+        #self.bkgevt = bkgevt_new
+
+        #self.energies = ebins
+        #self.energies_center = (self.energies[:-1]+self.energies[1:])/2.
+        #self.ne_bins = len(self.energies)-1
         return (onevt_new, bkgevt_new)
 
 
