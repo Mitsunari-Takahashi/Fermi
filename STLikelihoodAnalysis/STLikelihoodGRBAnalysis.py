@@ -38,12 +38,6 @@ def likelihood_grb_analysis(name, mode, emin, emax, eref, roi, spectraltype, ref
 
     grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectraltype=spectraltype, spectralpars=spectralpars)
     ana = pLATLikelihoodConfig.GRBConfig(grb, mode, emin=emin, emax=emax, deg_roi=roi, suffix=suffix, tmin_special=sptmin, tmax_special=sptmax, binned=binned, psForce=masifps, ft2interval='1s', gti_external=gti_external)
-    if calonly != tuple([None]*6):
-        logger.info('CalOnly data are laoded...')
-        logger.info(calonly)
-        ana.add_calonly(path_onevt=calonly[0], path_onexp=calonly[1], path_offevt=calonly[2], path_offexp=calonly[3], nhistogram=calonly[4], rclass=calonly[5])
-    else:
-        logger.info('CalOnly data are skipped.')
 
     if ana.tmin == ana.tmax:
         logger.warning('Time range of GRB config is NOT valid!')
@@ -57,24 +51,38 @@ def likelihood_grb_analysis(name, mode, emin, emax, eref, roi, spectraltype, ref
     #    ana.set_likelihood()
     #    logger.info("""Finishing the analysis because the number of events turned out to be zero.""")
         #return 0
+
+    if calonly != tuple([None]*5):
+        calonly_provided = True
+    else:
+        calonly_provided = False
+    if calonly_provided==True:
+        logger.info('CalOnly data are laoded...')
+        logger.info(calonly)
+        ana.add_calonly(path_onevt=calonly[0], path_onexp=calonly[1], path_bkgevt=calonly[2], nhistogram=calonly[3], rclass=calonly[4])
+        if ana.calonly.ne_bins<1:
+            calonly_provided = False            
+    else:
+        logger.info('CalOnly data are skipped.')
+
     if modelonly==True:
         esl = ana.set_likelihood()
         sys.exit(esl)
     fr = ana.fit(bredo=True)
     if fr!=1:
-        ana.summarize_fit_results(use_calonly=True if calonly!=tuple([None]*6) else False)
+        ana.summarize_fit_results(use_calonly=calonly_provided)
         ana.plot_countspectra_fitted()
         ana.eval_flux_and_error()
         if spectraltype in ('PowerLaw', 'PowerLaw2', 'ScaleFactor::PowerLaw2', 'EblAtten::PowerLaw2'):
             ana.eval_limits_powerlaw(eref=eref, str_index_fixed=['best'])
             ana.set_likelihood_external_model(ana.path_model_xml_new)
-            ana.scan_norm_and_index(eref=eref, use_calonly=True if calonly!=tuple([None]*6) else False)
+            ana.scan_norm_and_index(eref=eref, use_calonly=calonly_provided)
             #ana.eval_limits_powerlaw_index()
     logger.info(ana.dct_summary_results)
 
     ##### Likelihood ratio ordering #####
     if nrough<10:
-        ana.order_likeratio(eref=eref, use_calonly=True if calonly!=tuple([None]*6) else False)
+        ana.order_likeratio(eref=eref, use_calonly=calonly_provided)
     
     pickle_utilities.dump('{0}/Summary{1}.pickle'.format(ana.dir_work, '' if suffix=='' else '_'+suffix), ana.dct_summary_results)
     return ana.dct_summary_results
@@ -99,7 +107,7 @@ def likelihood_grb_analysis(name, mode, emin, emax, eref, roi, spectraltype, ref
 @click.option('--sptmin', type=float, default=-1, help='Only for mode special')
 @click.option('--sptmax', type=float, default=-1, help='Only for mode special')
 @click.option('--redshift', '-z', type=float, default=0.)
-@click.option('--calonly', type=(str, str, str, str, int, str), default=None, help='path_onevt, path_onexp, path_offevt, path_offexp, nhtg, rclass')
+@click.option('--calonly', type=(str, str, str, int, str), default=None, help='path_onevt, path_onexp, path_bkgevt, nhtg, rclass')
 @click.option('--binned', '-b', is_flag=True)
 @click.option('--outdir', '-o', type=str, default='/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone')
 @click.option('--quanta', '-q', type=str, default='/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/QuantiledGRBs_longonly3_GTI.pickle')
