@@ -37,12 +37,16 @@ import subprocess
 import datetime
 import numpy as np
 import itertools
+from collections import OrderedDict
 import math
 from math import log10, log, sqrt, ceil, isnan, pi, factorial
 from sympy import *
 from scipy import integrate
+from scipy.interpolate import interp2d, interp1d
+from scipy.optimize import minimize_scalar
 from astropy.io import fits
 import click
+import ROOT
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -51,6 +55,7 @@ import pyLikelihood
 from UnbinnedAnalysis import *
 from BinnedAnalysis import *
 import STLikelihoodAnalysis.pLATLikelihoodConfig as pLATLikelihoodConfig
+from STLikelihoodAnalysis.pLATLikelihoodConfig import TABLE_DLOGLIKE_SIGNIFICANCE
 from FindGoodstatPeriods import find_goodstat_periods, get_entries, get_event_time_and_energy, get_event_time_energy_angsep
 from FindCrossEarthlimb import find_cross_earthlimb#, get_good_intervals
 #from STLikelihoodAnalysis import get_module_logger
@@ -60,6 +65,8 @@ import ReadGBMCatalogueInfo
 import GetGTI
 import pickle_utilities
 import pMatplot
+import pMETandMJD
+
 
 mpl.rcParams['text.usetex'] = True
 mpl.rcParams['text.latex.preamble'] = [r'\usepackage{amsmath}']
@@ -81,6 +88,14 @@ logger.addHandler(handler)
 
 ##### Conversion from MeV to erg ######
 MEVtoERG = 1.6021766208E-6
+
+
+##### Scanned range of parameters #####
+DICT_SCANNED_RANGES_PARAMETERS = {'flux': (1E-12, 1E-2),
+                                  'eflux': (1E-6, 1.),
+                                  'e2dnde': (1E-6, 1.),
+                                  'Index': (-5., 3.)}
+
 
 class LightCurve:
     def __init__(self, name, met0, tmin, tmax, emin, emax, eref, evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, suffix='', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, psForce=False, refit=True, force=False, outdir=None, phase='lightcurve'):
@@ -237,14 +252,18 @@ class LightCurveGRB(LightCurve):
             #self.analyses[-1].use_external_model(self.analysis_whole.path_model_xml_new)
 
 
-    def add_calonly(self, path_onevt, path_onexp, path_offevt, path_offexp, rclass='R100'):
+    def add_calonly(self, calonly_info):
+        path_onevt = calonly_info[0] 
+        path_onexp = calonly_info[1] 
+        path_bkgevt = calonly_info[2] 
+        rclass = calonly_info[3]
         file_onevt = ROOT.TFile(path_onevt, "READ")
         tr_onevt = file_onevt.Get('EVENTS_GRB{0}'.format(self.analysis_whole.target.name))
         file_onexp = ROOT.TFile(path_onexp, "READ")
-        file_offevt = ROOT.TFile(path_offevt, "READ")
-        file_offexp = ROOT.TFile(path_offexp, "READ")
+        file_bkgevt = ROOT.TFile(path_bkgevt, "READ")
         for iana, ana in enumerate(self.analyses):
-            ana.calonly = pLATLikelihoodConfig.CalOnlyData(energy_bins=ana.like.energies, tr_onevt=tr_onevt, htg_onexp=file_onexp.Get('htgExp_{0}_scaled'.format(iana)), htg_offevt=file_offevt.Get('htgEvt_GalOffCalOnly_{rcla}'.format(rcla=rclass)), htg_offexp=file_offexp.Get('htgExp_GalacticOFF_yx_CalOnly{rcla}'.format(rcla=rclass)), on_time=(ana.target.met0+ana.tmin, ana.target.met0+ana.tmax), on_classes=pLATLikelihoodConfig.DICT_EVCLASSES_BIT_CALONLY[rclass], on_zenith=(0., ana.zmax), on_theta=(0., ana.thetamax))
+            dir_bkgevt = file_bkgevt.Get('TimeBin{0}'.format(iana))
+            ana.calonly = pLATLikelihoodConfig.CalOnlyData(tr_onevt=tr_onevt, htg_onexp=file_onexp.Get('htgExp_{0}_yx'.format(iana)), htg_bkgevt=dir_bkgevt.Get('htgExBKG_CalOnly_{rcla}_PSF68_projE'.format(rcla=rclass)), on_energy=(ana.emin, ana.emax), on_time=(ana.target.met0+ana.tmin, ana.target.met0+ana.tmax), on_classes=pLATLikelihoodConfig.DICT_EVCLASSES_BIT_CALONLY[rclass], on_zenith=(0., ana.zmax), on_theta=(0., ana.thetamax))
 
 
     def count_energy(self, rlim=6.0):
@@ -254,7 +273,7 @@ class LightCurveGRB(LightCurve):
         self.counts_angsep = events[2]
 
 
-    def run_analysis(self):
+    def run_analysis(self, use_calonly=False):
         for ip, pds in enumerate(self.periods_goodstat):
             logger.info('Analyzing {0}...'.format(pds))
             nevt_rough = self.analyses[ip].nevt_rough
@@ -291,18 +310,19 @@ class LightCurveGRB(LightCurve):
                 self.analyses[ip].plot_countspectra_fitted()
             #if self.analyses[ip].dct_summary_results['TS']>=4:
             #    self.analyses[ip].eval_flux_and_error()
-            if self.analyses[ip].dct_summary_results['TS']>0: #4:
-                self.analyses[ip].eval_limits_powerlaw(str_index_fixed=['best', 'free'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], eref=self.config['energy']['ref'])
-                self.analyses[ip].reset_target_norm()
-                self.analyses[ip].eval_limits_powerlaw_index(emin=self.config['energy']['min'], emax=self.config['energy']['max'], eref=self.config['energy']['ref'])
-            else:
-                self.analyses[ip].eval_limits_powerlaw(str_index_fixed=['best'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], eref=self.config['energy']['ref'])
-            self.analyses[ip].scan_norm_and_index(eref=self.config['energy']['ref'], use_calonly=False)
+            # if self.analyses[ip].dct_summary_results['TS']>0: #4:
+            #     self.analyses[ip].eval_limits_powerlaw(str_index_fixed=['best', 'free'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], eref=self.config['energy']['ref'])
+            #     self.analyses[ip].reset_target_norm()
+            #     self.analyses[ip].eval_limits_powerlaw_index(emin=self.config['energy']['min'], emax=self.config['energy']['max'], eref=self.config['energy']['ref'])
+            # else:
+            #     self.analyses[ip].eval_limits_powerlaw(str_index_fixed=['best'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], eref=self.config['energy']['ref'])
 
-            dict_allowed_intervals = {}
-            dict_allowed_intervals['1sigma'] = pLATLikelihoodConfig.get_allowed_intervals(ana.dct_summary_results['dloglike'], ana.dct_summary_results['dloglike']['dloglike']<=2.30)
-            dict_allowed_intervals['2sigma'] = pLATLikelihoodConfig.get_allowed_intervals(ana.dct_summary_results['dloglike'], ana.dct_summary_results['dloglike']['dloglike']<=6.18)
-            self.analyses[ip].dct_summary_results['allowed_intervals'] = dict_allowed_intervals
+            self.analyses[ip].scan_norm_and_index(eref=self.config['energy']['ref'], use_calonly=use_calonly)
+
+            # dict_allowed_intervals = {}
+            # dict_allowed_intervals['1sigma'] = pLATLikelihoodConfig.get_allowed_intervals(ana.dct_summary_results['dloglike'], ana.dct_summary_results['dloglike']['dloglike']<=2.30)
+            # dict_allowed_intervals['2sigma'] = pLATLikelihoodConfig.get_allowed_intervals(ana.dct_summary_results['dloglike'], ana.dct_summary_results['dloglike']['dloglike']<=6.18)
+            # self.analyses[ip].dct_summary_results['allowed_intervals'] = dict_allowed_intervals
 
             self.summary_results[ip].update(self.analyses[ip].dct_summary_results)
 
@@ -401,6 +421,133 @@ class LightCurveGRB(LightCurve):
             pickle.dump(self.dct_stored, f)
         logger.info('Result summary has been serialized as {0}'.format(path_pickle))
 
+
+def scan_norm_beta_alpha(dict_summary, torigin, outdir=None, suffix='', norms=None, betas=None, alphas=None, tnorm=10., tmin=0., tmax=sys.maxint):
+    #met = dict_summary['config']['met']
+    alpha_mesh, beta_mesh, norm_mesh = np.meshgrid(alphas, betas, norms)
+    loglike_mesh = np.full_like(norm_mesh, sys.maxint)
+    logger.info('3D mesh shape: {0}'.format(loglike_mesh.shape))
+
+    list_periods_used = []
+    for period in dict_summary['results']:
+        t0 = period['time']['min']
+        t1 = period['time']['max']
+        if t0>=tmin and t1<=tmax:
+            list_periods_used.append(period)
+            list_periods_used[-1]['tb_gti'] = GetGTI.get_gti_table(period['data_path'])
+
+    for inorm, jbeta, kalpha  in itertools.product(range(len(norms)), range(len(betas)), range(len(alphas))):
+        if inorm%10+jbeta%10+kalpha%10<2:
+            logger.info('No.{0},{1},{2}'.format(inorm, jbeta, kalpha))
+        dll_sum = 0.
+        flag_fail = False
+
+        for period in list_periods_used: #dict_summary['results']:
+            t0 = period['time']['min']
+            t1 = period['time']['max']
+            if t0>=tmin and t1<=tmax and flag_fail == False:
+                logger.debug('Time interval {0} - {1} s'.format(t0, t1))
+                #tb_gti = GetGTI.get_gti_table(period['data_path'])
+                norm = lightcurve_prefactor(tmin=t0, tmax=t1, integral=norms[inorm], index=alphas[kalpha], tb_gti=period['tb_gti'], torigin=torigin, tnorm=tnorm, rescaler=1.)[0]
+                normalizations = period['dloglike']['normalization']
+                indices = period['dloglike']['Index']
+                dloglikes = period['dloglike']['dloglike']
+                dloglikes[np.isinf(dloglikes)] = sys.maxint
+                func_interp = interp2d(x=indices, y=normalizations, z=dloglikes, kind='linear', bounds_error=True)
+                #print '  norm = {0}'.format(norm)
+                #print '  beta = {0}'.format(betas[jbeta])
+                try:
+                    dll = func_interp(betas[jbeta], norm)
+                    #if np.isinf(dll):
+                    #    dll = sys.maxint
+                    dll_sum += dll
+                except ValueError:
+                    logger.error('ValueError!!')
+                    logger.error('Time interval {0} - {1} s'.format(t0, t1))
+                    logger.error('Norm: {0} Should be within {1} - {2}'.format(norm, normalizations[0], normalizations[-1]))
+                    logger.error('Beta: {0} Should be within {1} - {2}'.format(betas[jbeta], indices[0], indices[-1]))
+                    logger.error('Norm at 10s: {0}, alpha: {1}'.format(norms[inorm], alphas[kalpha]))
+                    #loglike_mesh[jbeta][kalpha][inorm] = np.ma.masked
+                    flag_fail = True
+                    break
+                #print '  d-loglikelihood: {0}'.format(dll)
+            else:
+                logger.debug('Time interval {0} - {1} s is skipped.'.format(t0, t1))
+        logger.debug('Grid norm: {0}, beta: {1}, alpha:{2}'.format(inorm, jbeta, kalpha))
+        logger.debug('Summed d-loglike: {0}'.format(dll_sum))
+        if flag_fail==False: #np.ma.getmaskarray(loglike_mesh)[jbeta][kalpha][inorm] == False:
+            loglike_mesh[jbeta][kalpha][inorm] = dll_sum
+        else:
+            loglike_mesh[jbeta][kalpha][inorm] = sys.maxint
+    
+    #args_bestlike = zip(np.where(loglike_mesh==loglike_mesh.min())[0], np.where(loglike_mesh==loglike_mesh.min())[1], np.where(loglike_mesh==loglike_mesh.min())[2])[0]
+    loglike_min = np.nanmin(loglike_mesh) #loglike_mesh[args_bestlike[0]][args_bestlike[1]][args_bestlike[2]]
+    dloglike_mesh = loglike_mesh - loglike_min
+    print 'loglike mesh:'
+    print loglike_mesh
+    print 'Minimum loglike:', loglike_min
+    print 'd-loglike mesh:'
+    print dloglike_mesh
+
+        # Projection to alpha-beta
+    dloglike_alpha_beta = np.full_like(dloglike_mesh[:,:,0], float(sys.maxint))
+    for jb, ka  in itertools.product(range(len(betas)), range(len(alphas))):
+        dll_local = dloglike_mesh[jb,ka,:]
+        dloglike_alpha_beta[jb, ka] = np.nanmin(dll_local)
+    dloglike_alpha_beta = np.ma.masked_invalid(dloglike_alpha_beta)
+
+        # Projection to norm-alpha
+    dloglike_norm_alpha = np.full_like(dloglike_mesh[0,:,:], float(sys.maxint))
+    for ka, ino in itertools.product(range(len(alphas)), range(len(norms))):
+        dll_local = dloglike_mesh[:,ka,ino]
+        dloglike_norm_alpha[ka,ino] = np.nanmin(dll_local)
+    dloglike_norm_alpha = np.ma.masked_invalid(dloglike_norm_alpha)
+
+        # Projection to beta-norm
+    dloglike_beta_norm = np.full_like(dloglike_mesh[:,0,:], float(sys.maxint))
+    for ino, jb  in itertools.product(range(len(norms)), range(len(betas))):
+        dll_local = dloglike_mesh[jb,:,ino]
+        dloglike_beta_norm[jb,ino] = np.nanmin(dll_local)
+    dloglike_beta_norm = np.ma.masked_invalid(dloglike_beta_norm)
+
+    fig, ax = plt.subplots(1, 3, sharex=False, sharey=False, figsize=(15, 5))
+
+    print 'alpha:', alpha_mesh[:,:,0].shape
+    print alpha_mesh[:,:,0]
+    print 'beta:', beta_mesh[:,:,0].shape
+    print beta_mesh[:,:,0]
+    print 'd-loglike:', dloglike_alpha_beta.shape
+    print dloglike_alpha_beta
+    cont_levels_NDF3 = sorted(TABLE_DLOGLIKE_SIGNIFICANCE[2].as_void())
+    print 'Contours:',cont_levels_NDF3
+    cont_alpha_beta = ax[0].contour(alpha_mesh[:,:,0], beta_mesh[:,:,0], dloglike_alpha_beta*2., levels=cont_levels_NDF3)
+    ax[0].set_xlabel('Temporal index')
+    ax[0].set_ylabel('Spectral index')
+    ax[0].grid()
+
+    cont_norm_alpha = ax[1].contour(alpha_mesh[0,:,:], norm_mesh[0,:,:], dloglike_norm_alpha*2., levels=cont_levels_NDF3)
+    ax[1].set_yscale('log')
+    ax[1].set_xlabel('Temporal index')
+    ax[1].set_ylabel('Normalization [a.u.]')
+    ax[1].grid()
+
+    cont_beta_norm = ax[2].contour(beta_mesh[:,0,:], norm_mesh[:,0,:], dloglike_beta_norm*2., levels=cont_levels_NDF3)
+    ax[2].set_yscale('log')
+    ax[2].set_xlabel('Spectral index')
+    ax[2].set_ylabel('Normalization [a.u.]')
+    ax[2].grid()
+
+        # dict_meshed_allowd = {}
+        # for sgnf in [1.0, 2.0, 3.0]:
+        #     dict_meshed_allowd[sgnf] = dloglike_mesh*2. <= TABLE_DLOGLIKE_SIGNIFICANCE[str(sgnf)][2] # NDF=3
+    fig.tight_layout()
+    for ff in ('png',):
+        path_save = "{dire}/scanned3D_{targ}{suff}.{form}".format(dire=outdir, targ=dict_summary['config']['name'], suff=suffix, form=ff)
+        fig.savefig(path_save)
+        logger.info('{0} has been saved.'.format(path_save))
+    fig.clf()
+
+
         
 def lightcurve_prefactor(tmin, tmax, integral, index, tb_gti, torigin, tnorm=10., rescaler=1.): #, torigin=0): #, tend=100000
     logger.debug('Integral:{0}'.format(integral))
@@ -413,9 +560,11 @@ def lightcurve_prefactor(tmin, tmax, integral, index, tb_gti, torigin, tnorm=10.
     ti0, ti1 = tb_gti['START']-torigin, tb_gti['STOP']-torigin
     tdiff = tb_gti['STOP']-tb_gti['START']
     if index!=-1:
-        tiref = (index+1) / (index+2) * (pow(ti1, index+2)-pow(ti0, index+2)) / (pow(ti1, index+1)-pow(ti0, index+1))
+        #tiref = (index+1) / (index+2) * (pow(ti1, index+2)-pow(ti0, index+2)) / (pow(ti1, index+1)-pow(ti0, index+1))
+        tiref = pow((pow(ti1,index+1) + pow(ti0,index+1))/2., 1./(index+1))
     else:
-        tiref = (ti1-ti0) / (np.log(ti1/ti0))
+        #tiref = (ti1-ti0) / (np.log(ti1/ti0))
+        tiref = np.exp((np.log(ti1)+np.log(ti0))/2.)
     amp = powerlaw(tiref, index) * tdiff
     itgl = np.sum(tiref * amp)
     weight = np.sum(amp)
@@ -423,7 +572,7 @@ def lightcurve_prefactor(tmin, tmax, integral, index, tb_gti, torigin, tnorm=10.
     return (integral * pow(tref/tnorm, index) * rescaler), tref
 
 
-def make_lightcurves(name, wholephase, emin, emax, eref, roi, ngoodstat, rgoodstat, ntbinperdecade, suffix, grbcatalogue, refit, force, outdir, index, redshift=False, tmin=0, tmax=10000, addphoton=None):
+def make_lightcurves(name, wholephase, emin, emax, eref, roi, ngoodstat, rgoodstat, ntbinperdecade, suffix, grbcatalogue, refit, force, outdir, index, redshift=False, tmin=0, tmax=10000, addphoton=None, calonly=tuple([None]*4)):
     if redshift==0 or redshift!=redshift:
         sptype = 'PowerLaw2'
         sppars = {'Integral':1E-7, 'Index':-2., 'LowerLimit':emin, 'UpperLimit':emax}
@@ -432,11 +581,16 @@ def make_lightcurves(name, wholephase, emin, emax, eref, roi, ngoodstat, rgoodst
         sppars = {'Integral':1E-7, 'Index':-2., 'LowerLimit':emin, 'UpperLimit':emax, 'tau_norm':1., 'redshift':redshift, 'ebl_model':4}
     lc = LightCurveGRB(name=name, wholephase=wholephase, tmin=tmin, tmax=tmax, emin=emin, emax=emax, eref=eref, deg_roi=roi, ngoodstat=ngoodstat, rlim_goodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=None, spectraltype=sptype, spectralpars=sppars)
     lc.setup()
+    if tuple(calonly) != tuple([None]*4):
+        logger.info('CalOnly data:')
+        logger.info(calonly)
+        lc.add_calonly(calonly)
     lc.count_energy()
-    lc.run_analysis()
+    lc.run_analysis(use_calonly=True if calonly!=tuple([None]*4) else False)
     lc.pickle()
-    plot_lightcurves(lc.dct_stored, index=index, addphoton=addphoton)
-    dataframe(lc.dct_stored, index=index)
+    plot_lightcurves(lc.dct_stored, outdir=outdir, index=index, addphoton=addphoton)
+
+    #dataframe(lc.dct_stored, outdir=outdir, index=index)
 
 
 def dataframe(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
@@ -484,101 +638,183 @@ def dataframe(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
     df.to_csv('{dire}/{name}.csv'.format(dire=outdir, name=outbasename))
 
 
-def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, addphoton=None, fitlc=False):
+def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, addphoton=None, fitlc=False, fit_phase='afterglow'):
+
+    # Plotting light curve composite
+    dct_curves = None
     if isinstance(dct_summary, basestring) and dct_summary[-7:]=='.pickle':
-        dct_summary = pickle_utilities.load(dct_summary)
+        if dct_summary[-18:]=='plotmediate.pickle':
+            dct_mediate = pickle_utilities.load(dct_summary)
+            logger.info(dct_mediate.items())
+            dct_curves = dct_mediate['curves']
+            dct_summary = dct_mediate['summary']
+        else:
+            dct_summary = pickle_utilities.load(dct_summary)
     elif not isinstance(dct_summary, dict):
         logger.critical('The input {0} was NOT a dictionary or path of pickle file!!!'.format(dct_summary[-7:]))
         sys.exit(1)
+
+    tb_lat = ReadLATCatalogueInfo.open_table(grbcatalogue)
+    tb_gbm = ReadGBMCatalogueInfo.open_table()
+    tb_one = ReadLATCatalogueInfo.select_one_by_name(tb_lat, str(dct_summary['config']['name']), tb_gbm)
+
+    # Time-evolution
+    if 'GBM'in tb_one and 'FLUENCE' in tb_one['GBM']:
+        gbm_fluence = tb_one['GBM']['FLUENCE']
+    else:
+        gbm_fluence = 1E-5
+    if fit_phase=='afterglow':
+        tmin = tb_one['GBM']['T90'] + tb_one['GBM']['T90_START']
+        tmax = 100000.
+    else:
+        tmin = 0.
+        tmax = 100000.
+    scan_norm_beta_alpha(dict_summary=dct_summary, torigin=pMETandMJD.ConvertMjdToMet(float(tb_one['GBM']['TRIGGER_TIME'])), outdir=outdir, norms=gbm_fluence*(10**np.linspace(-3, 2, 51)), betas=np.linspace(-3.0, -0.0, 61), alphas=np.linspace(-2.5, -0.0, 101), tnorm=100., tmin=tmin, tmax=tmax, suffix=str(dct_summary['config']['suffix']))
+
     outbasename = 'LightCurve_{target}_index{idx}{suffix}'.format(target=str(dct_summary['config']['name']), idx=index, suffix=str(dct_summary['config']['suffix']))
 
+    if dct_curves is None:
     # Config
-    str_energies = '{emin:3.3f} - {emax:3.0f}'.format(emin=dct_summary['config']['energy']['min'], emax=dct_summary['config']['energy']['max'])
+        str_energies = '{emin:3.3f} - {emax:3.0f}'.format(emin=dct_summary['config']['energy']['min'], emax=dct_summary['config']['energy']['max'])
     #dct_summary['fit'] = {'flux':{}}
 
     # Starting point of fitting
-    tb_lat = ReadLATCatalogueInfo.open_table(grbcatalogue)
-    tb_gbm = ReadGBMCatalogueInfo.open_table()
-    tb_one = ReadLATCatalogueInfo.select_one_by_name(tb_lat, dct_summary['config']['name'], tb_gbm)
-    #t95 = tb_one['GBM']['T90'] + tb_one['GBM']['T90_START']
 
     # Characteristices
-    dct_curves = {}
-    dct_curves['TS'] = pMatplot.Curve('TS', xlabel='Time - T0 [s]', ylabel=r'$\sqrt{\rm{max}(TS, 0)}$', xerr_asym=True, yerr_asym=False)
+        dct_curves = OrderedDict() #{}
 
-    dct_curves['flux'] = pMatplot.Curve('flux', xlabel='Time - T0 [s]', ylabel=r'Photon flux $\mathrm{[/cm^2 s]}$', xerr_asym=True, yerr_asym=True)
-    dct_curves['flux_ul'] = pMatplot.Curve('flux', xlabel='Time - T0 [s]', ylabel=r'Photon flux $\mathrm{[/cm^2 s]}$', xerr_asym=True, yerr_asym=False, ul=True)
+        dct_curves['TS'] = pMatplot.Curve('TS', xlabel='Time - T0 [s]', ylabel=r'$\sqrt{\rm{max}(TS, 0)}$', xerr_asym=True, yerr_asym=False)
 
-    dct_curves['eflux'] = pMatplot.Curve('eflux', xlabel='Time - T0 [s]', ylabel=r'Energy flux $\mathrm{[erg/cm^2 s]}$', xerr_asym=True, yerr_asym=True)
-    dct_curves['eflux_ul'] = pMatplot.Curve('eflux', xlabel='Time - T0 [s]', ylabel=r'Energy flux $\mathrm{[erg/cm^2 s]}$', xerr_asym=True, yerr_asym=False, ul=True)
+        dct_curves['flux'] = pMatplot.Curve('flux', xlabel='Time - T0 [s]', ylabel=r'Photon flux $\mathrm{[/cm^2 s]}$', xerr_asym=True, yerr_asym=True)
+        dct_curves['flux_ul'] = pMatplot.Curve('flux', xlabel='Time - T0 [s]', ylabel=r'Photon flux $\mathrm{[/cm^2 s]}$', xerr_asym=True, yerr_asym=False, ul=True)
 
-    dct_curves['e2dnde'] = pMatplot.Curve('e2dnde', xerr_asym=True, yerr_asym=True, xlabel='Time - T0 [s]', ylabel=r'$E^2 dN/dE \, \rm{{at}} \, {ene:3.1f} \rm{{GeV}} \, \mathrm{{[erg/cm^2 s]}}$'.format(ene=dct_summary['config']['energy']['ref']/1000.))
-    dct_curves['e2dnde_ul'] = pMatplot.Curve('e2dnde', xerr_asym=True, yerr_asym=False, ul=True, xlabel='Time - T0 [s]', ylabel=r'$E^2 dN/dE \, \rm{{at}} \, {ene:3.1f} \rm{{GeV}} \, \mathrm{{[erg/cm^2 s]}}$'.format(ene=dct_summary['config']['energy']['ref']/1000.)) #ene=dct_summary['results'][0]['Scale']['value']/1000.), )
+        dct_curves['Index'] = pMatplot.Curve('Index', xlabel='Time - T0 [s]', ylabel='Spectral index', xerr_asym=True, yerr_asym=True)
+        dct_curves['Index_ul'] = pMatplot.Curve('Index', xlabel='Time - T0 [s]', ylabel='Spectral index', xerr_asym=True, yerr_asym=False, ul=True)
+        dct_curves['Index_ll'] = pMatplot.Curve('Index', xlabel='Time - T0 [s]', ylabel='Spectral index', xerr_asym=True, yerr_asym=False, ll=True)
 
-    dct_curves['Index'] = pMatplot.Curve('Index', xlabel='Time - T0 [s]', ylabel='Spectral index', xerr_asym=True, yerr_asym=False)
-    #dct_curves['Index_ul'] = pMatplot.Curve('Index', xlabel='Time - T0 [s]', ylabel='Spectral index', xerr_asym=True, yerr_asym=False, ul=True)
-    #dct_curves['Index_ll'] = pMatplot.Curve('Index', xlabel='Time - T0 [s]', ylabel='Spectral index', xerr_asym=True, yerr_asym=False, ll=True)
+        dct_curves['eflux'] = pMatplot.Curve('eflux', xlabel='Time - T0 [s]', ylabel=r'Energy flux $\mathrm{[erg/cm^2 s]}$', xerr_asym=True, yerr_asym=True)
+        dct_curves['eflux_ul'] = pMatplot.Curve('eflux', xlabel='Time - T0 [s]', ylabel=r'Energy flux $\mathrm{[erg/cm^2 s]}$', xerr_asym=True, yerr_asym=False, ul=True)
+
+        dct_curves['e2dnde'] = pMatplot.Curve('e2dnde', xlabel='Time - T0 [s]', ylabel=r'$E^2 dN/dE \, \rm{{at}} \, {ene:3.1f} \rm{{GeV}} \, \mathrm{{[erg/cm^2 s]}}$'.format(ene=dct_summary['config']['energy']['ref']/1000.), xerr_asym=True, yerr_asym=True)
+        dct_curves['e2dnde_ul'] = pMatplot.Curve('e2dnde', xerr_asym=True, yerr_asym=False, ul=True, xlabel='Time - T0 [s]', ylabel=r'$E^2 dN/dE \, \rm{{at}} \, {ene:3.1f} \rm{{GeV}} \, \mathrm{{[erg/cm^2 s]}}$'.format(ene=dct_summary['config']['energy']['ref']/1000.)) #ene=dct_summary['results'][0]['Scale']['value']/1000.), )
 
 #    dct_curves['Energy'] = pMatplot.Curve('Energy', xlabel='Time - T0 [s]', ylabel=r'$\log Energy \, \rm{{[GeV]}}$')
-
-    fig, ax = plt.subplots(1+sum([int(v.ul==False and v.ll==False) for v in dct_curves.values()]), 1, figsize=(10, 16), sharex=True)
     
-    for ic, curve in enumerate(dct_curves.values()):
-        logger.info('===== {0} ====='.format(curve.quantity))
-        for period in dct_summary['results']:
-            t0 = max(1, period['time']['min'])
-            t1 = period['time']['max']
-            tref = 10**((np.log10(t0)+np.log10(t1))/2.0) #(t0+t1)/2.0 #sqrt(t0*t1)
-            logger.info('----- {tmin:.1f} - {tmax:.1f} s -----'.format(tmin=t0, tmax=t1))            
+        for ic, curve in enumerate(dct_curves.values()):
+            logger.info('===== {0} ====='.format(curve.quantity))
+            for period in dct_summary['results']:
+                t0 = max(1, period['time']['min'])
+                t1 = period['time']['max']
+                tref = 10**((np.log10(t0)+np.log10(t1))/2.0) #(t0+t1)/2.0 #sqrt(t0*t1)
+                logger.info('----- {tmin:.1f} - {tmax:.1f} s -----'.format(tmin=t0, tmax=t1))            
+                dloglike = period['dloglike']['dloglike']
+                dict_meshes_allowed = {}
+                for sgnf in [1.0, 2.0, 3.0]:
+                    dict_meshes_allowed[sgnf] = dloglike*2. <= TABLE_DLOGLIKE_SIGNIFICANCE[str(sgnf)][1] # NDF=2
+                indices = period['dloglike']['Index']
+                norms = period['dloglike']['normalization']
+                indices_mesh, norms_mesh = np.meshgrid(indices, norms)
+                dloglikes_mesh = period['dloglike']['dloglike']
+                flag_detect = True if dloglikes_mesh[0][0]*2>TABLE_DLOGLIKE_SIGNIFICANCE['2.0'][1] else False
+
             #logger.debug(tref)
-            if period['TS']!=period['TS']:
-                logger.warning('Ananlysis result is NaN! Skipping...')
-            if curve.quantity == 'TS':
-                y = sqrt(max(0, period[curve.quantity]))
-                yerr = 0
-                logger.info('{v:.2}'.format(v=y))
-            if curve.ul==False and period['TS']>=ts_threshold:
-                if curve.quantity in ('Index'):
-                    y = period[curve.quantity]['value']
-                    yerr = period[curve.quantity]['error']
-                    logger.info('{v:.2} +/- {e:.2}'.format(v=y, e=yerr))
-                elif curve.quantity in ('flux', 'eflux', 'e2dnde'):
-                    logger.debug('Index: '+index)
-                    logger.debug(period['limits'])
-                    logger.debug(period['limits'][index])
-                    logger.debug(period['limits'][index][curve.quantity])
-                    y = period['limits'][index][curve.quantity]['x0']
-                    yerr_hi = period['limits'][index][curve.quantity]['err_hi']
-                    yerr_lo = period['limits'][index][curve.quantity]['err_lo']
-                    if curve.quantity in ('eflux', 'e2dnde'):
-                        y = y*MEVtoERG
-                        yerr_hi = yerr_hi*MEVtoERG
-                        yerr_lo = yerr_lo*MEVtoERG
-                    logger.info('{v:.2} + {eh:.2} - {el:.2}'.format(v=y, eh=yerr_hi, el=yerr_lo))
-
-                if curve.yerr_asym:
-                    curve.set_point(tref, y, {'hi':t1-tref, 'lo':tref-t0}, {'lo':yerr_lo, 'hi':yerr_hi})
-                else:
+                if period['TS']!=period['TS']:
+                    logger.warning('Ananlysis result is NaN! Skipping...')
+                if curve.quantity == 'TS':
+                    y = sqrt(max(0, period[curve.quantity]))
+                    yerr = 0
+                    logger.info('{v:.2}'.format(v=y))
                     curve.set_point(tref, y, {'hi':t1-tref, 'lo':tref-t0}, yerr)
+            #if curve.ul==False and period['TS']>=ts_threshold:
+                # if curve.quantity in ('Index'):
+                #     y = period[curve.quantity]['value']
+                #     yerr = period[curve.quantity]['error']
+                #     logger.info('{v:.2} +/- {e:.2}'.format(v=y, e=yerr))
+                # elif curve.quantity in ('flux', 'eflux', 'e2dnde'):
+                elif curve.quantity in ('Index', 'flux', 'eflux', 'e2dnde'):
+                    #logger.debug('Index: '+index)
+                    #logger.debug(period['limits'])
+                    #logger.debug(period['limits'][index])
+                    #logger.debug(period['limits'][index][curve.quantity])
+                    #y =  #period['limits'][index][curve.quantity]['x0']
+                    #yerr_hi = #period['limits'][index][curve.quantity]['err_hi']
+                    #yerr_lo = #period['limits'][index][curve.quantity]['err_lo']
+                    y_values = {}
 
-            elif (curve.ul==True or curve.quantity in ('TS')) and period['TS']<ts_threshold: #and period['Nobs']>0:
-                if curve.quantity in ('flux', 'eflux', 'e2dnde'):
-                    y = period['limits']['best'][curve.quantity]['ul'] #y = period['limits'][index][curve.quantity]['ul']
-                    yerr = 0
-                    if curve.quantity in ('eflux', 'e2dnde'):
-                        y = y*MEVtoERG
-                if curve.quantity in ('Index'):
-                    y = period['index_limit']['free']['index']['ul']
-                    yerr = 0
-                logger.info('UL: {ul:.2}'.format(ul=y))
-                curve.set_point(tref, y, {'hi':t1-tref, 'lo':tref-t0}, yerr)
-            elif (curve.ll==True) and period['TS']<ts_threshold:
-                if curve.quantity in ('Index'):
-                    y = period['index_limit']['free']['index']['ll']
-                    yerr = 0
-                logger.info('LL: {ll:.2}'.format(ll=y))
-                curve.set_point(tref, y, {'hi':t1-tref, 'lo':tref-t0}, yerr)
-    
+                    if curve.quantity in ('flux', 'eflux', 'e2dnde'):
+                        # logger.info('2D interpolation')
+                        # dll_interpolated = interp2d(x=indices_mesh, y=period['dloglike'][curve.quantity], z=dloglikes_mesh, bounds_error=False, fill_value=sys.maxint, kind='linear')
+                        # logy_edges = np.linspace(np.log10(DICT_SCANNED_RANGES_PARAMETERS[curve.quantity][0]), np.log10(DICT_SCANNED_RANGES_PARAMETERS[curve.quantity][1]), int(np.log10(DICT_SCANNED_RANGES_PARAMETERS[curve.quantity][1]/DICT_SCANNED_RANGES_PARAMETERS[curve.quantity][0])*20.+1.5))
+                        # dloglikes_min = np.full_like(logy_edges[:-1], float(sys.maxint))
+                        # logger.info('Going to a loop from {0} to {1}'.format(logy_edges[0], logy_edges[-1]))
+                        # for jy, (logy0, logy1) in enumerate(zip(logy_edges[:-1], logy_edges[1:])):
+                        #     liny = 10 ** ((logy0+logy1)/2.)
+                        #     dll_fixed_y = lambda x: dll_interpolated(x, liny)
+                        #     res = minimize_scalar(dll_fixed_y, bounds=(DICT_SCANNED_RANGES_PARAMETERS[curve.quantity][0],DICT_SCANNED_RANGES_PARAMETERS[curve.quantity][1]), method='bounded')
+                        #     dloglikes_min[jy] = res.fun
+                        # curve.set_point(tref, 10**logy_edges if not curve.quantity in ('eflux', 'e2dnde') else (10**logy_edges)*MEVtoERG, dloglikes_min*2., {'hi':t1-tref, 'lo':tref-t0})
+                        for sgnf in [1.0, 2.0, 3.0]:
+                            y_values[sgnf] = set(period['dloglike'][curve.quantity][dict_meshes_allowed[sgnf]])
+                    elif curve.quantity in ('Index',):
+                        # dloglikes_min = np.full_like(indices[:-1], float(sys.maxint))
+                        # dll_interpolated = interp2d(x=indices_mesh, y=norms_mesh, z=dloglikes_mesh, bounds_error=False, fill_value=sys.maxint, kind='linear')
+                        # for jindex, (index0,index1) in enumerate(zip(indices[:-1], indices[1:])):
+                        #     dll_fixed_x = lambda y: dll_interpolated((index0+index1)/2., y)
+                        #     res = minimize_scalar(dll_fixed_x)
+                        #     dloglikes_min[jindex] = res.fun
+                        # curve.set_point(tref, indices, dloglikes_min*2., {'hi':t1-tref, 'lo':tref-t0})
+                        for sgnf in [1.0, 2.0, 3.0]:
+                            y_values[sgnf] = set(indices_mesh[dict_meshes_allowed[sgnf]])
+                            
+                    if curve.ul==False and curve.ll==False and flag_detect==True:
+                        logger.info('Pointed')
+                        curve.set_point(tref, period['dloglike']['best'][curve.quantity]*(MEVtoERG if curve.quantity in ('eflux', 'e2dnde') else 1), {'hi':t1-tref, 'lo':tref-t0}, {'hi': (max(y_values[1.0])-period['dloglike']['best'][curve.quantity])*(MEVtoERG if curve.quantity in ('eflux', 'e2dnde') else 1), 'lo': (period['dloglike']['best'][curve.quantity]-min(y_values[1.0]))*(MEVtoERG if curve.quantity in ('eflux', 'e2dnde') else 1)})
+                    elif curve.ul==True and curve.ll==False and flag_detect==False:
+                        logger.info('Upper limit')
+                        curve.set_point(tref, max(y_values[2.0])*(MEVtoERG if curve.quantity in ('eflux', 'e2dnde') else 1), {'hi':t1-tref, 'lo':tref-t0})
+                    elif curve.ul==False and curve.ll==True and flag_detect==False:
+                        logger.info('Lower limit')
+                        curve.set_point(tref, min(y_values[2.0])*(MEVtoERG if curve.quantity in ('eflux', 'e2dnde') else 1), {'hi':t1-tref, 'lo':tref-t0})
+            #    curve.make_meshes()
+
+        dct_plotmediate = {'summary':dct_summary, 'curves':dct_curves}
+        pickle_utilities.dump('{0}/{1}_plotmediate.pickle'.format(outdir, outbasename), dct_plotmediate)
+                        #allowed_1d = np.array([ any(dict_meshes_allowed[sgnf][:,j_index]) for j_index in range(len(period['dloglike']['Index'])) ])
+                        #y_values[sgnf] = set(period['dloglike'][curve.quantity][allowed_1d])
+                    #else:
+                        #y_values[sgnf] = set()
+                #for yv in y_values[2.0]:
+                #    curve.set_point(tref, y, {'hi':t1-tref, 'lo':tref-t0}, yerr)
+
+                    # if curve.quantity in ('eflux', 'e2dnde'):
+                    #     y = y*MEVtoERG
+                    #     yerr_hi = yerr_hi*MEVtoERG
+                    #     yerr_lo = yerr_lo*MEVtoERG
+                    # logger.info('{v:.2} + {eh:.2} - {el:.2}'.format(v=y, eh=yerr_hi, el=yerr_lo))
+                    
+                # if curve.yerr_asym:
+                #     curve.set_point(tref, y, {'hi':t1-tref, 'lo':tref-t0}, {'lo':yerr_lo, 'hi':yerr_hi})
+                # else:
+                #     curve.set_point(tref, y, {'hi':t1-tref, 'lo':tref-t0}, yerr)
+
+            # elif (curve.ul==True or curve.quantity in ('TS')) and period['TS']<ts_threshold: #and period['Nobs']>0:
+            #     if curve.quantity in ('flux', 'eflux', 'e2dnde'):
+            #         y = period['limits']['best'][curve.quantity]['ul'] #y = period['limits'][index][curve.quantity]['ul']
+            #         yerr = 0
+            #         if curve.quantity in ('eflux', 'e2dnde'):
+            #             y = y*MEVtoERG
+            #     if curve.quantity in ('Index'):
+            #         y = period['index_limit']['free']['index']['ul']
+            #         yerr = 0
+            #     logger.info('UL: {ul:.2}'.format(ul=y))
+            #     curve.set_point(tref, y, {'hi':t1-tref, 'lo':tref-t0}, yerr)
+            # elif (curve.ll==True) and period['TS']<ts_threshold:
+            #     if curve.quantity in ('Index'):
+            #         y = period['index_limit']['free']['index']['ll']
+            #         yerr = 0
+            #     logger.info('LL: {ll:.2}'.format(ll=y))
+            #     curve.set_point(tref, y, {'hi':t1-tref, 'lo':tref-t0}, yerr)
+    fig, ax = plt.subplots(1+sum([int(v.ul==False and v.ll==False) for v in dct_curves.values()]), 1, figsize=(10, 16), sharex=True)
     ax[0].set_title('GRB '+str(dct_summary['config']['name']))
     ax[0].errorbar(dct_curves['TS'].get_xdata(), dct_curves['TS'].get_ydata(), xerr=dct_curves['TS'].get_xerr(), yerr=dct_curves['TS'].get_yerr(), fmt=dct_curves['TS'].fmt)
     ax[0].set_ylabel(dct_curves['TS'].ylabel)
@@ -586,8 +822,15 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free', g
     ax[0].grid(ls='-', lw=0.5, alpha=0.5)
     ax[0].set_xlim((1.0, 100000.0))
 
+    # logger.info('flux mesh')
+    # logger.info('X shape: {0}'.format(dct_curves['flux'].x_mesh.shape))
+    # logger.info('Y shape: {0}'.format(dct_curves['flux'].y_mesh.shape))
+    # logger.info('Z shape: {0}'.format(dct_curves['flux'].z_mesh.shape))
+
     ax[1].errorbar(dct_curves['flux'].get_xdata(), dct_curves['flux'].get_ydata(), xerr=dct_curves['flux'].get_xerr(), yerr=dct_curves['flux'].get_yerr(), fmt=dct_curves['flux'].fmt, ms=2)
     ax[1].errorbar(dct_curves['flux_ul'].get_xdata(), dct_curves['flux_ul'].get_ydata(), xerr=dct_curves['flux_ul'].get_xerr(), fmt=dct_curves['flux_ul'].fmt)
+    #ax[1].pcolormesh(dct_curves['flux'].x_mesh, dct_curves['flux'].y_mesh, dct_curves['flux'].z_mesh, vmin=0, vmax=TABLE_DLOGLIKE_SIGNIFICANCE['3.0'][1], cmap=cm.Greens_r)
+    #ax[1].set_ylim((DICT_SCANNED_RANGES_PARAMETERS['flux']))
     ax[1].set_ylabel(dct_curves['flux'].ylabel)
     ax[1].set_xscale("log", nonposx='clip')
     ax[1].set_yscale("log", nonposx='clip')
@@ -621,6 +864,8 @@ $\rm{{ \alpha = {alpha:.2E} \pm {alphaerr:.2E} }}$""".format(f0=params[0][0], f0
 
     ax[2].errorbar(dct_curves['eflux'].get_xdata(), dct_curves['eflux'].get_ydata(), xerr=dct_curves['eflux'].get_xerr(), yerr=dct_curves['eflux'].get_yerr(), fmt=dct_curves['eflux'].fmt)
     ax[2].errorbar(dct_curves['eflux_ul'].get_xdata(), dct_curves['eflux_ul'].get_ydata(), xerr=dct_curves['eflux_ul'].get_xerr(), fmt=dct_curves['eflux_ul'].fmt)
+    #ax[2].pcolormesh(dct_curves['eflux'].x_mesh, dct_curves['eflux'].y_mesh, dct_curves['eflux'].z_mesh, vmin=0, vmax=TABLE_DLOGLIKE_SIGNIFICANCE['3.0'][1], cmap=cm.Greens_r)
+    #ax[2].set_ylim(np.array(DICT_SCANNED_RANGES_PARAMETERS['eflux'])*MEVtoERG)
     ax[2].set_ylabel(dct_curves['eflux'].ylabel)
     ax[2].set_xscale("log", nonposx='clip')
     ax[2].set_yscale("log", nonposx='clip')
@@ -631,6 +876,8 @@ $\rm{{ \alpha = {alpha:.2E} \pm {alphaerr:.2E} }}$""".format(f0=params[0][0], f0
 
     ax[3].errorbar(dct_curves['e2dnde'].get_xdata(), dct_curves['e2dnde'].get_ydata(), xerr=dct_curves['e2dnde'].get_xerr(), yerr=dct_curves['e2dnde'].get_yerr(), fmt=dct_curves['e2dnde'].fmt)
     ax[3].errorbar(dct_curves['e2dnde_ul'].get_xdata(), dct_curves['e2dnde_ul'].get_ydata(), xerr=dct_curves['e2dnde_ul'].get_xerr(), fmt=dct_curves['e2dnde_ul'].fmt)
+    #ax[3].pcolormesh(dct_curves['e2dnde'].x_mesh, dct_curves['e2dnde'].y_mesh, dct_curves['e2dnde'].z_mesh, vmin=0, vmax=TABLE_DLOGLIKE_SIGNIFICANCE['3.0'][1], cmap=cm.Greens_r)
+    #ax[3].set_ylim(np.array(DICT_SCANNED_RANGES_PARAMETERS['e2dnde'])*MEVtoERG)
     ax[3].set_ylabel(dct_curves['e2dnde'].ylabel)
     ax[3].set_xscale("log", nonposx='clip')
     ax[3].set_yscale("log", nonposx='clip')
@@ -640,8 +887,9 @@ $\rm{{ \alpha = {alpha:.2E} \pm {alphaerr:.2E} }}$""".format(f0=params[0][0], f0
     ax[3].set_yticks([y for y in ax[3].get_yticks() if y<0.5*ax[3].get_ylim()[1]])
 
     ax[4].errorbar(dct_curves['Index'].get_xdata(), dct_curves['Index'].get_ydata(), xerr=dct_curves['Index'].get_xerr(), yerr=dct_curves['Index'].get_yerr(), fmt=dct_curves['Index'].fmt)
-    #ax[4].errorbar(dct_curves['Index_ul'].get_xdata(), dct_curves['Index_ul'].get_ydata(), xerr=dct_curves['Index_ul'].get_xerr(), yerr=dct_curves['Index_ul'].get_yerr(), fmt=dct_curves['Index_ul'].fmt)
-    #ax[4].errorbar(dct_curves['Index_ll'].get_xdata(), dct_curves['Index_ll'].get_ydata(), xerr=dct_curves['Index_ll'].get_xerr(), yerr=dct_curves['Index_ll'].get_yerr(), fmt=dct_curves['Index_ll'].fmt)
+    #ax[4].pcolormesh(dct_curves['Index'].x_mesh, dct_curves['Index'].y_mesh, dct_curves['Index'].z_mesh, vmin=0, vmax=TABLE_DLOGLIKE_SIGNIFICANCE['3.0'][1], cmap=cm.Greens_r)
+    ax[4].errorbar(dct_curves['Index_ul'].get_xdata(), dct_curves['Index_ul'].get_ydata(), xerr=dct_curves['Index_ul'].get_xerr(), yerr=dct_curves['Index_ul'].get_yerr(), fmt=dct_curves['Index_ul'].fmt)
+    ax[4].errorbar(dct_curves['Index_ll'].get_xdata(), dct_curves['Index_ll'].get_ydata(), xerr=dct_curves['Index_ll'].get_xerr(), yerr=dct_curves['Index_ll'].get_yerr(), fmt=dct_curves['Index_ll'].fmt)
     ax[4].set_ylabel(dct_curves['Index'].ylabel)
     ax[4].set_xlabel(dct_curves['Index'].xlabel)
     ax[4].set_xscale("log", nonposx='clip')
@@ -672,6 +920,7 @@ $\rm{{ \alpha = {alpha:.2E} \pm {alphaerr:.2E} }}$""".format(f0=params[0][0], f0
     outdir = outdir if outdir is not None else '{base}/{target}/E{emin:0>7.0f}-{emax:0>7.0f}MeV/r{roi:0>2.0f}deg/{phase}'.format(base=pLATLikelihoodConfig.PATH_BASEDIR, target=str(dct_summary['config']['name']), emin=dct_summary['config']['energy']['min'], emax=dct_summary['config']['energy']['max'], roi=dct_summary['config']['roi']['radius'], phase='lightcurve')
     for ff in ['png', 'pdf']:
         fig.savefig('{0}/{1}.{2}'.format(outdir, outbasename, ff))
+    fig.clf()
 
 
 @click.command()
@@ -690,14 +939,15 @@ $\rm{{ \alpha = {alpha:.2E} \pm {alphaerr:.2E} }}$""".format(f0=params[0][0], f0
 @click.option('--ntbinperdecade', type=float, default=5.0, help='Number of time bins in onde decade. This is active only if --ngoodstat 0.')
 @click.option('--index', type=click.Choice(['free', 'best']), default='free')
 @click.option('--redshift', '-z', type=float, default=0.)
+@click.option('--calonly', type=(str, str, str, str), default=[None]*4, help='path_onevt, path_onexp, path_offevt, path_offexp, rclass')
 @click.option('--suffix', '-s', type=str, default='')
 @click.option('--force', '-f', is_flag=True)
 @click.option('--refit', '-r', is_flag=True)
-@click.option('--outdir', '-o', type=str, default='')
+@click.option('--outdir', '-o', type=str, default='.')
 @click.option('--plotonly', '-p', type=str, default=None, help='Path of result pickle file if you skip analyses.')
 @click.option('--bsub', '-b', is_flag=True)
 @click.option('--loglevel', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'CRITICAL']), default='INFO')
-def main(namemin, namemax, mode, emin, emax, eref, tmin, tmax, roi, ngoodstat, rgoodstat, ntbinperdecade, refit, force, suffix, grbcatalogue, outdir, plotonly, index, redshift, bsub, loglevel):
+def main(namemin, namemax, mode, emin, emax, eref, tmin, tmax, roi, ngoodstat, rgoodstat, ntbinperdecade, refit, force, suffix, grbcatalogue, outdir, plotonly, index, redshift, calonly, bsub, loglevel):
     ##### Logger #####
     handler.setLevel(loglevel)
     logger.setLevel(loglevel)
@@ -716,11 +966,14 @@ def main(namemin, namemax, mode, emin, emax, eref, tmin, tmax, roi, ngoodstat, r
             print '##### No.{0} GRB{1} #####'.format(irow, name)
             if not os.path.exists(name):
                 os.mkdir(name)
-            acmd = ['bsub', '-o','{0}/GRB{0}_lightcurve{1}.log'.format(name, suffix if suffix=='' else '_'+suffix), '-J','lc{0}'.format(name[:-3]), '-W','400', 'python', '/u/gl/mtakahas/work/PythonModuleMine/Fermi/STLikelihoodAnalysis/LightCurve.py', '--mode', mode, '--emin', str(emin), '--emax', str(emax), '--eref', str(eref), '--tmin', str(tmin), '--tmax', str(tmax), '-s', suffix, '--index', 'free', '--redshift', str(redshift), '--roi', str(roi), '--ngoodstat', str(ngoodstat), '--rgoodstat', str(rgoodstat), '--ntbinperdecade', str(ntbinperdecade), '--grbcatalogue', grbcatalogue, '--namemin', name]
+            acmd = ['bsub', '-o','{0}/GRB{0}_lightcurve{1}.log'.format(name, suffix if suffix=='' else '_'+suffix), '-J','lc{0}'.format(name[:-3]), '-W','400', 'python', '/u/gl/mtakahas/work/PythonModuleMine/Fermi/STLikelihoodAnalysis/LightCurve.py', '--mode', mode, '--emin', str(emin), '--emax', str(emax), '--eref', str(eref), '--tmin', str(tmin), '--tmax', str(tmax), '-s', suffix, '--index', 'free', '--redshift', str(redshift), '--roi', str(roi), '--ngoodstat', str(ngoodstat), '--rgoodstat', str(rgoodstat), '--ntbinperdecade', str(ntbinperdecade), '--grbcatalogue', grbcatalogue, '--namemin', name, '--outdir', outdir, '--calonly', str(calonly[0]), str(calonly[1]), str(calonly[2]), str(calonly[3])]
             if force==True:
                 acmd.append('--force')
             if refit==True:
                 acmd.append('--refit')
+            if plotonly is not None:
+                acmd.append('--plotonly')
+                acmd.append(plotonly)
             print acmd
             subprocess.call(acmd)
         return 0
@@ -737,10 +990,10 @@ def main(namemin, namemax, mode, emin, emax, eref, tmin, tmax, roi, ngoodstat, r
             addphoton={'time': (2035.85387415,5757.82151717), 'energy':(115.829539063*1000.,63.1624726562*1000.)}
 
         if plotonly==None:
-            make_lightcurves(name=namemin, wholephase=mode, emin=emin, emax=emax, eref=eref, tmin=tmin, tmax=tmax, roi=roi, ngoodstat=ngoodstat, rgoodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=outdir, index=index, redshift=redshift, addphoton=addphoton)#, tmin=tb_lat['LAT_TRIGGER_TIME']-tb_lat['TRIGGER_TIME'])
+            make_lightcurves(name=namemin, wholephase=mode, emin=emin, emax=emax, eref=eref, tmin=tmin, tmax=tmax, roi=roi, ngoodstat=ngoodstat, rgoodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=outdir, index=index, redshift=redshift, addphoton=addphoton, calonly=calonly)#, tmin=tb_lat['LAT_TRIGGER_TIME']-tb_lat['TRIGGER_TIME'])
         else:
-            plot_lightcurves(plotonly, index=index, addphoton=addphoton) #, addphoton={'time': (422.7,), 'energy':(50.49609375*1000.,)})
-            dataframe(plotonly, index=index)
+            plot_lightcurves(plotonly, outdir=outdir, index=index, addphoton=addphoton) #, addphoton={'time': (422.7,), 'energy':(50.49609375*1000.,)})
+            #dataframe(plotonly, index=index)
 
 
 if __name__ == '__main__':
