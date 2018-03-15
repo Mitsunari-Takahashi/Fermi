@@ -120,6 +120,8 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
         trGRB = ROOT.TTree("EVENTS_GRB{0}".format(nameGrb), "Friend TTree for GRB{0}".format(nameGrb))
         cdTimeGRB = c_double()
         trGRB.Branch('TIME_GRB', cdTimeGRB, 'TIME_GRB/D')
+        cdAngSep = c_double()
+        trGRB.Branch('ANG_SEP', cdAngSep, 'ANG_SEP/D')
         cbFlagPSF68 = c_bool()
         trGRB.Branch('FLAG_PSF68', cbFlagPSF68, 'FLAG_PSF68/O')
         cbFlagPSF95 = c_bool()
@@ -214,6 +216,7 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
             dictDistCut = { 'PSF95': (htgPerf.getPSF95_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384)+3*(chIn.s==32768), epsf, cthpsf) + dict_grb["ERROR_RADIUS"]), 'PSF68': (htgPerf.getPSF68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384)+3*(chIn.s==32768), epsf, cthpsf) + dict_grb["ERROR_RADIUS"]) }
             radTheta = acos(np.dot(vecTgt, vecEvt))
             degDist = degrees(radTheta)
+            cdAngSep.value = degDist
             #if chIn.evid == 6500524:
              #   print "Distance:", degDist, "PSF95:", dictDistCut['PSF95']
             if degDist<dictDistCut['PSF95'] and chIn.t>=metStart and chIn.t<metStop and (chIn.t<exclude[0] or chIn.t>=exclude[1]):
