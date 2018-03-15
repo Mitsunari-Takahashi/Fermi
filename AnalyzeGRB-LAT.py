@@ -84,9 +84,9 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
 
     aliasSelections = yaml.load(open("{0}/config/pass8_event_selections.yaml".format(os.environ.get("EVENTSELECT")),'r'))
 
-    chIn = ROOT.TChain('EVENTS')
+    chInput = ROOT.TChain('EVENTS')
     for fileIn in listFileIn:
-        chIn.Add(fileIn)
+        chInput.Add(fileIn)
     if suffix!="":
         suffix = "_" + suffix
     aCutPsf = [95, 68]
@@ -106,13 +106,15 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
         else:
             metStart = chIn.GetMinimum("t")-1
             metStop = chIn.GetMaximum("t")+1
+        chIn = chInput.CopyTree('TIME>={0} && TIME<{1} && (TIME<{2} || TIME>={3})'.format(metStart, metStop, exclude[0], exclude[1]))
+        chIn.Write()
 
         print 'Analysis time domain: MET', metStart, '-', metStop
         if not (exclude[0]==sys.maxsize and exclude[1]==0):
             print 'Excluded time domain: MET', exclude[0], '-', exclude[1]
         nEventChain = chIn.GetEntries()
-        nEventTime = chIn.GetEntries('TIME>={0} && TIME<{1} && (TIME<{2} || TIME>={3})'.format(metStart, metStop, exclude[0], exclude[1]))
-        print "Total number of events in the time domain:", nEventTime
+        #nEventTime = chIn.GetEntries('TIME>={0} && TIME<{1} && (TIME<{2} || TIME>={3})'.format(metStart, metStop, exclude[0], exclude[1]))
+        print "Total number of events in the time domain:", nEventChain #nEventTime
         vecTgt = np.array([cos(radians(dict_grb["DEC"]))*cos(radians(dict_grb["RA"])), cos(radians(dict_grb["DEC"]))*sin(radians(dict_grb["RA"])), sin(radians(dict_grb["DEC"]))])
 
     # TTree
@@ -358,6 +360,7 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
                 print "Time from the trigger:", chIn.t-dict_grb["TRIGGER_MET"], "s"
                 print "Anglular distance:", degDist, "deg"
                 print "PSF68:", htgPerf.getPSF68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384)+3*(chIn.s==32768), chIn.e, chIn.cth), "deg"
+                print "PSF95:", htgPerf.getPSF95_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384)+3*(chIn.s==32768), chIn.e, chIn.cth), "deg"
                 print "Energy:", pow(10,chIn.e-3), "GeV"
                 print "Edisp68:", 100*htgPerf.getEdisp68_cth(chIn.c-1, 0*(chIn.s==4 or chIn.s==4096)+1*(chIn.s==128 or chIn.s==8192)+2*(chIn.s==16384)+3*(chIn.s==32768), chIn.e, chIn.cth), "%"
                 print "Cos( inclination angle ):", chIn.cth
@@ -372,6 +375,8 @@ def main(grbid, evtfiles, start, stop, suffix, fixpsfenergy, fixpsfinclin, exclu
                     meter = "\r[{0}{1}]".format("=" * rate, ' ' * (100-rate))
                 sys.stdout.write(meter)
                 sys.stdout.flush()
+
+        #trGRB.Merge(chIn.GetName())
         trGRB.AddFriend(chIn)
         cEvent = ROOT.TCanvas("cEvent", "GRB {0} gamma-like events".format(nameGrb))
         cEvent.cd()
