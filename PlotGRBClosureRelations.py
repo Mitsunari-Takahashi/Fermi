@@ -42,62 +42,68 @@ MEVtoERG = 1.6021766208E-6
 GRB_CATALOGUE = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LAT2CATALOG-v1-LTF.fits'
 
 
-DICT_ALPHA = {'Synchrotron':{'ISM':{'Fast':{'Highest-E': lambda p:(3.*p-2.)/4.,
-                                            '2nd highest-E': lambda p:1./4.},
-                                    'Slow':{'Highest-E': lambda p:(3.*p-2.)/4.,
-                                            'Highest-E (IC-dominated)': lambda p:3.*p/4.-1./(4.-p),
-                                            '2nd highest-E': lambda p:3.*(p-1.)/4.}
+DICT_LABEL = {'1st HE': '1',
+              '2nd HE': '2',
+              '1st HE (IC-dom)': '1a'}
+
+DICT_ALPHA = {'Synchrotron':{'ISM':{'Fast':{'1st HE': lambda p:(3.*p-2.)/4., # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p:1./4.}, # Panaitescu & Kumar, 2000
+                                    'Slow':{'1st HE': lambda p:(3.*p-2.)/4., # Panaitescu & Kumar, 2000
+                                            '1st HE (IC-dom)': lambda p:3.*p/4.-1./(4.-p), # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p:3.*(p-1.)/4.} # Panaitescu & Kumar, 2000
                                 },
-                             'Wind':{'Fast':{'Highest-E': lambda p:(3.*p-2.)/4.,
-                                            '2nd highest-E': lambda p:1./4.},
-                                    'Slow':{'Highest-E': lambda p:(3.*p-1.)/4.,
-                                            'Highest-E (IC-dominated)': lambda p:3.*p/4.-p/2./(4.-p),
-                                            '2nd highest-E': lambda p: 3.*(p-1.)/4.}
+                             'Wind':{'Fast':{'1st HE': lambda p:(3.*p-2.)/4., # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p:1./4.}, # Panaitescu & Kumar, 2000
+                                    'Slow':{'1st HE': lambda p:(3.*p-2.)/4.,  # Panaitescu & Kumar, 2000
+                                            '1st HE (IC-dom)': lambda p:3.*p/4.-p/2./(4.-p), # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p: (3.*p-1.)/4.} # Panaitescu & Kumar, 2000
                                  }
                          },
-              'SSC':{'ISM':{'Fast':{'Highest-E': lambda p:(9.*p-10.)/8.,
-                                    '2nd highest-E': lambda p:-1./8.},
-                            'Slow':{'Highest-E': lambda p:(9.*p-10.)/8.,
-                                    '2nd highest-E': lambda p:(9.*p-11.)/8.}
+              'SSC':{'ISM':{'Fast':{'1st HE': lambda p:(9.*p-10.)/8., # Panaitescu & Kumar, 2000
+                                    '2nd HE': lambda p:-1./8.}, # Panaitescu & Kumar, 2000
+                            'Slow':{'1st HE': lambda p:(9.*p-10.)/8., # Panaitescu & Kumar, 2000
+                                    '1st HE (IC-dom)': lambda p:(9.*p-10.)/8.-(p-2.)/(4.-p), #Sari & Esin (2001)
+                                    '2nd HE': lambda p:(9.*p-11.)/8.} # Panaitescu & Kumar, 2000. # IC-dom is same as this according to Sari & Esin (2001)
                         },
-                     'Wind':{'Fast':{'Highest-E': lambda p:(p-1.),
-                                     '2nd highest-E': lambda p:0},
-                             'Slow':{'Highest-E': lambda p:(p-1.),
-                                     '2nd highest-E': lambda p: p}
-                         }
+                     'Wind':{'Fast':{'1st HE': lambda p:(p-1.), # Panaitescu & Kumar, 2000
+                                     '2nd HE': lambda p:0}, # Panaitescu & Kumar, 2000
+                             'Slow':{'1st HE': lambda p:(p-1.), # Panaitescu & Kumar, 2000
+                                     '2nd HE': lambda p: p} # Panaitescu & Kumar, 2000
+                         } # Panaitescu & Kumar, 2000
                  }
               }
                             
     
-DICT_BETA = {'Synchrotron':{'ISM':{'Fast':{'Highest-E': lambda p:p/2.,
-                                            '2nd highest-E': lambda p:1/2},
-                                    'Slow':{'Highest-E': lambda p:p/2.,
-                                            'Highest-E (IC-dominated)': lambda p:p/2.,
-                                            '2nd highest-E': lambda p:(p-1.)/2.},
+DICT_BETA = {'Synchrotron':{'ISM':{'Fast':{'1st HE': lambda p:p/2.,  # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p:1/2}, # Panaitescu & Kumar, 2000
+                                    'Slow':{'1st HE': lambda p:p/2., # Panaitescu & Kumar, 2000
+                                            '1st HE (IC-dom)': lambda p:p/2., # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p:(p-1.)/2.}, # Panaitescu & Kumar, 2000
                                    },
-                            'Wind':{'Fast':{'Highest-E': lambda p:p/2.,
-                                            '2nd highest-E': lambda p:1./2.},
-                                    'Slow':{'Highest-E': lambda p:(p-1.)/2.,
-                                            'Highest-E (IC-dominated)': lambda p:p/2.,
-                                            '2nd highest-E': lambda p: (p-1.)/2.}
+                            'Wind':{'Fast':{'1st HE': lambda p:p/2., # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p:1./2.}, # Panaitescu & Kumar, 2000
+                                    'Slow':{'1st HE': lambda p:p/2.,  # Panaitescu & Kumar, 2000
+                                            '1st HE (IC-dom)': lambda p:p/2., # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p: (p-1.)/2.} # Panaitescu & Kumar, 2000
                                 }
                         },
-             'SSC':{'ISM':{'Fast':{'Highest-E': lambda p:p/2.,
-                                   '2nd highest-E': lambda p:1./2.},
-                           'Slow':{'Highest-E': lambda p:p/2.,
-                                   '2nd highest-E': lambda p:(1.-p)/2.}
+             'SSC':{'ISM':{'Fast':{'1st HE': lambda p:p/2., #Sari & Esin (2001)
+                                   '2nd HE': lambda p:1./2.}, #Sari & Esin (2001)
+                           'Slow':{'1st HE': lambda p:p/2., #Sari & Esin (2001)
+                                   '1st HE (IC-dom)': lambda p:p/2., #Sari & Esin (2001) # Same as Synchrotron-dominant
+                                   '2nd HE': lambda p:(p-1.)/2.} #Sari & Esin (2001)
                        },
-                    'Wind':{'Fast':{'Highest-E': lambda p:p/2.,
-                                    '2nd highest-E': lambda p:1./2.},
-                            'Slow':{'Highest-E': lambda p:p/2.,
-                                    '2nd highest-E': lambda p: (p-1.)/2.}
+                    'Wind':{'Fast':{'1st HE': lambda p:p/2., #Sari & Esin (2001)
+                                    '2nd HE': lambda p:1./2.}, #Sari & Esin (2001)
+                            'Slow':{'1st HE': lambda p:p/2., #Sari & Esin (2001)
+                                    '2nd HE': lambda p: (p-1.)/2.} #Sari & Esin (2001)
                         }
                 }
          }
 
 
 class ObservedIndices:
-    def __init__(self, alpha, beta, alpha_err=0., beta_err=0., name=None):
+    def __init__(self, alpha=None, beta=None, alpha_err=0., beta_err=0., name=None):
         self.name = name
         self.alpha = alpha
         self.alpha_err = alpha_err
@@ -105,12 +111,54 @@ class ObservedIndices:
         self.beta_err = beta_err
 
 
+    def read(self, indata, instruments=None): 
+        ndata = sum(1 for line in open(indata))-1
+        with open(indata, 'r') as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            dict_ncol = {}
+            for irow, row in enumerate(header):
+                dict_ncol[row] = irow
+            alpha = []
+            alpha_err_hi = []
+            alpha_err_lo = []
+            beta = []
+            beta_err_hi = []
+            beta_err_lo = []
+            name_data = None
+            for irow, row in enumerate(reader):
+                if instruments is None or row[dict_ncol['Instrument']] in instruments:
+                    alpha.append(float(row[dict_ncol['alpha']]))
+                    alpha_err_hi.append(float(row[dict_ncol['alpha_err_hi']]))
+                    alpha_err_lo.append(float(row[dict_ncol['alpha_err_lo']]))
+                    print '{v} + {eh} -{el}'.format(v=alpha[irow], eh=alpha_err_hi[irow], el=alpha_err_lo[irow])
+                    beta.append(float(row[dict_ncol['beta']]))
+                    beta_err_hi.append(float(row[dict_ncol['beta_err_hi']]))
+                    beta_err_lo.append(float(row[dict_ncol['beta_err_lo']]))
+                    print '{v} + {eh} -{el}'.format(v=beta[irow], eh=beta_err_hi[irow], el=beta_err_lo[irow])
+                if irow==0:
+                    name_data = row[dict_ncol['GRB']]
+
+            alpha = np.array(alpha)
+            alpha_err_hi = np.array(alpha_err_hi)
+            alpha_err_lo = np.array(alpha_err_lo)
+            beta = np.array(beta)
+            beta_err_hi = np.array(beta_err_hi)
+            beta_err_lo = np.array(beta_err_lo)
+
+        self.name = name_data
+        self.alpha = alpha
+        self.alpha_err = {'err_hi':alpha_err_hi,'err_lo':alpha_err_lo}
+        self.beta = beta
+        self.beta_err = {'err_hi':beta_err_hi,'err_lo':beta_err_lo}
+
+
     def draw(self, ax):
         print 'alpha:', self.alpha
         print 'alpha_err:', self.alpha_err
         print 'beta:', self.beta
         print 'beta_err:', self.beta_err
-        ax.errorbar(x=self.alpha, y=self.beta, xerr=[self.alpha_err['err_lo'],self.alpha_err['err_hi']], yerr=[self.beta_err['err_lo'],self.beta_err['err_hi']], label=self.name, c='k', lw=3, fmt='.')
+        ax.errorbar(x=self.alpha, y=self.beta, xerr=[self.alpha_err['err_lo'],self.alpha_err['err_hi']], yerr=[self.beta_err['err_lo'],self.beta_err['err_hi']], label=self.name, c='k', lw=1, fmt='.')
 
         
 
@@ -132,15 +180,32 @@ class ClosureRelation:
         return self.beta(p)
 
 
-    def draw(self, ax, p_range=(2, 3.0), npoint=100):
+    def draw(self, ax, p_range=(2, 3.0), npoint=100, **kwargs):
         p_indices = np.linspace(p_range[0], p_range[1], int((p_range[1]-p_range[0])*npoint)+1)
         alpha_indices = np.zeros_like(p_indices)
         beta_indices = np.zeros_like(p_indices)
         for ip,p in enumerate(p_indices):
             alpha_indices[ip] = self.eval_alpha(p)
             beta_indices[ip] = self.eval_beta(p)
-        self.im = ax.scatter(alpha_indices, beta_indices, c=p_indices, cmap=cm.rainbow, marker='o', s=2)
-        ax.text(x=(alpha_indices[0]+np.mean(alpha_indices))/2., y=(beta_indices[0]+np.mean(beta_indices))/2., s=self.name, fontsize=8)
+        pointlike = True if 'Fast' in ax.get_title() and '2nd HE' in ax.get_title() else False
+        self.im = ax.scatter(alpha_indices, beta_indices, c=p_indices if not pointlike else 'grey', cmap=cm.rainbow, marker='o', vmin=min(p_indices), vmax=max(p_indices), edgecolors=None, linewidths=0, s=30 if pointlike else 3, **kwargs)
+        xtext = alpha_indices[-1] -0.03 #if 'SSC' in self.name else alpha_indices[0]
+        if xtext < np.mean(alpha_indices):
+            xtext-=0.05
+        ytext = beta_indices[-1] + 0.03
+        # if 'SSC' in self.name:
+        #     ytext += beta_indices[-1] 
+        # elif 'IC-dom' in self.name:
+        #     ytext += np.mean(beta_indices)
+        # else:
+        #     ytext += (beta_indices[0]+0.1)
+        if self.name[:3]=='Syn':
+            stext = 'S' +DICT_LABEL[self.name[4:]]
+        elif self.name[:3]=='SSC':
+            stext = 'C'+DICT_LABEL[self.name[4:]]
+        ax.text(x=xtext, y=ytext, s=stext, fontsize=8)
+        #ax.text(x=xtext, y=ytext, s=self.name, fontsize=8)
+        #ax.text(x=(alpha_indices[0]+np.mean(alpha_indices))/2., y=(beta_indices[0]+np.mean(beta_indices))/2., s=self.name, fontsize=8)
 
 
 @click.command()
@@ -171,37 +236,40 @@ def main(name, indata, emission, cbm, cooling, suffix, pathout, figform):
                         cbar = fig.colorbar(clrel.im)
                         cbar.set_label('p of the electrons')
                         flag_cbar = True
-    ndata = sum(1 for line in open(indata))-1
-    with open(indata, 'r') as f:
-        reader = csv.reader(f)
-        header = next(reader)
-        dict_ncol = {}
-        for irow, row in enumerate(header):
-            dict_ncol[row] = irow
-        alpha = np.zeros(ndata)
-        alpha_err_hi = np.zeros(ndata)
-        alpha_err_lo = np.zeros(ndata)
-        beta = np.zeros(ndata)
-        beta_err_hi = np.zeros(ndata)
-        beta_err_lo = np.zeros(ndata)
-        name_data = None
-        for irow, row in enumerate(reader):
-            alpha[irow] = float(row[dict_ncol['alpha']])
-            alpha_err_hi[irow] = float(row[dict_ncol['alpha_err_hi']])
-            alpha_err_lo[irow] = float(row[dict_ncol['alpha_err_lo']])
-            print '{v} + {eh} -{el}'.format(v=alpha[irow], eh=alpha_err_hi[irow], el=alpha_err_lo[irow])
-            beta[irow] = float(row[dict_ncol['beta']])
-            beta_err_hi[irow] = float(row[dict_ncol['beta_err_hi']])
-            beta_err_lo[irow] = float(row[dict_ncol['beta_err_lo']])
-            print '{v} + {eh} -{el}'.format(v=beta[irow], eh=beta_err_hi[irow], el=beta_err_lo[irow])
-            if irow==0:
-                name_data = row[dict_ncol['GRB']] #','.join([row[dict_ncol['GRB']],row[dict_ncol['Band']],row[dict_ncol['Time']]])
+    # ndata = sum(1 for line in open(indata))-1
+    # with open(indata, 'r') as f:
+    #     reader = csv.reader(f)
+    #     header = next(reader)
+    #     dict_ncol = {}
+    #     for irow, row in enumerate(header):
+    #         dict_ncol[row] = irow
+    #     alpha = np.zeros(ndata)
+    #     alpha_err_hi = np.zeros(ndata)
+    #     alpha_err_lo = np.zeros(ndata)
+    #     beta = np.zeros(ndata)
+    #     beta_err_hi = np.zeros(ndata)
+    #     beta_err_lo = np.zeros(ndata)
+    #     name_data = None
+    #     for irow, row in enumerate(reader):
+    #         alpha[irow] = float(row[dict_ncol['alpha']])
+    #         alpha_err_hi[irow] = float(row[dict_ncol['alpha_err_hi']])
+    #         alpha_err_lo[irow] = float(row[dict_ncol['alpha_err_lo']])
+    #         print '{v} + {eh} -{el}'.format(v=alpha[irow], eh=alpha_err_hi[irow], el=alpha_err_lo[irow])
+    #         beta[irow] = float(row[dict_ncol['beta']])
+    #         beta_err_hi[irow] = float(row[dict_ncol['beta_err_hi']])
+    #         beta_err_lo[irow] = float(row[dict_ncol['beta_err_lo']])
+    #         print '{v} + {eh} -{el}'.format(v=beta[irow], eh=beta_err_hi[irow], el=beta_err_lo[irow])
+    #         if irow==0:
+    #             name_data = row[dict_ncol['GRB']] #','.join([row[dict_ncol['GRB']],row[dict_ncol['Band']],
+                #row[dict_ncol['Time']]])
     #print name_data
-    obs = ObservedIndices(alpha=alpha,
-                          beta=beta,
-                          alpha_err={'err_hi':alpha_err_hi,'err_lo':alpha_err_lo},
-                          beta_err={'err_hi':beta_err_hi,'err_lo':beta_err_lo},
-                          name=name_data)
+    # obs = ObservedIndices(alpha=alpha,
+    #                       beta=beta,
+    #                       alpha_err={'err_hi':alpha_err_hi,'err_lo':alpha_err_lo},
+    #                       beta_err={'err_hi':beta_err_hi,'err_lo':beta_err_lo},
+    #                       name=name_data)
+    obs = ObservedIndices()
+    obs.read(indata)
     obs.draw(ax)
     ax.legend()
     ax.grid()
