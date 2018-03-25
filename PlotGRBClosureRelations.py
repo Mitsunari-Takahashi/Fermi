@@ -42,6 +42,10 @@ MEVtoERG = 1.6021766208E-6
 GRB_CATALOGUE = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LAT2CATALOG-v1-LTF.fits'
 
 
+DICT_LABEL = {'1st HE': '1',
+              '2nd HE': '2',
+              '1st HE (IC-dom)': '1a'}
+
 DICT_ALPHA = {'Synchrotron':{'ISM':{'Fast':{'1st HE': lambda p:(3.*p-2.)/4., # Panaitescu & Kumar, 2000
                                             '2nd HE': lambda p:1./4.}, # Panaitescu & Kumar, 2000
                                     'Slow':{'1st HE': lambda p:(3.*p-2.)/4., # Panaitescu & Kumar, 2000
@@ -107,7 +111,7 @@ class ObservedIndices:
         self.beta_err = beta_err
 
 
-    def read(self, indata): 
+    def read(self, indata, instruments=None): 
         ndata = sum(1 for line in open(indata))-1
         with open(indata, 'r') as f:
             reader = csv.reader(f)
@@ -115,24 +119,33 @@ class ObservedIndices:
             dict_ncol = {}
             for irow, row in enumerate(header):
                 dict_ncol[row] = irow
-            alpha = np.zeros(ndata)
-            alpha_err_hi = np.zeros(ndata)
-            alpha_err_lo = np.zeros(ndata)
-            beta = np.zeros(ndata)
-            beta_err_hi = np.zeros(ndata)
-            beta_err_lo = np.zeros(ndata)
+            alpha = []
+            alpha_err_hi = []
+            alpha_err_lo = []
+            beta = []
+            beta_err_hi = []
+            beta_err_lo = []
             name_data = None
             for irow, row in enumerate(reader):
-                alpha[irow] = float(row[dict_ncol['alpha']])
-                alpha_err_hi[irow] = float(row[dict_ncol['alpha_err_hi']])
-                alpha_err_lo[irow] = float(row[dict_ncol['alpha_err_lo']])
-                print '{v} + {eh} -{el}'.format(v=alpha[irow], eh=alpha_err_hi[irow], el=alpha_err_lo[irow])
-                beta[irow] = float(row[dict_ncol['beta']])
-                beta_err_hi[irow] = float(row[dict_ncol['beta_err_hi']])
-                beta_err_lo[irow] = float(row[dict_ncol['beta_err_lo']])
-                print '{v} + {eh} -{el}'.format(v=beta[irow], eh=beta_err_hi[irow], el=beta_err_lo[irow])
+                if instruments is None or row[dict_ncol['Instrument']] in instruments:
+                    alpha.append(float(row[dict_ncol['alpha']]))
+                    alpha_err_hi.append(float(row[dict_ncol['alpha_err_hi']]))
+                    alpha_err_lo.append(float(row[dict_ncol['alpha_err_lo']]))
+                    print '{v} + {eh} -{el}'.format(v=alpha[irow], eh=alpha_err_hi[irow], el=alpha_err_lo[irow])
+                    beta.append(float(row[dict_ncol['beta']]))
+                    beta_err_hi.append(float(row[dict_ncol['beta_err_hi']]))
+                    beta_err_lo.append(float(row[dict_ncol['beta_err_lo']]))
+                    print '{v} + {eh} -{el}'.format(v=beta[irow], eh=beta_err_hi[irow], el=beta_err_lo[irow])
                 if irow==0:
                     name_data = row[dict_ncol['GRB']]
+
+            alpha = np.array(alpha)
+            alpha_err_hi = np.array(alpha_err_hi)
+            alpha_err_lo = np.array(alpha_err_lo)
+            beta = np.array(beta)
+            beta_err_hi = np.array(beta_err_hi)
+            beta_err_lo = np.array(beta_err_lo)
+
         self.name = name_data
         self.alpha = alpha
         self.alpha_err = {'err_hi':alpha_err_hi,'err_lo':alpha_err_lo}
@@ -176,15 +189,22 @@ class ClosureRelation:
             beta_indices[ip] = self.eval_beta(p)
         pointlike = True if 'Fast' in ax.get_title() and '2nd HE' in ax.get_title() else False
         self.im = ax.scatter(alpha_indices, beta_indices, c=p_indices if not pointlike else 'grey', cmap=cm.rainbow, marker='o', vmin=min(p_indices), vmax=max(p_indices), edgecolors=None, linewidths=0, s=30 if pointlike else 3, **kwargs)
-        xtext = alpha_indices[-1] if 'SSC' in self.name else alpha_indices[0]
-        ytext = 0.05
-        if 'SSC' in self.name:
-            ytext += beta_indices[-1] 
-        elif 'IC-dom' in self.name:
-            ytext += np.mean(beta_indices)
-        else:
-            ytext += (beta_indices[0]+0.1)
-        ax.text(x=xtext, y=ytext, s=self.name, fontsize=8)
+        xtext = alpha_indices[-1] -0.03 #if 'SSC' in self.name else alpha_indices[0]
+        if xtext < np.mean(alpha_indices):
+            xtext-=0.05
+        ytext = beta_indices[-1] + 0.03
+        # if 'SSC' in self.name:
+        #     ytext += beta_indices[-1] 
+        # elif 'IC-dom' in self.name:
+        #     ytext += np.mean(beta_indices)
+        # else:
+        #     ytext += (beta_indices[0]+0.1)
+        if self.name[:3]=='Syn':
+            stext = 'S' +DICT_LABEL[self.name[4:]]
+        elif self.name[:3]=='SSC':
+            stext = 'C'+DICT_LABEL[self.name[4:]]
+        ax.text(x=xtext, y=ytext, s=stext, fontsize=8)
+        #ax.text(x=xtext, y=ytext, s=self.name, fontsize=8)
         #ax.text(x=(alpha_indices[0]+np.mean(alpha_indices))/2., y=(beta_indices[0]+np.mean(beta_indices))/2., s=self.name, fontsize=8)
 
 
