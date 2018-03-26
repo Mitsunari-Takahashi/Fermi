@@ -49,23 +49,23 @@ def convert_eflux_to_vFv(eflux, spindex, eref, emin, emax):
         return eflux / (log(emax)-log(emin))
 
 
-def predict_LAT_curve(eref, erange, fluxGBM, tref, tmin, tmax, spindex):
+def predict_LAT_curve(eref, erange, fluenceGBM, tref, tmin, tmax, spindex):
     if erange=='highE':
-        n_t95 = 1.28824955169
+        prefactor = 5.07E-04
         emax = 100000.
         emin = 10000.
-        lcindex = -1.05
+        lcindex = -1.095
     elif erange=='midE':
-        n_t95 = 15.4881661891
+        prefactor = 15.4881661891
         emax = 10000.
         emin = 1000.
         lcindex = -1.315
     if erange=='lowE':
-        n_t95 = 138.03842646
+        prefactor = 138.03842646
         emax = 1000.
         emin = 100.
         lcindex = -1.305
-    return n_t95*fluxGBM * (lcindex+1.)/(pow(tmax, lcindex+1) - pow(tmin, lcindex+1))*pow(tref, lcindex) * (spindex+1.)/(pow(emax, spindex+1) - pow(emin, spindex+1))*pow(eref, spindex) * pow(eref, 2) *MEVtoERG
+    return prefactor*fluenceGBM * pow(tref/10., lcindex)
 #    return n_t95*fluxGBM*(spindex+1.)/(pow(emax, spindex+1) - pow(emin, spindex+1))*pow(eref, spindex+1) * pow(eref*MEVtoERG, 1) * pow(tref/tnorm, lcindex)
 
 
@@ -121,10 +121,10 @@ class SourceObject:
 
         #Prediction in 10-100GeV
         t_pred = [7.168, 100000]
-        vFv_pred_highE = [predict_LAT_curve(50000., 'highE', fluxGBM=4.4723e-06, tref=t, tmin=t_pred[0], tmax=t_pred[1], spindex=-2.1) for t in t_pred]
+        vFv_pred_highE = [predict_LAT_curve(10000., 'highE', fluenceGBM=4.4723e-06, tref=t, tmin=t_pred[0], tmax=t_pred[1], spindex=-2.1) for t in t_pred]
         ax.plot(t_pred, vFv_pred_highE, lw=1, c='b')
-        vFv_pred_lowE = [predict_LAT_curve(500., 'lowE', fluxGBM=4.4723e-06, tref=t, tmin=t_pred[0], tmax=t_pred[1], spindex=-2.0) for t in t_pred]
-        ax.plot(t_pred, vFv_pred_lowE, lw=1)
+        #vFv_pred_lowE = [predict_LAT_curve(500., 'lowE', fluenceGBM=4.4723e-06, tref=t, tmin=t_pred[0], tmax=t_pred[1], spindex=-2.0) for t in t_pred]
+        #ax.plot(t_pred, vFv_pred_lowE, lw=1)
         
         ax.legend(loc=0, fancybox=True, framealpha=0.5, fontsize=9) #, ncol=ngrb_plotted/10+1)
         for ff in figform:
