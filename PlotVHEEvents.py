@@ -28,11 +28,11 @@ import pickle_utilities
 import pMatplot
 import pMETandMJD
 import DownloadFermiData
-
+from pMatplot import TPL_COLOR_WO_BLACK as TPL_COLOR
 
 mpl.rcParams['text.usetex'] = True
 mpl.rcParams['text.latex.preamble'] = [r'\usepackage{amsmath}']
-plt.rcParams["font.size"] = 18
+plt.rcParams["font.size"] = 15
 NMARKER_STYLE = 10
 
 ##### VERSION OF THIS MACRO #####
@@ -50,10 +50,10 @@ lst_markers = ['s', 'o', 'D', 'x']
 
 
 ##### CalOnly photons #####
-addphoton={'090926A': {'time': (422.7,), 'energy':(50.49609375*1000.,)},
-           '150902A': {'time': (2064.52053469,), 'energy':(83.6322578125*1000.,)},
-           '160509A': {'time': (2035.85387415,5757.82151717), 'energy':(115.829539063*1000.,63.1624726562*1000.)}
-           }
+DICT_ADDPHOTON={'090926A': {'time': (422.7,), 'energy':(50.49609375*1000.,)},
+                '150902A': {'time': (2064.52053469,), 'energy':(83.6322578125*1000.,)},
+                '160509A': {'time': (2035.85387415,5757.82151717), 'energy':(115.829539063*1000.,63.1624726562*1000.)}
+                }
 
 
 class SourceObject:
@@ -86,17 +86,17 @@ class SourceObject:
         self.angsep = events[2]
 
 
-    def plot(self, ax, marker, color=None, alpha=0.75, addphoton=False):
+    def plot(self, ax, marker, color=None, alpha=1, addphoton=False):
         #nmarker = nplot / NMARKER_STYLE
-        p = ax.scatter(self.times, self.energies/1000., alpha=alpha, label=self.config['gcnname'], marker=marker, c=color)
+        p = ax.scatter(self.times, self.energies/1000., alpha=alpha, label=self.config['gcnname'], marker=marker, facecolors='none', edgecolors=color)
         #p = ax.scatter(self.times, self.energies/1000., alpha=0.75, label=self.config['gcnname'], marker=lst_markers[nmarker])
-        if addphoton==True and  self.config['gcnname'] in addphoton.keys():
+        if addphoton==True and self.config['gcnname'] in DICT_ADDPHOTON.keys():
             print 'Additional photons:'
-            t_added = np.array(addphoton[self.config['gcnname']]['time'])
-            e_added = np.array(addphoton[self.config['gcnname']]['energy'])
+            t_added = np.array(DICT_ADDPHOTON[self.config['gcnname']]['time'])
+            e_added = np.array(DICT_ADDPHOTON[self.config['gcnname']]['energy'])
             for t,e in zip(t_added, e_added):
                 print '{e:.1f} MeV at {t:.1f}'.format(t=t, e=e)
-            ax.scatter(t_added, e_added/1000., marker=lst_markers[nmarker], label='CalOnly', facecolors='none', edgecolors=p.get_facecolors())
+            ax.scatter(t_added, e_added/1000., marker=marker, label='CalOnly', facecolors=p.get_edgecolors(), edgecolors=p.get_edgecolors(), s=p.get_sizes()[0]*1.5)
 
 
 @click.command()
@@ -125,14 +125,14 @@ def main(emin, emax, tmin, tmax, roi, redshift, suffix, pathout, figform, longon
     ax.set_xlabel(r'$Time - \rm{ min( T_{0}, T_{0}+T_{05}) [s]}$')
     ax.set_ylabel(r'$Energy \rm{[GeV]}$')
 
-    fig_sep = plt.figure(figsize=(15, 4.5))
-    ax_sep = fig_sep.add_axes((0.07, 0.15, 0.9, 0.75))
-    angsep_stacked_sq = []
+    # fig_sep = plt.figure(figsize=(15, 4.5))
+    # ax_sep = fig_sep.add_axes((0.07, 0.15, 0.9, 0.75))
+    # angsep_stacked_sq = []
 
     tb_gbm = ReadGBMCatalogueInfo.open_table()
     tb_lat = ReadLATCatalogueInfo.open_table()
     lst_lat = ReadLATCatalogueInfo.read_all(tb_lat, tb_gbm)
-    lst_lat = ReadLATCatalogueInfo.select_gbm_exist(lst_lat)
+    #lst_lat = ReadLATCatalogueInfo.select_gbm_exist(lst_lat)
     if longonly==True:
         lst_lat = ReadLATCatalogueInfo.select_long(lst_lat)
     lst_lat = ReadLATCatalogueInfo.select_small_error(lst_lat, tolerr)
@@ -145,21 +145,23 @@ def main(emin, emax, tmin, tmax, roi, redshift, suffix, pathout, figform, longon
             print '{0} is skipped.'.format(name)
             continue
         #tb_one = ReadLTFCatalogueInfo.select_one_by_name(tb_lat, name)
-        trigger_met = pMETandMJD.ConvertMjdToMet(tb_one['GBM']['TRIGGER_TIME'])
-        t05 = pMETandMJD.ConvertMjdToMet(tb_one['GBM']['T90_START'])
+        trigger_met = tb_one['TRIGGER_TIME'] #pMETandMJD.ConvertMjdToMet(tb_one['GBM']['TRIGGER_TIME'])
+        if tb_one['GBM'] is not None:
+            t05 = pMETandMJD.ConvertMjdToMet(tb_one['GBM']['T90_START'])
+        else:
+            t05 = 0.
         z = 0 #tb_one['REDSHIFT']
         if redshift==False or z>0:
             src = SourceObject(name=name, met0=trigger_met, ra=tb_one['RA'], dec=tb_one['DEC'], gcnname=tb_one['GCNNAME'], tmin=tmin, tmax=tmax, emin=emin, emax=emax, deg_roi=roi, tprompt_start=t05, redshift=z if redshift==True else 0)
             path_dir_data = '/u/gl/mtakahas/work/FermiAnalysis/GRB/Regualr/HighestFluenceGRBs/LatAlone/{na}'.format(na=name)
             if not os.path.exists(path_dir_data):
                 os.mkdir(path_dir_data)
-            #DownloadFermiData.download_fermi_data_grb(name, lst_ft=[1], path_outdir=path_dir_data)
             src.get_events()
-            src.get_events_angsep()
-            angsep_stacked_sq.append(src.angsep**2)
+            #src.get_events_angsep()
+            #angsep_stacked_sq.append(src.angsep**2)
 
             if len(src.times)>0:
-                src.plot(ax, lst_markers[ngrb_plotted/NMARKER_STYLE], addphoton=addphoton)
+                src.plot(ax, lst_markers[ngrb_plotted/NMARKER_STYLE], TPL_COLOR[ngrb_plotted%len(TPL_COLOR)], addphoton=addphoton)
                 ngrb_plotted+=1
     ax.set_xlim([max(0.1,tmin), tmax])
     ax.set_ylim([emin/1000., emax/1000.])
@@ -167,13 +169,13 @@ def main(emin, emax, tmin, tmax, roi, redshift, suffix, pathout, figform, longon
     ax.grid(axis='y', which='minor',color='black',linestyle='-.', alpha=0.25)
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
     ax.yaxis.set_minor_formatter(FormatStrFormatter('%.0f'))
-    ax.legend(loc=0, fancybox=True, framealpha=0.5, fontsize=9, ncol=ngrb_plotted/7+1)
+    ax.legend(loc=2, fancybox=True, framealpha=0.5, fontsize=10, ncol=ngrb_plotted/7+1, scatterpoints=2)
 
-    ax_sep.hist(angsep_stacked_sq, histtype='barstacked', bins=1000)
+    #ax_sep.hist(angsep_stacked_sq, histtype='barstacked', bins=1000)
 
     for ff in figform:
         fig.savefig('{0}{1}{2}.{3}'.format(pathout, suffix if suffix=='' else '_'+suffix, '_redshift' if redshift==True else '', ff))
-        fig_sep.savefig('{0}_separation{1}{2}.{3}'.format(pathout, suffix if suffix=='' else '_'+suffix, '_redshift' if redshift==True else '', ff))
+        #fig_sep.savefig('{0}_separation{1}{2}.{3}'.format(pathout, suffix if suffix=='' else '_'+suffix, '_redshift' if redshift==True else '', ff))
 
 
 
