@@ -45,8 +45,13 @@ VERSION = 0.1 # 2017.12.09
 
 
 ##### Logger #####
+#logger = getLogger('__main__')
 logger = getLogger(__name__)
 handler = StreamHandler()
+loglevel = 'INFO'
+handler.setLevel(loglevel)
+logger.setLevel(loglevel)
+logger.addHandler(handler)
 
 
 ##### Conversion from MeV to erg ######
@@ -59,10 +64,10 @@ CATALOGUE_GBM = ReadGBMCatalogueInfo.open_table()
 
 def brief_grb_slots(name, emin, emax, roi, suffix, refit, force, outdir, index, normanchor, tmin=0, tmax=100000):
     tb_one = ReadLATCatalogueInfo.select_one_by_name(CATALOGUE_LAT, name, CATALOGUE_GBM)
-    lc = LightCurveGRB(name=name, wholephase='afterglow', tmin=tmin, tmax=tmax, emin=emin, emax=emax, deg_roi=roi, ngoodstat=0, rlim_goodstat=0, suffix=suffix, grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, refit=refit, force=force, outdir=None, phase='briefslots', spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2, 'Scale':emin}) #norm=1e-10, index=index, scalefactor=tb_one['GBM']['FLUENCE'])
+    lc = LightCurveGRB(name=name, wholephase='afterglow', tmin=tmin, tmax=tmax, emin=emin, emax=emax, deg_roi=roi, ngoodstat=0, rlim_goodstat=0, ntbinperdecade=5, suffix=suffix, grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, refit=refit, force=force, outdir=None, phase='briefslots', spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2, 'Scale':emin}) #norm=1e-10, index=index, scalefactor=tb_one['GBM']['FLUENCE'])
 
     lognorm_anc = 2.5-2.*np.log10(emin)
-    norms = 10**np.linspace(lognorm_anc-1., lognorm_anc+1., 101)*normanchor #-7, 0, 701)
+    norms = 10**np.linspace(lognorm_anc-3., lognorm_anc+3., 181)*normanchor #-7, 0, 701)
     lcindices = np.linspace(-0.655, -1.555, 91) #np.array([-1.0, -1.3, -1.6])
     lc.setup()
     like_results = lc.scan_parameters(norms, lcindices, tnorm=10., rescaler=tb_one['GBM']['FLUENCE'])
