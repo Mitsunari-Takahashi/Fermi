@@ -39,7 +39,7 @@ import numpy as np
 import itertools
 from collections import OrderedDict
 import math
-from math import log10, log, sqrt, ceil, isnan, pi, factorial
+from math import log10, log, sqrt, ceil, isnan, pi, factorial, cos, sin, degrees, radians
 from sympy import *
 from scipy import integrate
 from scipy.interpolate import interp2d, interp1d
@@ -136,6 +136,9 @@ class LightCurveGRB(LightCurve):
         self.counts_time = None
         self.counts_energy = None
         self.counts_angsep = None
+        self.calonly_counts_time = None
+        self.calonly_counts_energy = None
+        self.calonly_counts_angsep = None
 
 
     def setup(self):
@@ -305,15 +308,23 @@ class LightCurveGRB(LightCurve):
         tr_onevt = file_onevt.Get('EVENTS_GRB{0}'.format(self.analysis_whole.target.name))
         file_onexp = ROOT.TFile(path_onexp, "READ")
         file_bkgevt = ROOT.TFile(path_bkgevt, "READ")
-        calonly_counts_time = np.array([])
-        calonly_counts_energy = np.array([])
+        calonly_counts_time = []
+        calonly_counts_energy = []
+        calonly_counts_angsep = []
+        for evt in tr_onevt:
+            if evt.FLAG_PSF68 and evt.EVENT_CLASS>=4096 and evt.ZENITH_ANGLE<self.config['zenith']['max']:
+                calonly_counts_time.append(evt.TIME_GRB)
+                calonly_counts_energy.append(10**evt.ENERGY)
+                calonly_counts_angsep.append(evt.ANG_SEP)
+        self.calonly_counts_time = np.array(calonly_counts_time)
+        self.calonly_counts_energy = np.array(calonly_counts_energy)
+        self.calonly_counts_angsep = np.array(calonly_counts_angsep)
+
         for iana, ana in enumerate(self.analyses):
             dir_bkgevt = file_bkgevt.Get('TimeBin{0}'.format(iana))
             ana.calonly = pLATLikelihoodConfig.CalOnlyData(tr_onevt=tr_onevt, htg_onexp=file_onexp.Get('htgExp_{0}_projYX'.format(iana)), htg_bkgevt=dir_bkgevt.Get('htgExBKG_CalOnly_{rcla}_PSF68_projE'.format(rcla=rclass)), on_energy=(ana.emin, ana.emax), on_time=(ana.target.met0+ana.tmin, ana.target.met0+ana.tmax), on_classes=pLATLikelihoodConfig.DICT_EVCLASSES_BIT_CALONLY[rclass], on_zenith=(0., ana.zmax), on_theta=(0., ana.thetamax))
-            calonly_counts_time = np.hstack((calonly_counts_time, ana.calonly.onevt_unbinned['time']))
-            calonly_counts_energy = np.hstack((calonly_counts_time, ana.calonly.onevt_unbinned['energy']))
-        self.calonly_counts_time = calonly_counts_time
-        self.calonly_counts_energy = calonly_counts_energy
+        #     calonly_counts_time = np.hstack((calonly_counts_time, ana.calonly.onevt_unbinned['time']))
+        #     calonly_counts_energy = np.hstack((calonly_counts_time, ana.calonly.onevt_unbinned['energy']))
 
 
     def count_energy(self, rlim=6.0):
@@ -462,7 +473,7 @@ class LightCurveGRB(LightCurve):
 
 
     def pickle(self, stuff=None):
-        self.dct_stored = {'config':self.config, 'results':self.summary_results, 'counts':{'time':self.counts_time, 'energy':self.counts_energy, 'angsep':self.counts_angsep}} if stuff is None else stuff
+        self.dct_stored = {'config':self.config, 'results':self.summary_results, 'counts':{'time':self.counts_time, 'energy':self.counts_energy, 'angsep':self.counts_angsep}, 'counts_CalOnly':{'time':self.calonly_counts_time, 'energy':self.calonly_counts_energy, 'angsep':self.calonly_counts_angsep}} if stuff is None else stuff
         #path_pickle = '{base}/{target}/{energy}/{roi}/{phase}/LightCurve_{target}_{spectype}_{index}{suffix}.pickle'.format(base=self.analysis_whole.dir_base, target=self.analysis_whole.target.name, energy=self.analysis_whole.str_energy, roi=self.analysis_whole.str_roi, phase='lightcurve', spectype=self.analysis_whole.target.spectraltype, index=self.analysis_whole.str_index, suffix=self.analysis_whole.suffix)
         path_pickle = '{0}/{1}.pickle'.format(self.outdir, self.outbasename)
         #logger.info("""Object contents: 
@@ -580,11 +591,33 @@ def scan_norm_beta_alpha(dict_summary, torigin, outdir=None, suffix='', norms=No
         dloglike_beta_norm[jb,ino] = np.nanmin(dll_local)
     dloglike_beta_norm = np.ma.masked_invalid(dloglike_beta_norm)
 
-    #fig, ax = plt.subplots(2, 2, sharex=False, sharey=False, figsize=(12, 10))
+    # Plot for only result
+    fig_result = plt.figure(figsize=(5, 5))
+    ax_result = fig_result.add_axes((0.15, 0.1, 0.8, 0.8))
+    cont_levels_NDF3 = sorted(TABLE_DLOGLIKE_SIGNIFICANCE[2].as_void())
+    cont_alpha_beta = ax_result.contour(-alpha_mesh[:,:,0], -1.-beta_mesh[:,:,0], dloglike_alpha_beta*2., levels=cont_levels_NDF3, colors='k', linestyles=pMatplot.TPL_LINE)
+    if mwlindices is not None:
+        mwlobs = PlotGRBClosureRelations.ObservedIndices()
+        mwlobs.read(mwlindices, instruments=['XRT'])
+        mwlobs.draw(ax_result)
+    ax_result.set_title(dict_summary['config']['name'])
+    ax_result.set_xlabel(r'Temporal index $\alpha$')
+    ax_result.set_ylabel(r'Spectral index $\beta$')
+    ax_result.set_xlim((0, 2.5))
+    ax_result.set_ylim((-0.5, 1.5))
+    ax_result.grid()
+    for ff in ('png','pdf'):
+        path_save = "{dire}/scanned3D_result_{targ}{suff}.{form}".format(dire=outdir, targ=dict_summary['config']['name'], suff=suffix, form=ff)
+        fig_result.savefig(path_save)
+        logger.info('{0} has been saved.'.format(path_save))
+    fig_result.clf()
+
+
+    # Plot for comparison with closure relations
     fig = plt.figure(figsize=(12, 12))
-    ax = [[fig.add_axes((0.05, 0.6, 0.4, 0.35)),
+    ax = [[fig.add_axes((0.075, 0.6, 0.4, 0.35)),
           fig.add_axes((0.55, 0.6, 0.4, 0.35))],
-          [fig.add_axes((0.05, 0.15, 0.4, 0.35)),
+          [fig.add_axes((0.075, 0.15, 0.4, 0.35)),
           fig.add_axes((0.55, 0.15, 0.4, 0.35))]]
     cbaxes = fig.add_axes([0.1, 0.05, 0.8, 0.02]) 
     print 'alpha:', alpha_mesh[:,:,0].shape
@@ -594,7 +627,6 @@ def scan_norm_beta_alpha(dict_summary, torigin, outdir=None, suffix='', norms=No
     print 'd-loglike:', dloglike_alpha_beta.shape
     print dloglike_alpha_beta
 
-    cont_levels_NDF3 = sorted(TABLE_DLOGLIKE_SIGNIFICANCE[2].as_void())
     # closure_relations = {'Synchrotron':PlotGRBClosureRelations.ClosureRelation(alpha=PlotGRBClosureRelations.DICT_ALPHA['Synchrotron']['ISM']['Slow']['Highest-E'], beta=PlotGRBClosureRelations.DICT_BETA['Synchrotron']['ISM']['Slow']['Highest-E'], name='Synchrotron Highest-E'),
     #                      'SSC':PlotGRBClosureRelations.ClosureRelation(alpha=PlotGRBClosureRelations.DICT_ALPHA['SSC']['ISM']['Slow']['2nd highest-E'], beta=PlotGRBClosureRelations.DICT_BETA['Synchrotron']['ISM']['Slow']['2nd highest-E'], name='SSC 2nd highest-E')}
     # for clrel in closure_relations.values():
@@ -609,16 +641,21 @@ def scan_norm_beta_alpha(dict_summary, torigin, outdir=None, suffix='', norms=No
                     if eseg in ('1st HE', '2nd HE', '1st HE (IC-dom)'):
                         str_name = """{em}
 {eseg}""".format(em=em[:3], eseg=eseg)
-                        clrel = PlotGRBClosureRelations.ClosureRelation(alpha=formula, beta=PlotGRBClosureRelations.DICT_BETA[em][cb][coo][eseg], name=str_name)
+                        clrel = PlotGRBClosureRelations.ClosureRelation(alpha=formula, beta=PlotGRBClosureRelations.DICT_BETA[em][cb][coo][eseg], emission=em, cbmprof=cb, cooling=coo, esegment=eseg, name=str_name)
                         clrel.draw(ax[iax][jax])
-                        if flag_cbar==False and (coo!='Fast' or eseg!='2nd highest-E'):
+                        if em is 'Synchrotron' and coo is 'Fast' and eseg in ('1st HE', '2nd HE'):
+                            str_name = """{em}
+{eseg}""".format(em=em[:3], eseg=eseg)
+                            clrel = PlotGRBClosureRelations.ClosureRelation(alpha=PlotGRBClosureRelations.DICT_ALPHA[em][cb]['Radiative'][eseg], beta=PlotGRBClosureRelations.DICT_BETA[em][cb]['Radiative'][eseg], emission=em, cbmprof=cb, cooling='Radiative', esegment=eseg, name=str_name)
+                            clrel.draw(ax[iax][jax])
+                        if flag_cbar==False and (coo!='Fast' and eseg!='2nd HE'):
                             cbar = plt.colorbar(clrel.im, cax = cbaxes, orientation="horizontal")
                             cbar.set_label('p of the electrons')
                             #cbar = fig.colorbar(clrel.im)
                             #cbar.set_label('p of the electrons')
                             flag_cbar = True
             cont_alpha_beta = ax[iax][jax].contour(-alpha_mesh[:,:,0], -1.-beta_mesh[:,:,0], dloglike_alpha_beta*2., levels=cont_levels_NDF3, colors='k', linestyles=pMatplot.TPL_LINE)
-            if mwlindices is not None and coo is 'Slow':
+            if mwlindices is not None: #and coo is 'Slow':
                 mwlobs = PlotGRBClosureRelations.ObservedIndices()
                 mwlobs.read(mwlindices, instruments=['XRT'])
                 mwlobs.draw(ax[iax][jax])
@@ -629,24 +666,6 @@ def scan_norm_beta_alpha(dict_summary, torigin, outdir=None, suffix='', norms=No
             ax[iax][jax].set_ylim((-0.5, 1.75))
             ax[iax][jax].grid()
 
-    #cbaxes = fig.add_axes([0.01, 0.1, 0.01, 0.8]) 
-    #cbar = plt.colorbar(closure_relations.values()[0].im, cax = cbaxes)
-    #cbar = fig.colorbar(closure_relations.values()[0].im)
-    #ax.legend(loc=0)
-
-    # cont_norm_alpha = ax[1].contour(-alpha_mesh[0,:,:], norm_mesh[0,:,:], dloglike_norm_alpha*2., levels=cont_levels_NDF3, colors='k')
-    # ax[1].set_yscale('log')
-    # ax[1].set_xlabel('Temporal index')
-    # ax[1].set_ylabel('Normalization [a.u.]')
-    # ax[1].grid()
-
-    # cont_beta_norm = ax[2].contour(-1.-beta_mesh[:,0,:], norm_mesh[:,0,:], dloglike_beta_norm*2., levels=cont_levels_NDF3, colors='k')
-    # ax[2].set_yscale('log')
-    # ax[2].set_xlabel('Spectral index')
-    # ax[2].set_ylabel('Normalization [a.u.]')
-    # ax[2].grid()
-
-    #fig.tight_layout()
     for ff in ('png','pdf'):
         path_save = "{dire}/scanned3D_{targ}{suff}.{form}".format(dire=outdir, targ=dict_summary['config']['name'], suff=suffix, form=ff)
         fig.savefig(path_save)
@@ -709,6 +728,8 @@ def make_lightcurves(name, wholephase, emin, emax, eref, roi, ngoodstat, rgoodst
         logger.info('CalOnly data:')
         logger.info(calonly)
         lc.add_calonly(calonly)
+    else:
+        logger.warning('No CalOnly data.')
     lc.count_energy()
     lc.run_analysis(use_calonly=True if calonly!=tuple([None]*4) else False)
     lc.pickle()
@@ -803,8 +824,8 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free', g
         t_triggered = 400282876.000
     else:
         t_triggered = pMETandMJD.ConvertMjdToMet(float(tb_one['GBM']['TRIGGER_TIME']))
-    #dct_summary = scan_norm_beta_alpha(dict_summary=dct_summary, torigin=t_triggered, outdir=outdir, norms=gbm_fluence*(10**np.linspace(-3, 2, 51)), betas=np.linspace(-2.75, -0.5, 126), alphas=np.linspace(-2.5, 0.0, 151), tnorm=100., tmin=tmin, tmax=tmax, suffix=str(dct_summary['config']['suffix']), mwlindices=mwlindices)
-    dct_summary = scan_norm_beta_alpha(dict_summary=dct_summary, torigin=t_triggered, outdir=outdir, norms=gbm_fluence*(10**np.linspace(-3, 2, 51)), betas=np.linspace(-2.5, -1.25, 126), alphas=np.linspace(-2.0, -1.0, 151), tnorm=100., tmin=tmin, tmax=tmax, suffix=str(dct_summary['config']['suffix']), mwlindices=mwlindices)
+    dct_summary = scan_norm_beta_alpha(dict_summary=dct_summary, torigin=t_triggered, outdir=outdir, norms=gbm_fluence*(10**np.linspace(-3, 2, 51)), betas=np.linspace(-2.75, -0.5, 63), alphas=np.linspace(-2.5, 0.0, 76), tnorm=100., tmin=tmin, tmax=tmax, suffix=str(dct_summary['config']['suffix']), mwlindices=mwlindices) #GRB 160509374
+    #dct_summary = scan_norm_beta_alpha(dict_summary=dct_summary, torigin=t_triggered, outdir=outdir, norms=gbm_fluence*(10**np.linspace(-3, 2, 51)), betas=np.linspace(-2.5, -1.25, 63), alphas=np.linspace(-2.0, -1.0, 76), tnorm=100., tmin=tmin, tmax=tmax, suffix=str(dct_summary['config']['suffix']), mwlindices=mwlindices) #GRB 090926181
     bowtie_times, bowtie_curves = dct_summary['scan3D']['bowtie'][0], dct_summary['scan3D']['bowtie'][1]
 
     #print path_dct_summary
@@ -981,17 +1002,14 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free', g
         ax[iax].set_yticks([y for y in ax[iax].get_yticks() if y<ax[iax].get_ylim()[1]-0.1])
 
     iax+=1
-    ax[iax].scatter(dct_summary['counts']['time'], dct_summary['counts']['energy'], alpha=0.5, c=np.clip(1./dct_summary['counts']['angsep'], 0.0, 1.0), cmap=cm.Purples)
-    if addphoton is not None:
-        logger.info('Additional photons:')
-        t_added = np.array(addphoton['time'])
-        e_added = np.array(addphoton['energy'])
-        for t,e in zip(t_added, e_added):
-            logger.info('{e:.1f} MeV at {t:.1f}'.format(t=t, e=e))
-        ax[iax].scatter(t_added, e_added, marker='D', c='r', edgecolors='face')#, s=np.log10(e_added))
+    im_angsep = ax[iax].scatter(dct_summary['counts']['time'], dct_summary['counts']['energy'], alpha=0.5, c=np.clip(dct_summary['counts']['angsep'], 0.0, 6.0), cmap=cm.Greens_r, vmin=0, vmax=6)
+    if 'counts_CalOnly' in dct_summary:
+        if 'time' in dct_summary['counts_CalOnly'] and 'energy' in dct_summary['counts_CalOnly'] and 'angsep' in dct_summary['counts_CalOnly']:
+            if isinstance(dct_summary['counts_CalOnly']['time'], np.ndarray) and isinstance(dct_summary['counts_CalOnly']['energy'], np.ndarray) and isinstance(dct_summary['counts_CalOnly']['angsep'], np.ndarray):
+                if len(dct_summary['counts_CalOnly']['time'])*len(dct_summary['counts_CalOnly']['energy'])*len(dct_summary['counts_CalOnly']['angsep'])>0:
+                    ax[iax].scatter(dct_summary['counts_CalOnly']['time'], dct_summary['counts_CalOnly']['energy'], alpha=0.5, c=np.clip(dct_summary['counts_CalOnly']['angsep'], 0.0, 6.0), cmap=cm.Greens_r, marker='D', s=40, vmin=0, vmax=6, edgecolors='red', linewidth=1)
     ax[iax].set_xlabel('Time - T0 [s]')
     ax[iax].set_ylabel('Energy [MeV]')
-    #ax[iax].set_xscale("log", nonposx='clip')
     if len(dct_summary['counts']['time'])>0 or addphoton is not None:
         ax[iax].set_yscale("log", nonposx='clip')
     ax[iax].grid(ls='-', lw=0.5, alpha=0.5)
@@ -1001,12 +1019,15 @@ def plot_lightcurves(dct_summary, outdir=None, ts_threshold=4.0, index='free', g
         ax_intrinsic_energy = ax[iax].twinx()
         ax_intrinsic_energy.set_yscale("log", nonposx='clip')
         ax_intrinsic_energy.set_ylim(np.array(ax[iax].get_ylim()) * (1.+redshift))
-        ax_intrinsic_energy.set_ylabel('Energy (1+{0}) [MeV]'.format(redshift), color='g')
-        ax_intrinsic_energy.grid(ls='-', lw=0.5, alpha=0.5, axis='y', c='g')
-        ax_intrinsic_energy.tick_params(axis='y', colors='g')
+        ax_intrinsic_energy.set_ylabel('Energy * (1+{0:1.2f}) [MeV]'.format(redshift), color='magenta')
+        ax_intrinsic_energy.grid(ls='-', lw=0.5, alpha=0.5, axis='y', c='magenta')
+        ax_intrinsic_energy.tick_params(axis='y', colors='magenta')
         # ax_intrinsic_time = ax[0].twiny()
         # ax_intrinsic_time.set_yscale("log", nonposx='clip')
         # ax_intrinsic_time.set_xlim(np.array(ax[0].get_xlim()) / (1.+redshift))        
+    ax_cbar_angsep = fig.add_axes([0.1, 1./(1.+iax), 0.18, 0.02]) 
+    cbar_angsep = plt.colorbar(im_angsep, cax=ax_cbar_angsep, orientation="horizontal", ticks=[6.0, 4.0, 2.0, 0.0])
+    cbar_angsep.set_label('Angular separation [deg]')
 
     fig.tight_layout() #subplots_adjust(hspace=0)
     fig.subplots_adjust(hspace=0)
@@ -1093,7 +1114,7 @@ def main(namemin, namemax, mode, emin, emax, eref, tmin, tmax, roi, ngoodstat, r
             print '##### No.{0} GRB{1} #####'.format(irow, name)
             if not os.path.exists(name):
                 os.mkdir(name)
-            acmd = ['bsub', '-o','{0}/GRB{0}_lightcurve{1}.log'.format(name, suffix if suffix=='' else '_'+suffix), '-J','lc{0}'.format(name[:-3]), '-W','600', 'python', '/u/gl/mtakahas/work/PythonModuleMine/Fermi/STLikelihoodAnalysis/LightCurve.py', '--mode', mode, '--emin', str(emin), '--emax', str(emax), '--eref', str(eref), '--tmin', str(tmin), '--tmax', str(tmax), '-s', suffix, '--index', 'free', '--redshift', str(redshift), '--roi', str(roi), '--ngoodstat', str(ngoodstat), '--rgoodstat', str(rgoodstat), '--ntbinperdecade', str(ntbinperdecade), '--grbcatalogue', grbcatalogue, '--namemin', name, '--outdir', outdir]
+            acmd = ['bsub', '-o','{0}/GRB{0}_lightcurve{1}.log'.format(name, suffix if suffix=='' else '_'+suffix), '-J','lc{0}'.format(name[:-3]), '-W','1200', 'python', '/u/gl/mtakahas/work/PythonModuleMine/Fermi/STLikelihoodAnalysis/LightCurve.py', '--mode', mode, '--emin', str(emin), '--emax', str(emax), '--eref', str(eref), '--tmin', str(tmin), '--tmax', str(tmax), '-s', suffix, '--index', 'free', '--redshift', str(redshift), '--roi', str(roi), '--ngoodstat', str(ngoodstat), '--rgoodstat', str(rgoodstat), '--ntbinperdecade', str(ntbinperdecade), '--grbcatalogue', grbcatalogue, '--namemin', name, '--outdir', outdir]
             if force==True:
                 acmd.append('--force')
             if refit==True:
@@ -1116,12 +1137,12 @@ def main(namemin, namemax, mode, emin, emax, eref, tmin, tmax, roi, ngoodstat, r
 
         # CalOnly photons
         addphoton = None
-        if namemin=='090926181':
-            addphoton={'time': (422.7,), 'energy':(50.49609375*1000.,)}
-        elif namemin=='150902733':
-            addphoton={'time': (2064.52053469,), 'energy':(83.6322578125*1000.,)}
-        elif namemin=='160509374':
-            addphoton={'time': (2035.85387415,5757.82151717), 'energy':(115.829539063*1000.,63.1624726562*1000.)}
+        # if namemin=='090926181':
+        #     addphoton={'time': (422.7,), 'energy':(50.49609375*1000.,)}
+        # elif namemin=='150902733':
+        #     addphoton={'time': (2064.52053469,), 'energy':(83.6322578125*1000.,)}
+        # elif namemin=='160509374':
+        #     addphoton={'time': (2035.85387415,5757.82151717), 'energy':(115.829539063*1000.,63.1624726562*1000.)}
 
         if plotonly==None:
             make_lightcurves(name=namemin, wholephase=mode, emin=emin, emax=emax, eref=eref, tmin=tmin, tmax=tmax, roi=roi, ngoodstat=ngoodstat, rgoodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=outdir, index=index, redshift=redshift, addphoton=addphoton, calonly=calonly)#, tmin=tb_lat['LAT_TRIGGER_TIME']-tb_lat['TRIGGER_TIME'])
