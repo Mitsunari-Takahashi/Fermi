@@ -67,23 +67,23 @@ Input a dictionary returned by likelihood_grb_analysis_three_energies.
             if seds['energies'][item_shown] is not None:
                 lim_markers = [ True if ie%3==0 and item_shown=='2sigma' else False for ie in range(len(seds['energies'][item_shown])) ]
                 if erange in ('whole_energies'):
-                    ax.fill_between(seds['energies'][item_shown], seds['curve_lo'][item_shown]*MEVtoERG, seds['curve_hi'][item_shown]*MEVtoERG, alpha=0.8 if item_shown is '1sigma' else 0.2, label=item_shown, facecolor='b' if item_shown=='1sigma' else 'c')
+                    ax.fill_between(seds['energies'][item_shown], seds['curve_lo'][item_shown]*MEVtoERG, seds['curve_hi'][item_shown]*MEVtoERG, alpha=0.8 if item_shown is '1sigma' else 0.3, label=item_shown, facecolor='lime' if item_shown=='1sigma' else 'lightsage')
                 else:
                     #ax.errorbar(seds['energies'][item_shown], seds['curve_lo'][item_shown]*MEVtoERG, xerr=0, yerr=[[0]*len(lim_markers), seds['curve_lo'][item_shown]*MEVtoERG*lim_markers], lolims=lim_markers, uplims=False, ls='-', fmt='', c='k', lw=1, marker='None')
-                    ax.plot(seds['energies'][item_shown], seds['curve_lo'][item_shown]*MEVtoERG, '-^', c='k', lw=1, markevery=3, alpha=1.0 if item_shown=='1sigma' else 0.5)
+                    ax.plot(seds['energies'][item_shown], seds['curve_lo'][item_shown]*MEVtoERG, '-^', c='k' if item_shown=='1sigma' else 'darkred', lw=1, markevery=3, alpha=1.0)
                     if not item_shown in flags_label:
                         #ax.errorbar(seds['energies'][item_shown], seds['curve_hi'][item_shown]*MEVtoERG, xerr=0, yerr=[seds['curve_hi'][item_shown]*MEVtoERG*lim_markers*0.5,[0]*len(lim_markers)],uplims=lim_markers, lolims=False, ls='-', fmt='', label=item_shown, c='k', lw=1, marker='None')
-                        ax.plot(seds['energies'][item_shown], seds['curve_hi'][item_shown]*MEVtoERG, '-v', c='k', lw=1, label=item_shown, markevery=3, alpha=1.0 if item_shown=='1sigma' else 0.5)
+                        ax.plot(seds['energies'][item_shown], seds['curve_hi'][item_shown]*MEVtoERG, '-v', c='k' if item_shown=='1sigma' else 'darkred', lw=1, label=item_shown, markevery=3, alpha=1.0)
                         flags_label.append(item_shown)
                     else:
                         #ax.errorbar(seds['energies'][item_shown], seds['curve_hi'][item_shown]*MEVtoERG, xerr=0, yerr=[seds['curve_hi'][item_shown]*MEVtoERG*lim_markers*0.5,[0]*len(lim_markers)],uplims=lim_markers, lolims=False, ls='-', fmt=',', c='k', lw=1, marker='None')
-                        ax.plot(seds['energies'][item_shown], seds['curve_hi'][item_shown]*MEVtoERG, '-v', c='k', lw=1, markevery=3, alpha=1.0 if item_shown=='1sigma' else 0.5)
+                        ax.plot(seds['energies'][item_shown], seds['curve_hi'][item_shown]*MEVtoERG, '-v', c='k' if item_shown=='1sigma' else 'darkred', lw=1, markevery=3, alpha=1.0)
         ax.set_xscale('log')
         ax.set_yscale('log')
         ax.set_ylim((1E-15, 1E-7))
         ax.set_xlabel('Energy [MeV]')
         ax.set_ylabel(r'$\nu F_{\nu} \ \rm{[erg/cm^2 \cdot s]}$')
-        ax.grid()
+        ax.grid(color='k', linestyle='--', linewidth=1, alpha=0.5)
         ax.legend(loc=0, fontsize=12, fancybox=True, framealpha=0.5)
 
     for ff in ('pdf', 'png'):
@@ -117,7 +117,7 @@ Input a dictionary returned by likelihood_grb_analysis_three_energies.
 @click.option('--loglevel', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'CRITICAL']), default='INFO')
 def main(namemin, namemax, mode, roi, spectraltype, emax, refit, force, suffix, grbcatalogue, modelonly, sptmin, sptmax, redshift, calonly, outdir, binned, plotonly, masifps, quanta, bsub, loglevel):
     if mode=='special':
-        suffix  = 'T{0:0>6.0f}-{1:0>6.0f}ks{2}'.format(sptmin, sptmax, suffix if suffix is '' or suffix[0]=='_' else '_'+suffix)
+        suffix  = 'T{0:0>6.0f}-{1:0>6.0f}s{2}'.format(sptmin, sptmax, suffix if suffix is '' or suffix[0]=='_' else '_'+suffix)
     ##### Logger ######
     handler.setLevel(loglevel)
     logger.setLevel(loglevel)
@@ -165,6 +165,10 @@ def main(namemin, namemax, mode, roi, spectraltype, emax, refit, force, suffix, 
                 acmd.append('--masifps')
             if binned==True:
                 acmd.append('--binned')
+            if calonly != tuple([None]*5):
+                acmd.append('--calonly')
+                for i in range(5):
+                    acmd.append(str(calonly[i]))
             if plotonly is not None:
                 acmd.append('--plotonly {0}'.format(plotonly))
             print acmd
