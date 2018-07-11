@@ -24,6 +24,7 @@ import FluxDensity
 from LikelihoodState import LikelihoodState
 import SummedLikelihood
 from astropy.io import fits
+from astropy.table import Table, Column
 from fermipy.utils import get_parameter_limits
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -42,6 +43,7 @@ import ReadGBMCatalogueInfo
 from STLikelihoodAnalysis import get_module_logger
 import GetGTI
 from pCommon import MEVtoERG
+import pMatplot
 
 
 ##### Logger #####
@@ -55,8 +57,11 @@ plt.rcParams["font.size"] = 15
 
 
 ##### d-loglike value for certain signicicance cuts #####
-
-
+# Significance(sigma): [ Doubled d-loglike for NDF=1,2,3 ]
+TABLE_DLOGLIKE_SIGNIFICANCE = Table({'1.0': [1.00, 2.30, 3.53],
+                                     '2.0': [4.00, 6.18, 8.03],
+                                     '3.0': [9.00, 11.83, 14.16]
+                                     })
 
 ##### PATH of Catalogue #####
 GRB_CATALOGUE_LTF = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LAT2CATALOG-v1-LTF.fits'
@@ -262,10 +267,10 @@ class AnalysisConfig:
         self.retcode = None
 
         # GTI
-        self.gti_filter = '(DATA_QUAL==1)&&(LAT_CONFIG==1)&&(ANGSEP(RA_ZENITH,DEC_ZENITH,{ra},{dec}) + {rad} < {zen})'.format(ra=self.target.ra, dec=self.target.dec, rad=12., zen=self.zmax)
-        #self.gti_filter = ' (DATA_QUAL==1)&&(LAT_CONFIG==1)' #'(DATA_QUAL>0)&&(LAT_CONFIG==1)'
+        #self.gti_filter = '(DATA_QUAL==1)&&(LAT_CONFIG==1)&&(ANGSEP(RA_ZENITH,DEC_ZENITH,{ra},{dec}) + {rad} < {zen})'.format(ra=self.target.ra, dec=self.target.dec, rad=12., zen=self.zmax)
+        self.gti_filter = ' (DATA_QUAL==1)&&(LAT_CONFIG==1)'
         self.gti_external = gti_external
-        self.roicut = True #False
+        self.roicut = False #True
 
         # CCube
         self.binsz = 0.2
@@ -396,6 +401,7 @@ class AnalysisConfig:
         my_apps.maketime.run()
         logger.info("""Making GTI finished.
 """)
+        self.dct_summary_results['data_path'] = self.path_filtered_gti
         self.nevt_rough = get_entries_roi(self.path_filtered_gti, self.tmin, self.tmax, self.roi_checked, self.target.ra, self.target.dec, self.target.met0)
         if self.nevt_rough>0:
             logger.info('{0} events within {1} deg.'.format(self.nevt_rough, self.roi_checked))
@@ -1147,18 +1153,18 @@ class AnalysisConfig:
         if norm_error>0:
             logx_lowest = -3.0
             logx_highest = max(2.0, 4.*np.log10(norm_error/norm_value))
-            nx = min(500, ndivperdec * (logx_highest-logx_lowest))
+            nx = min(300, ndivperdec * (logx_highest-logx_lowest))
             xvals = norm_value * 10 ** np.linspace(logx_lowest, logx_highest, nx)
         else:
             logx_lowest = -8.0
             logx_highest = -2.0
-            nx = min(500, ndivperdec * (logx_highest-logx_lowest))
+            nx = min(400, ndivperdec * (logx_highest-logx_lowest))
             xvals = 10 ** np.linspace(logx_lowest, logx_highest, nx)
 
         if np.inf in xvals:
             logger.warning('Infinite profile normalization value exists!!')
-            logx_lowest = -8.0
-            logx_highest = -2.0
+            logx_lowest = -7.0
+            logx_highest = -3.0
             nx = min(1000, ndivperdec * (logx_highest-logx_lowest))
             xvals = 10 ** np.linspace(logx_lowest, logx_highest, nx)
         # if norm_value<min(xvals):
@@ -1174,14 +1180,18 @@ class AnalysisConfig:
         return xvals
 
 
-    def map_index_range(self, ndiv=250, index_range=(-5., 3.)):
+    def map_index_range(self, ndivperuni=40, index_range=(-5., 2.)):
         # Index parameter
-        index_name = 'Index'
-        index_idx = self.like.par_index(self.target.name, index_name)
-        index_value = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).value()
-        index_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).error()
+        # index_name = 'Index'
+        # index_idx = self.like.par_index(self.target.name, index_name)
+        # index_value = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).value()
+        # index_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(index_name).error()
         #xvals = np.linspace(index_value-3.*index_error, index_value+3.*index_error, ndiv+1)
-        xvals = np.linspace(index_range[0], index_range[1], ndiv+1)
+
+        xvals_mid = np.linspace(-3, 0, 3.*ndivperuni*2.+1)
+        xvals_soft = np.linspace(index_range[0], -3., (-3.-index_range[0])*ndivperuni+1)
+        xvals_hard = np.linspace(0., index_range[1], (index_range[1]-0.)*ndivperuni+1)
+        xvals = np.hstack((xvals_soft, xvals_mid[1:-1], xvals_hard)) #np.linspace(index_range[0], index_range[1], ndiv+1)
         return xvals
 
 
@@ -1205,6 +1215,7 @@ class AnalysisConfig:
         indices_mesh, norms_mesh = np.meshgrid(indices, norms)
         loglikes = np.zeros_like(indices_mesh)
         efluxes = np.zeros_like(indices_mesh)
+        fluxes = np.zeros_like(indices_mesh)
         efluences = np.zeros_like(indices_mesh)
         e2dnde = np.zeros_like(indices_mesh)
         npreds_caltkr = np.zeros_like(indices_mesh)
@@ -1245,6 +1256,7 @@ class AnalysisConfig:
                 loglikes_without_calonly[inorm][jindex] = loglikes[inorm][jindex]
                 loglikes_calonly[inorm][jindex] = -self.like_calonly()
                 loglikes[inorm][jindex] += loglikes_calonly[inorm][jindex]
+            fluxes[inorm][jindex] = self.like.flux(self.target.name, self.emin_eval, self.emax_eval)
             efluxes[inorm][jindex] = self.like.energyFlux(self.target.name, self.emin_eval, self.emax_eval)
             efluences[inorm][jindex] = efluxes[inorm][jindex] * self.duration
             if self.target.spectraltype[-8:]=='PowerLaw':
@@ -1287,6 +1299,7 @@ class AnalysisConfig:
             self.dct_summary_results['dloglike']['loglike_without_calonly'] = loglikes_without_calonly
             self.dct_summary_results['dloglike']['dloglike_calonly'] = dloglike_calonly
             self.dct_summary_results['dloglike']['dloglike_without_calonly'] = dloglike_without_calonly
+        self.dct_summary_results['dloglike']['flux'] = fluxes
         self.dct_summary_results['dloglike']['eflux'] = efluxes
         self.dct_summary_results['dloglike']['efluence'] = efluences
         self.dct_summary_results['dloglike']['e2dnde'] = e2dnde
@@ -1299,7 +1312,7 @@ class AnalysisConfig:
         self.dct_summary_results['dloglike']['best']['Index'] = indices[args_bestlike[1]]
         logger.info('Index (best likelihood): {0}'.format(self.dct_summary_results['dloglike']['best']['Index']))
         for k,v in self.dct_summary_results['dloglike'].items():
-            if k in ('loglike', 'dloglike', 'eflux', 'efluence', 'e2dnde'):
+            if k in ('loglike', 'dloglike', 'flux', 'eflux', 'efluence', 'e2dnde'):
                 self.dct_summary_results['dloglike']['best'][k] = v.flatten()[arg_bestlike]
         self.dct_summary_results['dloglike']['TS'] =2. * (self.dct_summary_results['dloglike']['loglike'][0,0] - self.dct_summary_results['dloglike']['best']['loglike'])
         logger.info('TS of {0}: {1}'.format(self.target.name, self.dct_summary_results['dloglike']['TS']))
@@ -1381,6 +1394,7 @@ class AnalysisConfig:
             path_save = "{0}/{1}_sed_bowtie_{2}{3}.{4}".format(self.dir_work, name, self.target.name, self.suffix, ff)
             fig.savefig(path_save)
             logger.info('{0} has been saved.'.format(path_save))
+        fig.clf()
 
 
     def plot_spectrum_scanned2D(self, name, norms_mesh, e2dnde, efluences, indices_mesh, zvalues, cont_levels, shown_map, eref):
@@ -1394,41 +1408,41 @@ class AnalysisConfig:
         efluences_max = np.amax(efluences[1:,:][shown_map[1:,:]])
 
         fig, ax = plt.subplots(1, 3, sharex=False, sharey=False, figsize=(15, 5))
-        cont = ax[0].contour(indices_mesh, norms_mesh, zvalues, levels=cont_levels) #, colors='black')
-        try:
-            cont.clabel(fmt='%1.1E', fontsize=10)
-        except ValueError:
-            logger.error('Drawing normalization label failed because of ValueError!')
+        cont = ax[0].contour(indices_mesh, norms_mesh, zvalues, levels=cont_levels, colors='k', linestyles=pMatplot.TPL_LINE) #, colors='black')
+        # try:
+        #     cont.clabel(fmt='%1.1E', fontsize=10)
+        # except ValueError:
+        #     logger.error('Drawing normalization label failed because of ValueError!')
         ax[0].set_xlim((indices_min, indices_max)) #(np.amin(indices_mesh + sys.maxint*unshown_map), np.amax(indices_mesh - sys.maxint*unshown_map)))
         ax[0].set_ylim((norms_min, norms_max)) #(np.amin(norms_mesh + sys.maxint*unshown_map), np.amax(norms_mesh - sys.maxint*unshown_map)))
         ax[0].set_yscale('log')
         ax[0].set_xlabel('Spectral index')
         ax[0].set_ylabel('Normalization factor [a.u.]')
         ax[0].grid()
-        fig.tight_layout() 
 
-        print 'E^2dN/dE'
-        print e2dnde[1:,:].flatten()[shown_map[1:,:].flatten()] #e2dnde*MEVtoERG
-        print 'Min:', e2dnde_min, e2dnde_min*MEVtoERG
-        print 'Max:', e2dnde_max, e2dnde_max*MEVtoERG
-        cont_eflux = ax[1].contour(indices_mesh, e2dnde*MEVtoERG, zvalues, levels=cont_levels)
-        try:
-            cont_eflux.clabel(fmt='%1.1E', fontsize=10)
-        except ValueError:
-            logger.error('Drawing eflux label failed because of ValueError!')
+        #print 'E^2dN/dE'
+        #print e2dnde[1:,:].flatten()[shown_map[1:,:].flatten()] #e2dnde*MEVtoERG
+        #print 'Min:', e2dnde_min, e2dnde_min*MEVtoERG
+        #print 'Max:', e2dnde_max, e2dnde_max*MEVtoERG
+        cont_eflux = ax[1].contour(indices_mesh, e2dnde*MEVtoERG, zvalues, levels=cont_levels, colors='k', linestyles=pMatplot.TPL_LINE)
+        # try:
+        #     cont_eflux.clabel(fmt='%1.1E', fontsize=10)
+        # except ValueError:
+        #     logger.error('Drawing eflux label failed because of ValueError!')
+
         ax[1].set_xlim((indices_min, indices_max)) #(np.amin(indices_mesh + sys.maxint*unshown_map), np.amax(indices_mesh - sys.maxint*unshown_map)))
         ax[1].set_ylim((e2dnde_min*MEVtoERG, e2dnde_max*MEVtoERG)) #(np.amin(e2dnde*MEVtoERG + sys.maxint*unshown_map), np.amax(e2dnde*MEVtoERG - sys.maxint*unshown_map)))
         ax[1].set_yscale('log')
         ax[1].set_xlabel('Spectral index')
         ax[1].set_ylabel(r'$\nu F_{{\nu}} \ \rm{{[erg/cm^2 \cdot s]}} \ at \ {eref:.1f} GeV$'.format(eref=eref/1000.))
         ax[1].grid()
-        fig.tight_layout() 
 
-        cont_efluence = ax[2].contour(indices_mesh, efluences*MEVtoERG, zvalues, levels=cont_levels)
-        try:
-            cont_efluence.clabel(fmt='%1.1E', fontsize=10)
-        except ValueError:
-            logger.error('Drawing efluence label failed because of ValueError!')
+        cont_efluence = ax[2].contour(indices_mesh, efluences*MEVtoERG, zvalues, levels=cont_levels, colors='k', linestyles=pMatplot.TPL_LINE)
+        # try:
+        #     cont_efluence.clabel(fmt='%1.1E', fontsize=10)
+        # except ValueError:
+        #     logger.error('Drawing efluence label failed because of ValueError!')
+
         #ax[2].axhline(self.target.table_grb_catalogue['GBM']['FLUENCE'], alpha=0.5, lw=1.5, c='g', label='GBM (prompt)')
         ax[2].set_xlim((indices_min, indices_max)) #(np.amin(indices_mesh + sys.maxint*unshown_map), np.amax(indices_mesh - sys.maxint*unshown_map)))
         ax[2].set_ylim((efluences_min*MEVtoERG, efluences_max*MEVtoERG)) #(np.amin(efluences*MEVtoERG + sys.maxint*unshown_map), np.amax(efluences*MEVtoERG - sys.maxint*unshown_map)))
@@ -1443,6 +1457,7 @@ class AnalysisConfig:
             path_save = "{0}/{1}_scanned2D_{2}{3}.{4}".format(self.dir_work, name, self.target.name, self.suffix, ff)
             fig.savefig(path_save)
             logger.info('{0} has been saved.'.format(path_save))
+        fig.clf()
 
 
     def order_likeratio(self, nseries=0, eref=None, use_calonly=False):
@@ -1554,9 +1569,9 @@ class AnalysisConfig:
                 npreds[inorm][jindex] = sum(sum_model) + model_calonly
             else:
                 npreds[inorm][jindex] = sum_model + model_calonly
-                if inorm==50:
-                    logger.info('Regular: {0}'.format(sum_model))
-                    logger.info('CalOnly: {0}'.format(model_calonly))
+                #if inorm==50:
+                #    logger.info('Regular: {0}'.format(sum_model))
+                #    logger.info('CalOnly: {0}'.format(model_calonly))
             efluxes[inorm][jindex] = self.like.energyFlux(self.target.name, self.emin_eval, self.emax_eval)
             efluences[inorm][jindex] = efluxes[inorm][jindex] * self.duration
             if self.target.spectraltype[-8:]=='PowerLaw':
@@ -1665,7 +1680,7 @@ class AnalysisConfig:
         file_bkgevt = ROOT.TFile(path_bkgevt, "READ")
         dir_bkgevt = file_bkgevt.Get('TimeBin{0}'.format(nhistogram))
         #file_offexp = ROOT.TFile(path_offexp, "READ")
-        self.calonly = CalOnlyData(tr_onevt=tr_onevt, htg_onexp=file_onexp.Get('htgExp_{0}_yx'.format(nhistogram)), htg_bkgevt=dir_bkgevt.Get('htgExBKG_CalOnly_{rcla}_PSF68_projE'.format(rcla=rclass)), on_energy=(self.emin, self.emax), on_time=(self.target.met0+self.tmin, self.target.met0+self.tmax), on_classes=DICT_EVCLASSES_BIT_CALONLY[rclass], on_zenith=(0., self.zmax), on_theta=(0., self.thetamax)) #, ebins=np.log10(self.energies),
+        self.calonly = CalOnlyData(tr_onevt=tr_onevt, htg_onexp=file_onexp.Get('htgExp_{0}_projYX'.format(nhistogram)), htg_bkgevt=dir_bkgevt.Get('htgExBKG_CalOnly_{rcla}_PSF68_projE'.format(rcla=rclass)), on_energy=(self.emin, self.emax), on_time=(self.target.met0+self.tmin, self.target.met0+self.tmax), on_classes=DICT_EVCLASSES_BIT_CALONLY[rclass], on_zenith=(0., self.zmax), on_theta=(0., self.thetamax)) #, ebins=np.log10(self.energies),
         if self.calonly.ne_bins<1:
             logger.warning('No CalOnly data in the energy range.')
             return 0
@@ -1787,6 +1802,7 @@ class GRBConfig(AnalysisConfig):
         ax_cspec_fit[0].set_ylabel('[counts]')
         ax_cspec_fit[0].set_title('RoI of '+self.target.name)
         fig_cspec_fit.savefig("{0}/Count_spectrum_{1}{2}.png".format(self.dir_work, self.target.name, self.suffix))
+        fig_cspec_fit.clf()
         return (fig_cspec_fit, ax_cspec_fit)
         #fig_cspec_fit.clf()
 
@@ -1795,7 +1811,7 @@ class CalOnlyData:
     def __init__(self, tr_onevt, htg_onexp, htg_bkgevt, ebins=None, on_energy=(0, sys.maxint), on_time=(0, sys.maxint), on_classes=(4096, 8192, 16384, 32768), on_zenith=(0., 100.), on_theta=(0., 65.)):
         logger.info('CalOnly data set is constructing...')
         logger.info('Energy limit: {0}'.format(on_energy))
-        #self.tr_onevt = tr_onevt
+        self.tr_onevt = tr_onevt
         onevt_times = []
         onevt_energies = []
         self.rebin([htg_onexp])
@@ -1838,6 +1854,7 @@ class CalOnlyData:
             self.func_onexp = interpolate.interp1d(energies_center_original, self._onexp, fill_value=0, bounds_error=False)
 
             self.onevt = np.zeros(self.ne_bins) 
+            logger.debug('On event tree: {0}'.format(tr_onevt))
             for evt in tr_onevt:
                 if (evt.e>=np.log10(on_energy[0]) and evt.e<np.log10(on_energy[1])) and evt.s in on_classes and evt.FLAG_PSF68==True and (evt.t>=on_time[0] and evt.t<=on_time[1]) and (evt.z>=on_zenith[0] and evt.z<=on_zenith[1]) and (evt.th>=on_theta[0] and evt.th<=on_theta[1]):
                     onevt_times.append(evt.t)
