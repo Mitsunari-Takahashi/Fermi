@@ -42,21 +42,30 @@ MEVtoERG = 1.6021766208E-6
 GRB_CATALOGUE = '/nfs/farm/g/glast/u/mtakahas/FermiAnalysis/GRB/Regualr/catalogue/LAT2CATALOG-v1-LTF.fits'
 
 
-DICT_LABEL = {'1st HE': '1',
-              '2nd HE': '2',
-              '1st HE (IC-dom)': '1a'}
-
+DICT_LABEL = {'Fast':{'1st HE': '1',
+                  '2nd HE': '2',
+                  '1st HE (IC-dom)': '1*'},
+              'Slow':{'1st HE': '1',
+                      '2nd HE': '2',
+                      '1st HE (IC-dom)': '1*'},
+              'Radiative':{'1st HE': '1R',
+                           '2nd HE': '2R'}
+              }
 DICT_ALPHA = {'Synchrotron':{'ISM':{'Fast':{'1st HE': lambda p:(3.*p-2.)/4., # Panaitescu & Kumar, 2000
                                             '2nd HE': lambda p:1./4.}, # Panaitescu & Kumar, 2000
                                     'Slow':{'1st HE': lambda p:(3.*p-2.)/4., # Panaitescu & Kumar, 2000
                                             '1st HE (IC-dom)': lambda p:3.*p/4.-1./(4.-p), # Panaitescu & Kumar, 2000
-                                            '2nd HE': lambda p:3.*(p-1.)/4.} # Panaitescu & Kumar, 2000
-                                },
+                                            '2nd HE': lambda p:3.*(p-1.)/4.}, # Panaitescu & Kumar, 2000
+                                    'Radiative':{'1st HE': lambda p:2.*(3.*p-1.)/7., #Panaitescu et al., 2006
+                                                 '2nd HE': lambda p:4./7.} #Panaitescu et al., 2006
+                                    },
                              'Wind':{'Fast':{'1st HE': lambda p:(3.*p-2.)/4., # Panaitescu & Kumar, 2000
                                             '2nd HE': lambda p:1./4.}, # Panaitescu & Kumar, 2000
                                     'Slow':{'1st HE': lambda p:(3.*p-2.)/4.,  # Panaitescu & Kumar, 2000
                                             '1st HE (IC-dom)': lambda p:3.*p/4.-p/2./(4.-p), # Panaitescu & Kumar, 2000
-                                            '2nd HE': lambda p: (3.*p-1.)/4.} # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p: (3.*p-1.)/4.}, # Panaitescu & Kumar, 2000
+                                    'Radiative':{'1st HE': lambda p:(5.*p-2.)/6., #Panaitescu et al., 2006
+                                                 '2nd HE': lambda p:1./2.} #Panaitescu et al., 2006
                                  }
                          },
               'SSC':{'ISM':{'Fast':{'1st HE': lambda p:(9.*p-10.)/8., # Panaitescu & Kumar, 2000
@@ -68,6 +77,7 @@ DICT_ALPHA = {'Synchrotron':{'ISM':{'Fast':{'1st HE': lambda p:(3.*p-2.)/4., # P
                      'Wind':{'Fast':{'1st HE': lambda p:(p-1.), # Panaitescu & Kumar, 2000
                                      '2nd HE': lambda p:0}, # Panaitescu & Kumar, 2000
                              'Slow':{'1st HE': lambda p:(p-1.), # Panaitescu & Kumar, 2000
+                                     '1st HE (IC-dom)': lambda p:p*(3.-p)/(4.-p),
                                      '2nd HE': lambda p: p} # Panaitescu & Kumar, 2000
                          } # Panaitescu & Kumar, 2000
                  }
@@ -75,16 +85,20 @@ DICT_ALPHA = {'Synchrotron':{'ISM':{'Fast':{'1st HE': lambda p:(3.*p-2.)/4., # P
                             
     
 DICT_BETA = {'Synchrotron':{'ISM':{'Fast':{'1st HE': lambda p:p/2.,  # Panaitescu & Kumar, 2000
-                                            '2nd HE': lambda p:1/2}, # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p:1./2.}, # Panaitescu & Kumar, 2000
                                     'Slow':{'1st HE': lambda p:p/2., # Panaitescu & Kumar, 2000
                                             '1st HE (IC-dom)': lambda p:p/2., # Panaitescu & Kumar, 2000
                                             '2nd HE': lambda p:(p-1.)/2.}, # Panaitescu & Kumar, 2000
+                                    'Radiative':{'1st HE': lambda p:p/2.,
+                                                 '2nd HE': lambda p:1./2.}
                                    },
                             'Wind':{'Fast':{'1st HE': lambda p:p/2., # Panaitescu & Kumar, 2000
                                             '2nd HE': lambda p:1./2.}, # Panaitescu & Kumar, 2000
                                     'Slow':{'1st HE': lambda p:p/2.,  # Panaitescu & Kumar, 2000
                                             '1st HE (IC-dom)': lambda p:p/2., # Panaitescu & Kumar, 2000
-                                            '2nd HE': lambda p: (p-1.)/2.} # Panaitescu & Kumar, 2000
+                                            '2nd HE': lambda p: (p-1.)/2.}, # Panaitescu & Kumar, 2000
+                                    'Radiative':{'1st HE': lambda p:p/2.,
+                                                 '2nd HE': lambda p:1./2.}
                                 }
                         },
              'SSC':{'ISM':{'Fast':{'1st HE': lambda p:p/2., #Sari & Esin (2001)
@@ -96,6 +110,7 @@ DICT_BETA = {'Synchrotron':{'ISM':{'Fast':{'1st HE': lambda p:p/2.,  # Panaitesc
                     'Wind':{'Fast':{'1st HE': lambda p:p/2., #Sari & Esin (2001)
                                     '2nd HE': lambda p:1./2.}, #Sari & Esin (2001)
                             'Slow':{'1st HE': lambda p:p/2., #Sari & Esin (2001)
+                                    '1st HE (IC-dom)': lambda p:p/2.,
                                     '2nd HE': lambda p: (p-1.)/2.} #Sari & Esin (2001)
                         }
                 }
@@ -163,13 +178,17 @@ class ObservedIndices:
         
 
 class ClosureRelation:
-    def __init__(self, alpha, beta, name='', expression=''):
+    def __init__(self, alpha, beta, emission, cbmprof, cooling, esegment, name='', expression=''):
         """Input alpha and beta as lambda functions and name and expression as string
 """
         self.name = name #str
         self.alpha = alpha #lambda
         self.beta = beta #lambda
         self.expression = expression #str
+        self.emission = emission
+        self.cbmprof = cbmprof
+        self.cooling = cooling
+        self.esegment = esegment
 
 
     def eval_alpha(self, p):
@@ -180,32 +199,26 @@ class ClosureRelation:
         return self.beta(p)
 
 
-    def draw(self, ax, p_range=(2, 3.0), npoint=100, **kwargs):
+    def draw(self, ax, p_range=(2, 3.0), npoint=200, **kwargs):
         p_indices = np.linspace(p_range[0], p_range[1], int((p_range[1]-p_range[0])*npoint)+1)
         alpha_indices = np.zeros_like(p_indices)
         beta_indices = np.zeros_like(p_indices)
         for ip,p in enumerate(p_indices):
             alpha_indices[ip] = self.eval_alpha(p)
             beta_indices[ip] = self.eval_beta(p)
-        pointlike = True if 'Fast' in ax.get_title() and '2nd HE' in ax.get_title() else False
+        pointlike = True if all([a==alpha_indices[0] for a in alpha_indices]) and all([b==beta_indices[0] for b in beta_indices]) else False
         self.im = ax.scatter(alpha_indices, beta_indices, c=p_indices if not pointlike else 'grey', cmap=cm.rainbow, marker='o', vmin=min(p_indices), vmax=max(p_indices), edgecolors=None, linewidths=0, s=30 if pointlike else 3, **kwargs)
-        xtext = alpha_indices[-1] -0.03 #if 'SSC' in self.name else alpha_indices[0]
+        xtext = alpha_indices[-1] -0.03 
         if xtext < np.mean(alpha_indices):
             xtext-=0.05
         ytext = beta_indices[-1] + 0.03
-        # if 'SSC' in self.name:
-        #     ytext += beta_indices[-1] 
-        # elif 'IC-dom' in self.name:
-        #     ytext += np.mean(beta_indices)
-        # else:
-        #     ytext += (beta_indices[0]+0.1)
         if self.name[:3]=='Syn':
-            stext = 'S' +DICT_LABEL[self.name[4:]]
+            stext = 'S' +DICT_LABEL[self.cooling][self.esegment]
+            #stext = 'S' +DICT_LABEL[self.name[4:]]
         elif self.name[:3]=='SSC':
-            stext = 'C'+DICT_LABEL[self.name[4:]]
+            stext = 'C'+DICT_LABEL[self.cooling][self.esegment]
+            #stext = 'C'+DICT_LABEL[self.name[4:]]
         ax.text(x=xtext, y=ytext, s=stext, fontsize=8)
-        #ax.text(x=xtext, y=ytext, s=self.name, fontsize=8)
-        #ax.text(x=(alpha_indices[0]+np.mean(alpha_indices))/2., y=(beta_indices[0]+np.mean(beta_indices))/2., s=self.name, fontsize=8)
 
 
 @click.command()
