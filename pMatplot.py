@@ -15,48 +15,37 @@ import logging
 
 
 TPL_MARKER = ('.', 'D', 's', 'o', 'x', '*', 'p', 'h', '8')
-TPL_COLOR = ("k", "r", "g", "b", "c", "hotpink", "brown", "purple", "gold", "olive", "orange")
-TPL_LINE = ('-', '--', ':', '-.')
+TPL_COLOR = ("k", "r", "g", "b", "c", "hotpink", "brown", "purple", "olive", "orange")
+TPL_COLOR_WO_BLACK = ("r", "g", "b", "c", "hotpink", "brown", "purple", "olive", "orange")
+TPL_LINE = ('-', '--', '-.', ':')
 
 
-def find_range_shown(x, y, f, nx_restricted=None, ny_restricted=None):
-    indexrange = find_indexrange(x, y, f, nx_restricted=nx_restricted, ny_restricted=ny_restricted)
-    return ((x[0][indexrange[0][0]], x[0][indexrange[0][1]]), (y[indexrange[1][0]][0], y[indexrange[1][1]][0]))
-    # nxmax_shown = 0 
-    # nymax_shown = 0
-    # nxmin_shown = x.shape[1]-1 #len(x)-1
-    # nymin_shown = y.shape[0]-1 #len(y)-1
-    # #print 'Shape of X: {0}'.format(x.shape)
-    # #print 'Shape of Y: {0}'.format(y.shape)
-    # for ix, iy in itertools.product(range(x.shape[1]), range(y.shape[0])):
-    #     if f(iy, ix)==True:
-    #         if ix>nxmax_shown:
-    #             nxmax_shown = ix
-    #         if ix<nxmin_shown:
-    #             nxmin_shown = ix
-    #         if iy>nymax_shown:
-    #             nymax_shown = iy
-    #         if iy<nymin_shown:
-    #             nymin_shown = iy
-    # return ((x[0][nxmin_shown], x[0][nxmax_shown]), (y[nymin_shown][0], y[nymax_shown][0]))
+def find_range_shown(y, x, f, ny_restricted=None, nx_restricted=None):
+    yindexrange, xindexrange = find_indexrange(y, x, f, ny_restricted=ny_restricted, nx_restricted=nx_restricted)
+    print 'Y index range: {0}'.format(yindexrange)
+    print 'X index range: {0}'.format(xindexrange)
+    #print 'Y shape: {0}'.format(y.shape)
+    #print 'X shape: {0}'.format(x.shape)
+    return ((y[yindexrange[0][0], yindexrange[0][1]], y[yindexrange[1][0], yindexrange[1][1]]), 
+            (x[xindexrange[0][0], xindexrange[0][1]], x[xindexrange[1][0], xindexrange[1][1]]))
 
 
-def find_indexrange(x, y, f, nx_restricted=None, ny_restricted=None):
-    nxmax_shown = 0 
-    nymax_shown = 0
-    nxmin_shown = x.shape[1]-1
-    nymin_shown = y.shape[0]-1
-    for ix, iy in itertools.product(range(x.shape[1]), range(y.shape[0])):
+def find_indexrange(y, x, f, ny_restricted=None, nx_restricted=None):
+    nxmax_shown = None
+    nymax_shown = None
+    nxmin_shown = None
+    nymin_shown = None
+    for iy, ix in itertools.product(range(y.shape[0]), range(x.shape[1])):
         if f(iy, ix)==True and (nx_restricted is None or ix in nx_restricted) and (ny_restricted is None or iy in ny_restricted):
-            if ix>nxmax_shown:
-                nxmax_shown = ix
-            if ix<nxmin_shown:
-                nxmin_shown = ix
-            if iy>nymax_shown:
-                nymax_shown = iy
-            if iy<nymin_shown:
-                nymin_shown = iy
-    return ((nxmin_shown, nxmax_shown), (nymin_shown, nymax_shown))    
+            if nxmax_shown is None or x[iy,ix]>x[nxmax_shown[0],nxmax_shown[1]]:
+                nxmax_shown = (iy,ix)
+            if nymax_shown is None or y[iy,ix]>y[nymax_shown[0],nymax_shown[1]]:
+                nymax_shown = (iy,ix)
+            if nxmin_shown is None or x[iy,ix]<x[nxmin_shown[0],nxmin_shown[1]]:
+                nxmin_shown = (iy,ix)
+            if nymin_shown is None or y[iy,ix]<y[nymin_shown[0],nymin_shown[1]]:
+                nymin_shown = (iy,ix)
+    return ((nymin_shown, nymax_shown), (nxmin_shown, nxmax_shown))    
 
 
 class Data_plotted():
@@ -80,7 +69,7 @@ Returns a tuple of Figure and Axes.
     def __init__(self, lst_data, title='', xtitle='', ytitle='', xlog=False, ylog=False, xfigsize=16, yfigsize=10, fontsize=12, zlevels=[1.0]):
         self.datasets = lst_data
         print '{0} plots.'.format(len(self.datasets))
-        self.fig = plt.figure(12, 5)
+        self.fig = plt.figure(figsize=(12, 5))
         self.ax = self.fig.add_axes((0.125, 0.125, 0.8, 0.8))
         self.title = title
         self.xtitle = xtitle
@@ -175,7 +164,7 @@ Returns a tuple of Figure and Axes.
 
 
 class Curve:
-    def __init__(self, quantity, xlabel='time [s]', ylabel='', ul=False, xerr_asym=False, yerr_asym=False):
+    def __init__(self, quantity, xlabel='time [s]', ylabel='', ul=False, ll=False, xerr_asym=False, yerr_asym=False):
         self.quantity = quantity
         self.xlabel = xlabel
         self.ylabel = ylabel
@@ -192,7 +181,13 @@ class Curve:
         else:
             self.lst_yerr = []
         self.ul = ul
-        self.fmt = '.' if self.ul==False else 'v'
+        self.ll = ll
+        if self.ul==True:
+            self.fmt =  'v'
+        elif self.ul==True:
+            self.fmt =  '^'
+        else:
+            self.fmt = '.' 
 
 
     def set_point(self, x, y, xerr=0, yerr=0):
@@ -396,3 +391,82 @@ Covariance: {1}""".format(params_optimal, cov))
             logy_draw[ix] = fitfunc(pfinal, logx) #fitfunc(params_optimal, logx)
 
         return ((params_optimal, params_err), (10**logx_draw, 10**logy_draw, logyerr_draw))
+
+
+class ColorMeshCurve(Curve):
+    """"Light curve represented by pcolormesh of matplotlib
+https://matplotlib.org/api/_as_gen/matplotlib.axes.Axes.pcolormesh.html
+"""
+    def __init__(self, quantity, xlabel='time [s]', ylabel='', zlabel=''):
+        Curve.__init__(self, quantity, xlabel=xlabel, ylabel=ylabel, ul=False, ll=False, xerr_asym=True, yerr_asym=False)
+        self.zlabel = zlabel
+        self.lst_zdata = []
+
+
+    def set_point(self, x, y, z, xerr=0, yerr=0):
+        Curve.set_point(self, x=x, y=y, xerr=xerr, yerr=yerr)
+        self.lst_zdata.append(z)
+
+
+    def get_zdata(self):
+        return np.array(self.lst_zdata)
+
+
+    def make_meshes(self):
+        # X-axis
+        xcenters = self.get_xdata()
+        # Z-axis
+        zvalues = self.get_zdata()
+        print 'z-valus: {0}'.format(zvalues)
+
+        if self.xerr_asym:
+            xerr_lo, xerr_hi = self.get_xerr()
+        else:
+            xerr_lo, xerr_hi = self.get_xerr(), self.get_xerr()
+        xlowedges, xupedges = xcenters - xerr_lo, xcenters + xerr_hi
+        list_xgrid = [xlowedges[0]]
+        list_zvalues = []
+        list_zmask = []
+        for ix, x in enumerate(xcenters):
+            #if ix==0:
+            #    list_xgrid.append(xlowedges[ix])
+            if abs(xlowedges[ix]-list_xgrid[-1])<0.01:
+                list_xgrid.append(xupedges[ix])
+            elif xlowedges[ix]>list_xgrid[-1]:
+                list_zvalues.append(np.full_like(list_zvalues[0], float(sys.maxint)))
+                list_zmask.append(np.full_like(zvalues[0], True, dtype=bool))
+                list_xgrid.append(xlowedges[ix])
+                list_xgrid.append(xupedges[ix])
+            else:
+                logging.critical('X bin edge (No.{0}) {1} is smaller than the previous one {2}!!!'.format(ix, xlowedges[ix], list_xgrid[-1]))
+                logging.critical('Difference: {0}'.format(xlowedges[ix]-list_xgrid[-1]))
+                logging.critical('Filled grids: {0}'.format(list_xgrid))
+                logging.critical('Lower edges: {0}'.format(xlowedges))
+                logging.critical('Upper edges: {0}'.format(xupedges))
+                sys.exit(1)
+            list_zvalues.append(zvalues[ix])
+            list_zmask.append(np.full_like(zvalues[0], False, dtype=bool))
+        xedges = np.array(list_xgrid)
+        self.z_mesh = np.ma.array(list_zvalues, mask=list_zmask).T
+        print 'Z mesh: {0}'.format(self.z_mesh)
+
+        # Y-axis
+        for iys, ys in enumerate(self.lst_ydata):
+            if any(ys!=self.lst_ydata[0]):
+                logging.critical('Y bin edges do NOT match!!!')
+                logging.critical('In the first time bin: {0}'.format(self.lst_ydata[0]))
+                logging.critical('In the {0}th time bin: {1}'.format(iys, ys))
+                sys.exit(1)
+        yedges = self.lst_ydata[0]
+
+        # Y-X mesh
+        self.x_mesh, self.y_mesh = np.meshgrid(xedges, yedges)
+
+        print 'X mesh: {0}'.format(self.x_mesh.shape)
+        print 'Y mesh: {0}'.format(self.y_mesh.shape)
+        print 'Z mesh: {0}'.format(self.z_mesh.shape)
+
+
+
+            
+            
