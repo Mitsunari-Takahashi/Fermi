@@ -56,7 +56,7 @@ from UnbinnedAnalysis import *
 from BinnedAnalysis import *
 import STLikelihoodAnalysis.pLATLikelihoodConfig as pLATLikelihoodConfig
 from STLikelihoodAnalysis.pLATLikelihoodConfig import TABLE_DLOGLIKE_SIGNIFICANCE
-from FindGoodstatPeriods import find_goodstat_periods, get_entries, get_event_time_and_energy, get_event_time_energy_angsep
+from FindGoodstatPeriods import find_goodstat_periods, get_entries, get_event_time_and_energy, get_event_time_energy_angsep, find_goodstat_periods_back
 from FindCrossEarthlimb import find_cross_earthlimb#, get_good_intervals
 #from STLikelihoodAnalysis import get_module_logger
 from logging import getLogger,StreamHandler,DEBUG,INFO,WARNING,ERROR,CRITICAL
@@ -120,9 +120,9 @@ class LightCurve:
 
 
 class LightCurveGRB(LightCurve):
-    def __init__(self, name, wholephase='special', tmin=0.0, tmax=10000.0, emin=100.0, emax=100000.0, eref=1000., evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, redshift=0.0, suffix='', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, psForce=False, rlim_goodstat=2.0, ngoodstat=10, ntbinperdecade=4, refit=True, force=False, outdir=None, phase='lightcurve', spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2, 'Scale':1000}):
+    def __init__(self, name, wholephase='special', tmin=0.0, tmax=10000.0, emin=100.0, emax=100000.0, eref=1000., evclass=128, evtype=3, ft2interval='30s', deg_roi=12., rad_margin=10., zmax=100., index_fixed=None, redshift=0.0, suffix='', grbcatalogue=pLATLikelihoodConfig.GRB_CATALOGUE_LAT, psForce=False, rlim_goodstat=2.0, ngoodstat=10, ntbinperdecade=4, refit=True, force=False, outdir=None, phase='lightcurve', spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2, 'Scale':1000}, synccutoff=None):
         # Target GRB
-        self.grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectraltype=spectraltype, spectralpars=spectralpars, redshift=redshift)
+        self.grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectraltype=spectraltype, spectralpars=spectralpars, redshift=redshift, synccutoff=synccutoff)
         #self.grb = pLATLikelihoodConfig.GRBTarget(name, grbcatalogue, spectraltype='ScaleFactor::PowerLaw2', spectralpars={'Integral':norm, 'Index':index, 'LowerLimit':emin, 'UpperLimit':emax, 'ScaleFactor':scalefactor})
 
         # Light curve instance
@@ -139,6 +139,7 @@ class LightCurveGRB(LightCurve):
         self.calonly_counts_time = None
         self.calonly_counts_energy = None
         self.calonly_counts_angsep = None
+        self.synccutoff = synccutoff
 
 
     def setup(self):
@@ -201,15 +202,16 @@ class LightCurveGRB(LightCurve):
 
             else: # Logarithmically equivalent time binning
                 # Prompt phase
-                tpromptstart = self.analysis_whole.target.t05
+                tpromptstart = 0. #self.analysis_whole.target.t05
                 tpromptend = (self.analysis_whole.target.t25 + self.analysis_whole.target.t50) #*3./2.)
                 if validtimes[0][0]<tpromptend and tpromptend<validtimes[0][1]:
                     if tpromptstart>validtimes[0][0] and tpromptstart<tpromptend:
-                        self.periods_goodstat.append([validtimes[0][0], tpromptstart])
+                        #self.periods_goodstat.append([validtimes[0][0], tpromptstart])
                         tp0, tp1 = tpromptstart, tpromptend
                     else:
                         tp0, tp1 = validtimes[0][0], tpromptend
-                    self.periods_goodstat += find_goodstat_periods(self.analysis_whole.path_filtered, tp0, tp1, nthreshold=12, rlim=12., ra=self.grb.ra, dec=self.grb.dec, torigin=self.analysis_whole.target.met0)
+                    self.periods_goodstat += find_goodstat_periods_back(self.analysis_whole.path_filtered, tp0, tp1, nthreshold=8, rlim=12., ra=self.grb.ra, dec=self.grb.dec, torigin=self.analysis_whole.target.met0)
+                    #self.periods_goodstat += find_goodstat_periods(self.analysis_whole.path_filtered, tp0, tp1, nthreshold=10, rlim=12., ra=self.grb.ra, dec=self.grb.dec, torigin=self.analysis_whole.target.met0)
                         
                     validtimes[0][0] = tpromptend # Forget about the prompt phase
                 # Afterglow phase
@@ -369,22 +371,8 @@ class LightCurveGRB(LightCurve):
                     self.analyses[ip].reset_target_norm()
             if sum(self.analyses[ip].like._Nobs())>0:
                 self.analyses[ip].plot_countspectra_fitted()
-            #if self.analyses[ip].dct_summary_results['TS']>=4:
-            #    self.analyses[ip].eval_flux_and_error()
-            # if self.analyses[ip].dct_summary_results['TS']>0: #4:
-            #     self.analyses[ip].eval_limits_powerlaw(str_index_fixed=['best', 'free'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], eref=self.config['energy']['ref'])
-            #     self.analyses[ip].reset_target_norm()
-            #     self.analyses[ip].eval_limits_powerlaw_index(emin=self.config['energy']['min'], emax=self.config['energy']['max'], eref=self.config['energy']['ref'])
-            # else:
-            #     self.analyses[ip].eval_limits_powerlaw(str_index_fixed=['best'], emin=self.config['energy']['min'], emax=self.config['energy']['max'], eref=self.config['energy']['ref'])
 
             self.analyses[ip].scan_norm_and_index(eref=self.config['energy']['ref'], use_calonly=use_calonly)
-
-            # dict_allowed_intervals = {}
-            # dict_allowed_intervals['1sigma'] = pLATLikelihoodConfig.get_allowed_intervals(ana.dct_summary_results['dloglike'], ana.dct_summary_results['dloglike']['dloglike']<=2.30)
-            # dict_allowed_intervals['2sigma'] = pLATLikelihoodConfig.get_allowed_intervals(ana.dct_summary_results['dloglike'], ana.dct_summary_results['dloglike']['dloglike']<=6.18)
-            # self.analyses[ip].dct_summary_results['allowed_intervals'] = dict_allowed_intervals
-
             self.summary_results[ip].update(self.analyses[ip].dct_summary_results)
 
 
@@ -474,10 +462,7 @@ class LightCurveGRB(LightCurve):
 
     def pickle(self, stuff=None):
         self.dct_stored = {'config':self.config, 'results':self.summary_results, 'counts':{'time':self.counts_time, 'energy':self.counts_energy, 'angsep':self.counts_angsep}, 'counts_CalOnly':{'time':self.calonly_counts_time, 'energy':self.calonly_counts_energy, 'angsep':self.calonly_counts_angsep}} if stuff is None else stuff
-        #path_pickle = '{base}/{target}/{energy}/{roi}/{phase}/LightCurve_{target}_{spectype}_{index}{suffix}.pickle'.format(base=self.analysis_whole.dir_base, target=self.analysis_whole.target.name, energy=self.analysis_whole.str_energy, roi=self.analysis_whole.str_roi, phase='lightcurve', spectype=self.analysis_whole.target.spectraltype, index=self.analysis_whole.str_index, suffix=self.analysis_whole.suffix)
         path_pickle = '{0}/{1}.pickle'.format(self.outdir, self.outbasename)
-        #logger.info("""Object contents: 
-#{0}""".format(self.dct_stored))
         with open(path_pickle, mode='wb') as f:
             pickle.dump(self.dct_stored, f)
         logger.info('Result summary has been serialized as {0}'.format(path_pickle))
@@ -546,8 +531,7 @@ def scan_norm_beta_alpha(dict_summary, torigin, outdir=None, suffix='', norms=No
             else:
                 loglike_mesh[jbeta][kalpha][inorm] = sys.maxint
 
-    #args_bestlike = zip(np.where(loglike_mesh==loglike_mesh.min())[0], np.where(loglike_mesh==loglike_mesh.min())[1], np.where(loglike_mesh==loglike_mesh.min())[2])[0]
-        loglike_min = np.nanmin(loglike_mesh) #loglike_mesh[args_bestlike[0]][args_bestlike[1]][args_bestlike[2]]
+        loglike_min = np.nanmin(loglike_mesh)
         dloglike_mesh = loglike_mesh - loglike_min
         dict_summary['scan3D']['dloglike_mesh'] = dloglike_mesh
     else:        
@@ -715,14 +699,23 @@ def lightcurve_prefactor(tmin, tmax, integral, index, tb_gti, torigin, tnorm=10.
     return (integral * pow(tref/tnorm, index) * rescaler), tref
 
 
-def make_lightcurves(name, wholephase, emin, emax, eref, roi, ngoodstat, rgoodstat, ntbinperdecade, suffix, grbcatalogue, refit, force, outdir, index, redshift=False, tmin=0, tmax=10000, addphoton=None, calonly=tuple([None]*4)):
-    if redshift==0 or redshift!=redshift:
-        sptype = 'PowerLaw2'
-        sppars = {'Integral':1E-7, 'Index':-2., 'LowerLimit':emin, 'UpperLimit':emax}
+def make_lightcurves(name, wholephase, emin, emax, eref, roi, ngoodstat, rgoodstat, ntbinperdecade, suffix, grbcatalogue, refit, force, outdir, index, redshift=False, tmin=0, tmax=10000, addphoton=None, calonly=tuple([None]*4), synccutoff=None):
+    if synccutoff is not None and synccutoff is not False and synccutoff==synccutoff:
+        if redshift==0 or redshift!=redshift:
+            sptype = 'ExpCutoff'
+            sppars = {'Prefactor':1E-10, 'Index':-2., 'Scale':1e3, 'Ebreak':5e4, 'P1':5e4, 'P2':0, 'P3':0}
+        else:
+            sptype = 'EblAtten::ExpCutoff'
+            sppars = {'Prefactor':1E-10, 'Index':-2., 'Scale':1e3, 'Ebreak':5e4, 'P1':5e4, 'P2':0, 'P3':0, 'tau_norm':1., 'redshift':redshift, 'ebl_model':4}
     else:
-        sptype = 'EblAtten::PowerLaw2'
-        sppars = {'Integral':1E-7, 'Index':-2., 'LowerLimit':emin, 'UpperLimit':emax, 'tau_norm':1., 'redshift':redshift, 'ebl_model':4}
-    lc = LightCurveGRB(name=name, wholephase=wholephase, tmin=tmin, tmax=tmax, emin=emin, emax=emax, eref=eref, deg_roi=roi, ngoodstat=ngoodstat, rlim_goodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=None, spectraltype=sptype, spectralpars=sppars, zmax=100.)
+        if redshift==0 or redshift!=redshift:
+            sptype = 'PowerLaw2'
+            sppars = {'Integral':1E-7, 'Index':-2., 'LowerLimit':emin, 'UpperLimit':emax}
+        else:
+            sptype = 'EblAtten::PowerLaw2'
+            sppars = {'Integral':1E-7, 'Index':-2., 'LowerLimit':emin, 'UpperLimit':emax, 'tau_norm':1., 'redshift':redshift, 'ebl_model':4}
+        
+    lc = LightCurveGRB(name=name, wholephase=wholephase, tmin=tmin, tmax=tmax, emin=emin, emax=emax, eref=eref, deg_roi=roi, ngoodstat=ngoodstat, rlim_goodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=None, spectraltype=sptype, spectralpars=sppars, zmax=100., synccutoff=synccutoff)
     lc.setup()
     if tuple(calonly) != tuple([None]*4):
         logger.info('CalOnly data:')
@@ -734,8 +727,6 @@ def make_lightcurves(name, wholephase, emin, emax, eref, roi, ngoodstat, rgoodst
     lc.run_analysis(use_calonly=True if calonly!=tuple([None]*4) else False)
     lc.pickle()
     plot_lightcurves(lc.dct_stored, outdir=outdir, index=index, addphoton=addphoton, redshift=redshift)
-
-    #dataframe(lc.dct_stored, outdir=outdir, index=index)
 
 
 def dataframe(dct_summary, outdir=None, ts_threshold=4.0, index='free'):
@@ -1093,9 +1084,10 @@ def get_lightcurve_bowtie(norm_mesh, indices_mesh, dict_meshes_shown, trange, ts
 @click.option('--outdir', '-o', type=str, default='.')
 @click.option('--plotonly', '-p', type=str, default=None, help='Path of result pickle file if you skip analyses.')
 @click.option('--mwlindices', type=str, default=None, help='Path of a CSV file of the observed temporal/spectral indices in other wavelengh.')
+@click.option('--synccutoff', type=float, default=None, help='Cutoff at synchrotron maximum energy at 1000 s in MeV')
 @click.option('--bsub', '-b', is_flag=True)
 @click.option('--loglevel', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'CRITICAL']), default='INFO')
-def main(namemin, namemax, mode, emin, emax, eref, tmin, tmax, roi, ngoodstat, rgoodstat, ntbinperdecade, refit, force, suffix, grbcatalogue, outdir, plotonly, index, redshift, calonly, mwlindices, bsub, loglevel):
+def main(namemin, namemax, mode, emin, emax, eref, tmin, tmax, roi, ngoodstat, rgoodstat, ntbinperdecade, refit, force, suffix, grbcatalogue, outdir, plotonly, index, redshift, calonly, mwlindices, synccutoff, bsub, loglevel):
     ##### Logger #####
     handler.setLevel(loglevel)
     logger.setLevel(loglevel)
@@ -1122,6 +1114,9 @@ def main(namemin, namemax, mode, emin, emax, eref, tmin, tmax, roi, ngoodstat, r
             if plotonly is not None:
                 acmd.append('--plotonly')
                 acmd.append(plotonly)
+            if synccutoff is not None:
+                acmd.append('--synccutoff')
+                acmd.append(str(synccutoff))
             if calonly != tuple([None]*4):
                 acmd.append('--calonly')
                 for i in range(4):
@@ -1137,18 +1132,11 @@ def main(namemin, namemax, mode, emin, emax, eref, tmin, tmax, roi, ngoodstat, r
 
         # CalOnly photons
         addphoton = None
-        # if namemin=='090926181':
-        #     addphoton={'time': (422.7,), 'energy':(50.49609375*1000.,)}
-        # elif namemin=='150902733':
-        #     addphoton={'time': (2064.52053469,), 'energy':(83.6322578125*1000.,)}
-        # elif namemin=='160509374':
-        #     addphoton={'time': (2035.85387415,5757.82151717), 'energy':(115.829539063*1000.,63.1624726562*1000.)}
 
         if plotonly==None:
-            make_lightcurves(name=namemin, wholephase=mode, emin=emin, emax=emax, eref=eref, tmin=tmin, tmax=tmax, roi=roi, ngoodstat=ngoodstat, rgoodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=outdir, index=index, redshift=redshift, addphoton=addphoton, calonly=calonly)#, tmin=tb_lat['LAT_TRIGGER_TIME']-tb_lat['TRIGGER_TIME'])
+            make_lightcurves(name=namemin, wholephase=mode, emin=emin, emax=emax, eref=eref, tmin=tmin, tmax=tmax, roi=roi, ngoodstat=ngoodstat, rgoodstat=rgoodstat, ntbinperdecade=ntbinperdecade, suffix=suffix, grbcatalogue=grbcatalogue, refit=refit, force=force, outdir=outdir, index=index, redshift=redshift, addphoton=addphoton, calonly=calonly, synccutoff=synccutoff)#, tmin=tb_lat['LAT_TRIGGER_TIME']-tb_lat['TRIGGER_TIME'])
         else:
-            plot_lightcurves(plotonly, outdir=outdir, index=index, addphoton=addphoton, mwlindices=mwlindices, redshift=redshift) #, addphoton={'time': (422.7,), 'energy':(50.49609375*1000.,)})
-            #dataframe(plotonly, index=index)
+            plot_lightcurves(plotonly, outdir=outdir, index=index, addphoton=addphoton, mwlindices=mwlindices, redshift=redshift)
 
 
 if __name__ == '__main__':

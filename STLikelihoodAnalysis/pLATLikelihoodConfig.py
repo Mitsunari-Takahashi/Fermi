@@ -88,6 +88,8 @@ DICT_SPECTRALPARS_SET = {'PowerLaw': set(['Prefactor', 'Index', 'Scale']),
                          'PowerLaw2': set(['Integral', 'Index', 'LowerLimit', 'UpperLimit']),
                          'EblAtten::PowerLaw2': set(['Integral', 'Index', 'LowerLimit', 'UpperLimit', "tau_norm", "redshift", "ebl_model"]),
                          'ScaleFactor::PowerLaw2': set(['Integral', 'Index', 'LowerLimit', 'UpperLimit', 'ScaleFactor']),
+                         'ExpCutoff': set(['Prefactor', 'Index', 'Scale', 'Ebreak', 'P1', 'P2', 'P3']),
+                         'EblAtten::ExpCutoff': set(['Prefactor', 'Index', 'Scale', 'Ebreak', 'P1', 'P2', 'P3', "tau_norm", "redshift", "ebl_model"]),
                          'BrokenPowerLaw': set(['Prefactor', 'Index1', 'Index2', 'BreakValue', 'LowerLimit', 'UpperLimit']),
                          'BrokenPowerLaw2': set(['Integral', 'Index1', 'Index2', 'BreakValue', 'LowerLimit', 'UpperLimit'])
                          }
@@ -96,7 +98,8 @@ DICT_SPECTRALPARS_SCALE = {'PowerLaw':{'Prefactor':1, 'Index':1, 'Scale':1},
                            'PowerLaw2': {'Integral':1, 'Index':1, 'LowerLimit':1, 'UpperLimit':1},
                            'EblAtten::PowerLaw2': {'Integral':1, 'Index':1, 'LowerLimit':1, 'UpperLimit':1, 'tau_norm':1, 'redshift':1, 'ebl_model':1},
                            'ScaleFactor::PowerLaw2': {'Integral':1, 'Index':1, 'LowerLimit':1, 'UpperLimit':1, 'ScaleFactor':1},
-                           'ExpCutoff': {'Prefactor':1, 'Index':1, 'Ebreak':1, 'P1':1, 'P2':1, 'P3':1},
+                           'ExpCutoff': {'Prefactor':1, 'Index':1, 'Scale':1, 'Ebreak':1, 'P1':1, 'P2':1, 'P3':1},
+                           'EblAtten::ExpCutoff': {'Prefactor':1, 'Index':1, 'Scale':1, 'Ebreak':1, 'P1':1, 'P2':1, 'P3':1, 'tau_norm':1, 'redshift':1, 'ebl_model':1},
                            'BrokenPowerLaw': {'Prefactor':1, 'Index1':1, 'Index2':1, 'BreakValue':1},
                            'BrokenPowerLaw2': {'Integral':1, 'Index1':1, 'Index2':1, 'BreakValue':1, 'LowerLimit':1, 'UpperLimit':1}
                            }
@@ -105,7 +108,8 @@ DICT_SPECTRALPARS_BOUNDS = {'PowerLaw':{'Prefactor':(0.,1.), 'Index':(-9.,3.), '
                            'PowerLaw2': {'Integral':(0.,1.), 'Index':(-9.,3.), 'LowerLimit':(30.,100000.), 'UpperLimit':(100.,1000000.)},
                            'EblAtten::PowerLaw2': {'Integral':(0.,1.), 'Index':(-9.,3.), 'LowerLimit':(30.,100000.), 'UpperLimit':(100.,1000000.), 'tau_norm':(0.,10.), 'redshift':(0.,10.), 'ebl_model':(0,7)},
                            'ScaleFactor::PowerLaw2': {'Integral':(0.,1.), 'Index':(-9.,3.), 'LowerLimit':(30.,100000.), 'UpperLimit':(100.,1000000.), 'ScaleFactor':(0.,100.)},
-                           'ExpCutoff': {'Prefactor':(0.,1.), 'Index':(-9.,3.), 'Ebreak':(100.,100000.), 'P1':(100.,100000.), 'P2':(100.,100000.), 'P3':(100.,100000.)},
+                           'ExpCutoff': {'Prefactor':(0.,1.), 'Index':(-9.,3.), 'Scale':(100.,100000.), 'Ebreak':(100.,100000.), 'P1':(100.,100000.), 'P2':(100.,100000.), 'P3':(100.,100000.)},
+                           'EblAtten::ExpCutoff': {'Prefactor':(0.,1.), 'Index':(-9.,3.), 'Scale':(100.,100000.), 'Ebreak':(10.,100000.), 'P1':(10.,100000.), 'P2':(0.,100000.), 'P3':(0.,100000.), 'tau_norm':(0.,10.), 'redshift':(0.,10.), 'ebl_model':(0,7)},
                            'BrokenPowerLaw': {'Prefactor':(0.,1.), 'Index1':(-9.,3.), 'Index2':(-9.,3.), 'BreakValue':(100.,100000.)},
                            'BrokenPowerLaw2': {'Integral':(0.,1.), 'Index1':(-9.,3.), 'Index2':(-9.,3.), 'BreakValue':1, 'LowerLimit':(30.,100000.), 'UpperLimit':(100.,1000000.)}
                            }
@@ -115,6 +119,7 @@ DICT_SPECTRALPARS_FIXED = {'PowerLaw': ['Scale'],
                            'EblAtten::PowerLaw2': ['LowerLimit', 'UpperLimit', 'tau_norm', 'redshift', 'ebl_model'],
                            'ScaleFactor::PowerLaw2': ['LowerLimit', 'UpperLimit', 'ScaleFactor'],
                            'ExpCutoff': ['Scale', 'P2', 'P3'],
+                           'EblAtten::ExpCutoff': ['Scale', 'P2', 'P3', 'tau_norm', 'redshift', 'ebl_model'],
                            'BrokenPowerLaw': ['BreakValue'],
                            'BrokenPowerLaw2': ['LowerLimit', 'UpperLimit']
                            }
@@ -130,14 +135,17 @@ class _AstroTarget:
             logger.error('Spectral parameters are NOT correct for {0}!!!'.format(self.spectraltype))
             logger.error(spectralpars.keys())
             logger.error('Correct parameters:')
-            loger.error(DICT_SPECTRALPARS_SET[self.spectraltype])
+            logger.error(DICT_SPECTRALPARS_SET[self.spectraltype])
             sys.exit(1)
 
         # Name of Normalization parameter
-        if spectraltype in ('PowerLaw', 'BrokenPowerLaw', 'ExpCutoff'):
+        if spectraltype in ('PowerLaw', 'BrokenPowerLaw', 'ExpCutoff', 'EblAtten::ExpCutoff'):
             self.norm_name = 'Prefactor' 
         elif spectraltype in ('PowerLaw2', 'BrokenPowerLaw2', 'ScaleFactor::PowerLaw2', 'EblAtten::PowerLaw2'):
             self.norm_name = 'Integral' 
+        else:
+            logger.critical('No normalization name is found.')
+            sys.exit(1)
 
         self.spectralpars = spectralpars
         self.spectralpars_scale = spectralpars_scale
@@ -160,7 +168,7 @@ class PointTarget(_AstroTarget):
 
 
 class GRBTarget(PointTarget):
-    def __init__(self, name, path_catalogue=GRB_CATALOGUE_LAT, spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2.0, 'Scale':1000.}, spectralpars_fixed=None, spectralpars_bounds=None, redshift=0.):
+    def __init__(self, name, path_catalogue=GRB_CATALOGUE_LAT, spectraltype='PowerLaw', spectralpars={'Prefactor':1e-10, 'Index':-2.0, 'Scale':1000.}, spectralpars_fixed=None, spectralpars_bounds=None, redshift=0., synccutoff=None):
 
         tb_gbm = ReadGBMCatalogueInfo.open_table(1, GRB_CATALOGUE_GBM)
         self.path_catalogue = path_catalogue
@@ -173,12 +181,17 @@ class GRBTarget(PointTarget):
             self.table_grb_catalogue = tb_one
         else:
             logger.critical('Catalogue {0} is not in readable format!!!'.format(path_catalogue))
+        self.synccutoff = synccutoff
 
         spectralpars_scale = DICT_SPECTRALPARS_SCALE[spectraltype]
         spectralpars_fixed = spectralpars_fixed if spectralpars_fixed is not None else DICT_SPECTRALPARS_FIXED[spectraltype]
+        if self.synccutoff is not None and self.synccutoff is not False and self.synccutoff==self.synccutoff:
+            for sfp in ['Ebreak', 'P1']:
+                if not sfp in spectralpars_fixed:
+                    spectralpars_fixed.append(sfp)
         spectralpars_bounds = spectralpars_bounds if spectralpars_bounds is not None else DICT_SPECTRALPARS_BOUNDS[spectraltype]
 
-        PointTarget.__init__(self, name, float(tb_one['RA']), float(tb_one['DEC']), spectraltype=spectraltype, spectralpars=spectralpars, spectralpars_scale=spectralpars_scale, spectralpars_fixed=spectralpars_fixed, spectralpars_bounds=spectralpars_bounds, met0=tb_one['TRIGGER_TIME'], redshift=redshift) #, redshift=(float(tb_one['REDSHIFT']) if float(tb_one['REDSHIFT'])>0 else np.nan)
+        PointTarget.__init__(self, name, float(tb_one['RA']), float(tb_one['DEC']), spectraltype=spectraltype, spectralpars=spectralpars, spectralpars_scale=spectralpars_scale, spectralpars_fixed=spectralpars_fixed, spectralpars_bounds=spectralpars_bounds, met0=tb_one['TRIGGER_TIME'], redshift=redshift) 
 
         if path_catalogue[-5:] == '.fits':
             tb_gbm_one = ReadGBMCatalogueInfo.select_one_by_name(tb_gbm, tb_one['GBM_assoc_key'])
@@ -187,15 +200,11 @@ class GRBTarget(PointTarget):
             self.t25 = tb_gbm_one['T50_START']
             self.t50 = tb_gbm_one['T50']
         elif path_catalogue[-4:] == '.xml':
-            #tb_gbm_one = ReadGBMCatalogueInfo.select_one_by_name(tb_gbm, tb_one['GBM']['NAME'])
             if tb_one['GBM'] is None:
                 self.t05 = 0
                 self.t90 = 0
                 self.t25 = 0
                 self.t50 = 0
-                #else:
-                #    logger.critical('No valid content in the GBM catalogue for {0}!!'.format(name))
-                #    sys.exit(1)
             else:
                 self.t05 = tb_one['GBM']['T90_START']
                 self.t90 = tb_one['GBM']['T90']
@@ -206,6 +215,13 @@ class GRBTarget(PointTarget):
         self.met95 = self.met05 + self.t90
         self.met25 = self.met0 + self.t25
         logger.debug('Target name: {0}'.format(self.name))
+
+
+    def synccutoff_time(self, t):
+        if self.synccutoff is not None:
+            return self.synccutoff*pow(max(t, self.t95)/1000., -3./8.)
+        else:
+            return None
 
 
 ##### Analysis Classes #####
@@ -630,25 +646,32 @@ class AnalysisConfig:
     def set_parameter_initial(self, plike, parname, bound_lo, bound_hi, fixed=False):
         par = plike.getParam(parname)
         par.setScale(self.target.spectralpars_scale[parname])
-        par.setValue(self.target.spectralpars[parname])
+        valset = self.target.spectralpars[parname]
+        if self.target.spectraltype[-9:]=='ExpCutoff' and parname in ['Ebreak', 'P1'] and self.target.synccutoff in locals():
+            if self.target.synccutoff is not None and self.target.synccutoff is not False and self.target.synccutoff==self.target.synccutoff:
+                valset = self.target.synccutoff_time(self.tmin)
+                logger.debug('Exponential cutoff: {0} MeV'.format(valset))
+        par.setValue(valset)
         par.setBounds(bound_lo, bound_hi)
         plike.setParam(par)
         if fixed==True:
             plike.setParamAlwaysFixed(parname)
+        logger.info('{n}: {v} {x}'.format(n=parname, v=valset, x='(fixed)' if fixed==True else ''))
+
 
     def set_parameters_initial(self, plike):
         for parname, parvalue in self.target.spectralpars.items():
-            par = plike.getParam(parname)
-            par.setScale(self.target.spectralpars_scale[parname])
-            par.setValue(parvalue)
-            par.setBounds(self.target.spectralpars_bounds[parname][0], self.target.spectralpars_bounds[parname][1])
-            plike.setParam(par)
-            if parname in self.target.spectralpars_fixed:
-                plike.setParamAlwaysFixed(parname)
+            self.set_parameter_initial(plike, parname, self.target.spectralpars_bounds[parname][0], self.target.spectralpars_bounds[parname][1], fixed=True if parname in self.target.spectralpars_fixed else False)
+            # par = plike.getParam(parname)
+            # par.setScale(self.target.spectralpars_scale[parname])
+            # par.setValue(parvalue)
+            # par.setBounds(self.target.spectralpars_bounds[parname][0], self.target.spectralpars_bounds[parname][1])
+            # plike.setParam(par)
+            # if parname in self.target.spectralpars_fixed:
+            #     plike.setParamAlwaysFixed(parname)
 
 
     def set_likelihood(self):
-
         check_required_files({'FT2':self.path_ft2, 'Filtered GTI event':self.path_filtered_gti, 'Livetime':self.path_livetime, 'Exposure':self.path_exposure, 'Source model':self.path_model_xml})
 
         if self.binned==True:
@@ -657,11 +680,8 @@ class AnalysisConfig:
             self.like = BinnedAnalysis(self.obs, self.path_model_xml, optimizer='NewMinuit')
         else:
             logger.info("""Setting up Unbinned likelihood...""")
-            #logger.info('{0}, {1}, {2}, {3}, {4}'.format(self.path_filtered_gti, self.path_ft2, self.path_exposure, self.path_livetime, self.irfs))
             self.obs = UnbinnedObs(self.path_filtered_gti, self.path_ft2, expMap=self.path_exposure, expCube=self.path_livetime, irfs=self.irfs)
             self.like = UnbinnedAnalysis(self.obs, self.path_model_xml, optimizer='NewMinuit')
-        #self.like.setEnergyRange(self.emin_fit, self.emax_fit)
-        #logger.debug('New energy bounds: {0}'.format(self.like.energies))
         if self.binned==False:
             self.like.reset_ebounds(self.energies)
             logger.info('Energy bound has changed to {0}'.format(self.like.energies))
@@ -700,6 +720,9 @@ class AnalysisConfig:
         self.diffuse_responses(bforce=True, path_model_xml=path_model)
         self.obs = UnbinnedObs(self.path_filtered_gti, self.path_ft2, expMap=self.path_exposure, expCube=self.path_livetime, irfs=self.irfs)
         self.like = UnbinnedAnalysis(self.obs, path_model, optimizer='NewMinuit')
+        if self.target.synccutoff is not None and self.target.synccutoff is not False and self.target.synccutoff==self.target.synccutoff:
+            self.set_target_synccutoff()
+
         self.path_model_xml = path_model
         self.path_model_xml_new = None
         self.likeobj = pyLike.NewMinuit(self.like.logLike)
@@ -760,11 +783,11 @@ class AnalysisConfig:
                     self.like.deleteSource(source)
 
             # Fix Ebreak
-            if self.target.spectraltype=='ExpCutoff':
-                eb_idx = self.like.par_index(self.target.name, 'Ebreak')
-                self.like.freeze(eb_idx)
-                logger.info(self.like.params()[eb_idx])
-                logger.info('Free parameter of {src}: {free}'.format(src=self.target.name, free=self.like.freePars(self.target.name)))
+            # if self.target.spectraltype=='ExpCutoff':
+            #     eb_idx = self.like.par_index(self.target.name, 'Ebreak')
+            #     self.like.freeze(eb_idx)
+            #     logger.info(self.like.params()[eb_idx])
+            #     logger.info('Free parameter of {src}: {free}'.format(src=self.target.name, free=self.like.freePars(self.target.name)))
 
             try:
                 self.dofit()
@@ -871,24 +894,20 @@ class AnalysisConfig:
         self.like[norm_idx] = self.target.spectralpars[self.target.norm_name]
 
 
+    def set_target_synccutoff(self):
+        vcutoff = self.target.synccutoff_time(self.tmin)
+        ebreak_idx = self.like.par_index(self.target.name, 'Ebreak')
+        self.like[ebreak_idx] = vcutoff
+        self.like.freeze(ebreak_idx)
+        p1_idx = self.like.par_index(self.target.name, 'P1')
+        self.like[p1_idx] = vcutoff
+        self.like.freeze(p1_idx)
+        logger.debug('Exponential cutoff: {0} MeV'.format(vcutoff))                
+
+
     def summarize_fit_results(self, use_calonly=False):
         """Summarize the results after fitting and return a dictonary. The contents are the model parameters, photon flux, TS, return code.
 """
-        # Model parameters
-        # if self.target.spectraltype=='PowerLaw':
-        #     model_pars = ('Prefactor', 'Index', 'Scale')
-        # elif self.target.spectraltype=='PowerLaw2':
-        #     model_pars = ('Integral', 'Index', 'LowerLimit', 'UpperLimit')
-        # elif self.target.spectraltype=='ScaleFactor::PowerLaw2':
-        #     model_pars = ('Integral', 'Index', 'LowerLimit', 'UpperLimit', 'ScaleFactor')
-        # elif self.target.spectraltype=='ExpCutoff':
-        #     model_pars = ('Prefactor', 'Index', 'Scale', 'Ebreak', 'P1', 'P2', 'P3')
-        # elif self.target.spectraltype=='BrokenPowerLaw':
-        #     model_pars = ('Prefactor', 'Index1', 'Index2', 'BreakValue')
-        # elif self.target.spectraltype=='BrokenPowerLaw2':
-        #     model_pars = ('Integral', 'Index1', 'Index2', 'BreakValue', 'LowerLimit', 'UpperLimit')
-
-
         for name_param in self.target.spectralpars.keys(): #model_pars:
             param = self.like.model[self.target.name].funcs['Spectrum'].getParam(name_param)
             self.dct_summary_results[name_param] = {'value':param.value(), 'error':param.error()}
@@ -1146,7 +1165,7 @@ class AnalysisConfig:
         return limits
 
 
-    def map_norm_range(self, ndivperdec=20, insert_zero=False):
+    def map_norm_range(self, ndivperdec=10, insert_zero=False): #Let ndivperdec be back to 20
         norm_value = self.like.model[self.target.name].funcs['Spectrum'].getParam(self.target.norm_name).value()
         norm_error = self.like.model[self.target.name].funcs['Spectrum'].getParam(self.target.norm_name).error()
         norm_idx = self.like.par_index(self.target.name, self.target.norm_name)
@@ -1180,7 +1199,7 @@ class AnalysisConfig:
         return xvals
 
 
-    def map_index_range(self, ndivperuni=40, index_range=(-5., 2.)):
+    def map_index_range(self, ndivperuni=20, index_range=(-6., 2.)): # Back to 40
         # Index parameter
         # index_name = 'Index'
         # index_idx = self.like.par_index(self.target.name, index_name)
@@ -1267,8 +1286,9 @@ class AnalysisConfig:
                 else:
                     e2dnde[inorm][jindex] = norms[inorm] / (np.log(self.target.spectralpars['UpperLimit']) - np.log(self.target.spectralpars['LowerLimit'])) * eref
             else:
-                logger.error('Use PowerLaw or PowerLaw2 instead of {0}!!'.format(self.target.spectraltype))
-                sys.exit(1)
+                #logger.warning('Use PowerLaw or PowerLaw2 instead of {0}!!'.format(self.target.spectraltype))
+                e2dnde = None
+                #sys.exit(1)
 
         logger.info("""likelihood:
 {0}""".format(loglikes))
@@ -1313,13 +1333,17 @@ class AnalysisConfig:
         logger.info('Index (best likelihood): {0}'.format(self.dct_summary_results['dloglike']['best']['Index']))
         for k,v in self.dct_summary_results['dloglike'].items():
             if k in ('loglike', 'dloglike', 'flux', 'eflux', 'efluence', 'e2dnde'):
-                self.dct_summary_results['dloglike']['best'][k] = v.flatten()[arg_bestlike]
+                if v is not None:
+                    self.dct_summary_results['dloglike']['best'][k] = v.flatten()[arg_bestlike]
+                else:
+                    self.dct_summary_results['dloglike']['best'][k] = None
         self.dct_summary_results['dloglike']['TS'] =2. * (self.dct_summary_results['dloglike']['loglike'][0,0] - self.dct_summary_results['dloglike']['best']['loglike'])
         logger.info('TS of {0}: {1}'.format(self.target.name, self.dct_summary_results['dloglike']['TS']))
         #logger.info('CalOnly best d-likelihood: {0}'.format(self.dct_summary_results['dloglike']['dloglike'][218,120]))
 
         self.plot_spectrum_scanned2D(name='dloglike', norms_mesh=norms_mesh, e2dnde=e2dnde, efluences=efluences, indices_mesh=indices_mesh, zvalues=dloglike_doubled, cont_levels=[2.30, 6.18, 11.83], shown_map=(dloglike_doubled<=11.83*1.5), eref=eref)
-        self.plot_sed_bowtie(name='dloglike', norms_mesh=norms_mesh, indices_mesh=indices_mesh, dict_meshes_shown={'1sigma':dloglike_doubled<=2.30, '2sigma':dloglike_doubled<=6.18})
+        if self.target.spectraltype[-8:]=='PowerLaw' or self.target.spectraltype[-9:]=='PowerLaw2':
+            self.plot_sed_bowtie(name='dloglike', norms_mesh=norms_mesh, indices_mesh=indices_mesh, dict_meshes_shown={'1sigma':dloglike_doubled<=2.30, '2sigma':dloglike_doubled<=6.18})
         if use_calonly==True:
             self.plot_spectrum_scanned2D(name='dloglike_calonly', norms_mesh=norms_mesh, e2dnde=e2dnde, efluences=efluences, indices_mesh=indices_mesh, zvalues=dloglike_calonly_doubled, cont_levels=[2.30, 6.18, 11.83], shown_map=(dloglike_calonly_doubled<=11.83*1.5), eref=eref)
             self.plot_spectrum_scanned2D(name='dloglike_without_calonly', norms_mesh=norms_mesh, e2dnde=e2dnde, efluences=efluences, indices_mesh=indices_mesh, zvalues=dloglike_without_calonly_doubled, cont_levels=[2.30, 6.18, 11.83], shown_map=(dloglike_without_calonly_doubled<=11.83*1.5), eref=eref)
@@ -1337,8 +1361,9 @@ class AnalysisConfig:
             elif self.target.spectraltype[-9:]=='PowerLaw2':
                 return (phindex!=-1)*(e*e*norm*(phindex+1)*pow(e, phindex)/(pow(self.target.spectralpars['UpperLimit'], phindex+1) - pow(self.target.spectralpars['LowerLimit'], phindex+1))) + (phindex==-1)*(e*norm/(np.log(self.target.spectralpars['UpperLimit']) - np.log(self.target.spectralpars['LowerLimit'])))
             else:
-                logger.error('Use PowerLaw or PowerLaw2 instead of {0}'.format(self.target.spectraltype))
-                sys.exit(1)
+                #logger.error('Use PowerLaw or PowerLaw2 instead of {0}'.format(self.target.spectraltype))
+                #sys.exit(1)
+                return 0
         
         odict_curves_lo = OrderedDict()
         odict_curves_hi = OrderedDict()
@@ -1402,17 +1427,14 @@ class AnalysisConfig:
         indices_max = np.amax(indices_mesh[1:,:][shown_map[1:,:]])
         norms_min = np.amin(norms_mesh[1:,:][shown_map[1:,:]])
         norms_max = np.amax(norms_mesh[1:,:][shown_map[1:,:]])
-        e2dnde_min = min(e2dnde[1:,:].flatten()[shown_map[1:,:].flatten()]) #e2dnde[1:,:][shown_map[1:,:]])
-        e2dnde_max = max(e2dnde[1:,:].flatten()[shown_map[1:,:].flatten()]) #e2dnde[1:,:][shown_map[1:,:]])
+        if e2dnde is not None:
+            e2dnde_min = min(e2dnde[1:,:].flatten()[shown_map[1:,:].flatten()]) #e2dnde[1:,:][shown_map[1:,:]])
+            e2dnde_max = max(e2dnde[1:,:].flatten()[shown_map[1:,:].flatten()]) #e2dnde[1:,:][shown_map[1:,:]])
         efluences_min = np.amin(efluences[1:,:][shown_map[1:,:]])
         efluences_max = np.amax(efluences[1:,:][shown_map[1:,:]])
 
         fig, ax = plt.subplots(1, 3, sharex=False, sharey=False, figsize=(15, 5))
-        cont = ax[0].contour(indices_mesh, norms_mesh, zvalues, levels=cont_levels, colors='k', linestyles=pMatplot.TPL_LINE) #, colors='black')
-        # try:
-        #     cont.clabel(fmt='%1.1E', fontsize=10)
-        # except ValueError:
-        #     logger.error('Drawing normalization label failed because of ValueError!')
+        cont = ax[0].contour(indices_mesh, norms_mesh, zvalues, levels=cont_levels, colors='k', linestyles=pMatplot.TPL_LINE) 
         ax[0].set_xlim((indices_min, indices_max)) #(np.amin(indices_mesh + sys.maxint*unshown_map), np.amax(indices_mesh - sys.maxint*unshown_map)))
         ax[0].set_ylim((norms_min, norms_max)) #(np.amin(norms_mesh + sys.maxint*unshown_map), np.amax(norms_mesh - sys.maxint*unshown_map)))
         ax[0].set_yscale('log')
@@ -1420,30 +1442,16 @@ class AnalysisConfig:
         ax[0].set_ylabel('Normalization factor [a.u.]')
         ax[0].grid()
 
-        #print 'E^2dN/dE'
-        #print e2dnde[1:,:].flatten()[shown_map[1:,:].flatten()] #e2dnde*MEVtoERG
-        #print 'Min:', e2dnde_min, e2dnde_min*MEVtoERG
-        #print 'Max:', e2dnde_max, e2dnde_max*MEVtoERG
-        cont_eflux = ax[1].contour(indices_mesh, e2dnde*MEVtoERG, zvalues, levels=cont_levels, colors='k', linestyles=pMatplot.TPL_LINE)
-        # try:
-        #     cont_eflux.clabel(fmt='%1.1E', fontsize=10)
-        # except ValueError:
-        #     logger.error('Drawing eflux label failed because of ValueError!')
-
-        ax[1].set_xlim((indices_min, indices_max)) #(np.amin(indices_mesh + sys.maxint*unshown_map), np.amax(indices_mesh - sys.maxint*unshown_map)))
-        ax[1].set_ylim((e2dnde_min*MEVtoERG, e2dnde_max*MEVtoERG)) #(np.amin(e2dnde*MEVtoERG + sys.maxint*unshown_map), np.amax(e2dnde*MEVtoERG - sys.maxint*unshown_map)))
-        ax[1].set_yscale('log')
-        ax[1].set_xlabel('Spectral index')
-        ax[1].set_ylabel(r'$\nu F_{{\nu}} \ \rm{{[erg/cm^2 \cdot s]}} \ at \ {eref:.1f} GeV$'.format(eref=eref/1000.))
-        ax[1].grid()
+        if e2dnde is not None:
+            cont_eflux = ax[1].contour(indices_mesh, e2dnde*MEVtoERG, zvalues, levels=cont_levels, colors='k', linestyles=pMatplot.TPL_LINE)
+            ax[1].set_xlim((indices_min, indices_max)) #(np.amin(indices_mesh + sys.maxint*unshown_map), np.amax(indices_mesh - sys.maxint*unshown_map)))
+            ax[1].set_ylim((e2dnde_min*MEVtoERG, e2dnde_max*MEVtoERG)) #(np.amin(e2dnde*MEVtoERG + sys.maxint*unshown_map), np.amax(e2dnde*MEVtoERG - sys.maxint*unshown_map)))
+            ax[1].set_yscale('log')
+            ax[1].set_xlabel('Spectral index')
+            ax[1].set_ylabel(r'$\nu F_{{\nu}} \ \rm{{[erg/cm^2 \cdot s]}} \ at \ {eref:.1f} GeV$'.format(eref=eref/1000.))
+            ax[1].grid()
 
         cont_efluence = ax[2].contour(indices_mesh, efluences*MEVtoERG, zvalues, levels=cont_levels, colors='k', linestyles=pMatplot.TPL_LINE)
-        # try:
-        #     cont_efluence.clabel(fmt='%1.1E', fontsize=10)
-        # except ValueError:
-        #     logger.error('Drawing efluence label failed because of ValueError!')
-
-        #ax[2].axhline(self.target.table_grb_catalogue['GBM']['FLUENCE'], alpha=0.5, lw=1.5, c='g', label='GBM (prompt)')
         ax[2].set_xlim((indices_min, indices_max)) #(np.amin(indices_mesh + sys.maxint*unshown_map), np.amax(indices_mesh - sys.maxint*unshown_map)))
         ax[2].set_ylim((efluences_min*MEVtoERG, efluences_max*MEVtoERG)) #(np.amin(efluences*MEVtoERG + sys.maxint*unshown_map), np.amax(efluences*MEVtoERG - sys.maxint*unshown_map)))
         ax[2].set_yscale('log')
@@ -1578,6 +1586,8 @@ class AnalysisConfig:
                 e2dnde[inorm][jindex] = norms[inorm] * pow(eref/self.target.spectralpars['Scale'], indices[jindex]) * eref * eref
             elif self.target.spectraltype[-9:]=='PowerLaw2':
                 e2dnde[inorm][jindex] = norms[inorm] * (indices[jindex]+1) * pow(eref, indices[jindex]) / (pow(self.target.spectralpars['UpperLimit'], indices[jindex]+1) - pow(self.target.spectralpars['LowerLimit'], indices[jindex]+1)) * eref * eref
+            else:
+                e2dnde[inorm][jindex] = 0
             
             loglike_possible = np.log(np.exp(-npreds[inorm][jindex]) * pow(npreds[inorm][jindex], nobs_possible_T) / scipy.misc.factorial(nobs_possible_T))
             loglikeratio = loglike_possible - loglike_possible_ideal_T
@@ -1665,12 +1675,13 @@ class AnalysisConfig:
         self.dct_summary_results['likeratioordering']['index'] = indices
         self.dct_summary_results['likeratioordering']['eflux'] = efluxes
         self.dct_summary_results['likeratioordering']['efluence'] = efluences
-        self.dct_summary_results['likeratioordering']['e2dnde'] = e2dnde
+        self.dct_summary_results['likeratioordering']['e2dnde'] = e2dnde 
         self.dct_summary_results['likeratioordering']['pliker'] = prob_liker
         self.dct_summary_results['likeratioordering']['punliker'] = prob_unliker
 
         self.plot_spectrum_scanned2D(name='likeratioordering', norms_mesh=norms_mesh, e2dnde=e2dnde, efluences=efluences, indices_mesh=indices_mesh, zvalues=prob_unliker, cont_levels=[2.7e-3, 4.55e-2, 3.173e-1], shown_map=(prob_unliker>=0.0000063), eref=eref)
-        self.plot_sed_bowtie(name='likeratioordering', norms_mesh=norms_mesh, indices_mesh=indices_mesh, dict_meshes_shown={'2sigma':prob_unliker>=4.55e-2, '1sigma':prob_unliker>=3.173e-1})
+        if self.target.spectraltype[-8:]=='PowerLaw' or self.target.spectraltype[-9:]=='PowerLaw2':
+            self.plot_sed_bowtie(name='likeratioordering', norms_mesh=norms_mesh, indices_mesh=indices_mesh, dict_meshes_shown={'2sigma':prob_unliker>=4.55e-2, '1sigma':prob_unliker>=3.173e-1})
 
 
     def add_calonly(self, path_onevt, path_onexp, path_bkgevt, nhistogram=0, rclass='R100'):
