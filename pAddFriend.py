@@ -13,9 +13,13 @@ ROOT.gROOT.SetBatch()
 par = sys.argv #args # 
 print par
 aPathFile = par[1:]
-nFriend = 2
-aSuffixFriend=["newVariables", "WP8CalOnlyBEPCaseE_myBDT"]
-aNameFriend=["newVariables", "WP8CalOnlyBEP_E_BDT"]
+
+aSuffixFriend=["newVariables", "WP8CalOnlyBEPCaseE_myBDT", "CalOnlyVar"]
+aNameFriend=["newVariables", "WP8CalOnlyBEP_E_BDT", "CalOnlyVar"]
+if len(aSuffixFriend)!=len(aNameFriend):
+    print "Numbers of the name and the suffix of the friend files are different!!"
+    sys.exit(1)
+nFriend = len(aSuffixFriend)
 # if options.bep==True:
 #     nFriend = nFriend+1
 #     aSuffixFriend.append("")
