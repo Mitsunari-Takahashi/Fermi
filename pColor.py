@@ -9,7 +9,7 @@ def stepColorRGB(nStep, iStep):
 
 def akColor(iColor):
     if iColor>=0 and iColor<11:
-        akColor = [kBlack, kBlue, kRed, kGreen+3, kMagenta, kCyan+3, kYellow+2, kOrange+2, 28, 39, 46]
+        akColor = [kBlack, kRed, kBlue, kGreen+3, kMagenta, kCyan+3, kYellow+2, kOrange+2, 28, 39, 46]
         return akColor[iColor]
     else:
         print "No color No.%s is defined." % iColor
