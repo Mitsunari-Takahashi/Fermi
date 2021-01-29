@@ -27,19 +27,22 @@ from pLivetime import *
 
 
 par = sys.argv
-nameFileSuffix = par[1]
+nameFileOut = par[2]
+#nameFileSuffix = par[2]
 
 # Spacecraft data
 #pathFileScAll = "/disk/gamma/cta/store/takhsm/FermiData/spacecraft/FERMI_POINTING_FINAL_???_20?????_20?????_??.fits"
-pathFileScAll = "/disk/gamma/cta/store/takhsm/FermiData/spacecraft/mtakahas-AstroServer-00009-ft2-30s.fits"
+pathFileScAll = par[1]
+#"/nfs/farm/g/glast/u/mtakahas/data/spacecraft/lat_spacecraft_weekly_w*.fits" 
+#"/disk/gamma/cta/store/takhsm/FermiData/spacecraft/mtakahas-AstroServer-00009-ft2-30s.fits"
 
 print "===================="
-metStart = float(par[2])
-metStop = float(par[3])
-if len(par)>4:
-    pathCatalogue = par[4]
+metStart = float(par[3])
+metStop = float(par[4])
+if len(par)>5:
+    pathCatalogue = par[5]
 else:
-    pathCatalogue = "/disk/gamma/cta/store/takhsm/FermiData/catalogue/gll_psch_v09.fit"
+    pathCatalogue = "/nfs/farm/g/glast/u/mtakahas/data/catalogue/gll_psch_v13.fit" #"/disk/gamma/cta/store/takhsm/FermiData/catalogue/gll_psch_v09.fit"
 print "Time domain:", metStart, "-", metStop
 # ON/OFF regions
 NHPSIDE_OFF = 16
@@ -51,14 +54,15 @@ aStrRegion = ["GalacticOFF"]
 for npix in aHpxOFF[0]:
     aAngPix = hppf.pix2ang(NHPSIDE_OFF, npix)
     aCoordsPix_array[0].append(SkyCoord(aAngPix[1], pi/2-aAngPix[0], unit="rad"))
-    aAreaPix_array[0].append(hppf.nside2pixarea(NHPSIDE_OFF, npix))
+    aAreaPix_array[0].append(hppf.nside2pixarea(NHPSIDE_OFF))
     
 # Output objects
 aFileToI = []
-fileRoot = ROOT.TFile("Livetime_GalacticOff_{0}.root".format(nameFileSuffix), "update")
+fileRoot = ROOT.TFile(nameFileOut, "update")
+#fileRoot = ROOT.TFile("Livetime_GalacticOff_{0}.root".format(nameFileSuffix), "update")
 aHtgLt = []
 for hRegion in range(len(aStrRegion)):
-    aHtgLt.append(ROOT.TH3D("htgLt_{0}".format(aStrRegion[hRegion]), "Livetime over {0} [sec sr];Cos(Inclination angle);Zenith angle [deg];Time[sec]".format(aStrRegion[hRegion]), 40, 0.2, 1.0, 180, 0, 180, max(10, int(metStop-metStart)/54000), metStart, metStop+1))
+    aHtgLt.append(ROOT.TH3D("htgLt_{0}".format(aStrRegion[hRegion]), "Livetime over {0} [sec sr];Cos(Inclination angle);Zenith angle [deg];Time[sec]".format(aStrRegion[hRegion]), 100, -1.0, 1.0, 180, 0, 180, max(10, int(metStop-metStart)/54000), metStart, metStop+1))
 make_livetime_histogram(aHtgLt, len(aStrRegion), pathFileScAll, metStart, metStop, aFileToI, aCoordsPix_array, aAreaPix_array)
 aHtgLt_projYX = []
 fileRoot.cd()
