@@ -1,6 +1,6 @@
 import ROOT
 
-def cutBDT(nameFileRoc, aCutEgb=[10, 3, 1], nameVar="S18V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatThree_15_2_BDTG500D06Log"):
+def cutBDT(nameFileRoc, aCutEgb=[10, 3, 1], nameVar="S18V200909_020RAWE20ZDIR010ZCS000wwoTRKwoMCZDIR00woRWcatThree_15_2_BDTG500D06Log", useEGB=True):
     fileRoc = ROOT.TFile(nameFileRoc, 'READ')
     print fileRoc.GetName(), " was opened."
     print "Cutting at", aCutEgb, "xEGB level."
@@ -32,7 +32,7 @@ def cutBDT(nameFileRoc, aCutEgb=[10, 3, 1], nameVar="S18V200909_020RAWE20ZDIR010
         h1Count = h2Count.ProjectionY("h1BkgCount", ie+1, ie+1)
         h1Egb = h2Egb.ProjectionY("h1EgbRate", ie+1, ie+1)
         for ib in range(1, h1Sig.GetNbinsX()+1):
-            nEgb = h1Egb.GetBinContent(ib)
+            nEgb = h1Egb.GetBinContent(ib) if useEGB is True else 10**ebLow
             nSig = h1Sig.GetBinContent(ib)
             nRem = h1Bkg.GetBinContent(ib)
             nCount = h1Count.GetBinContent(ib)
