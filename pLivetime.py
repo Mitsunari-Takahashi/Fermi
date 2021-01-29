@@ -58,38 +58,99 @@ def make_livetime_histogram(aHtgLt, nRegion, pathFileScAll, metStart, metStop, a
         aDATA_QUAL = tbdataSC.field('DATA_QUAL')
         aLAT_CONFIG = tbdataSC.field('LAT_CONFIG')
         nTI = len(aSTART)
-        print "  ", fileToI, "(", nTI, "intervals )"
-        nTI_included = 0
-        for iTI in range(nTI):
-            if ( aSTART[iTI]>=metStart and aSTART[iTI]<metStop ) and ( (metExStart==0 and metExStop==0) or aSTOP[iTI]<metExStart or aSTART[iTI]>=metExStop):
-                nTI_included = nTI_included+1
-                if not aDATA_QUAL[iTI]>0:
-                    print 'Bad time interval', aSTART[iTI], '-', aSTOP[iTI], ':', aDATA_QUAL[iTI]
-                    continue
-                if not aLAT_CONFIG[iTI]==1:
-                    print 'LAT config:', aSTART[iTI], '-', aSTOP[iTI], ':', aLAT_CONFIG[iTI]
-                    continue
-                tti = aLIVETIME[iTI]
-                coordsSCZ = SkyCoord(aRA_SCZ[iTI], aDEC_SCZ[iTI], unit="deg")
-                coordsZenith = SkyCoord(aRA_ZENITH[iTI], aDEC_ZENITH[iTI], unit="deg")
-                tplot = aSTART[iTI]-origin_time
-                vecSCX = np.array(hppf.ang2vec(math.pi/2.-math.radians(aDEC_SCX[iTI]), math.radians(aRA_SCX[iTI])))
-                vecSCZ = np.array(hppf.ang2vec(math.pi/2.-math.radians(aDEC_SCZ[iTI]), math.radians(aRA_SCZ[iTI])))
-                for iR in range(nRegion):
-                    if aAreaPix_array[iR]==0:
-                        angSCZ = coordsSCZ.separation(aCoordsPix_array[iR])
-                        radSCZ = float(angSCZ.to_string(unit=u.rad, decimal=True))
-                        angZenith = coordsZenith.separation(aCoordsPix_array[iR])
-                        degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
-                        aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti)
-                    else:                        
-                        for (jpix, coordsPix) in enumerate(aCoordsPix_array[iR]):
-                            angSCZ = coordsSCZ.separation(coordsPix)
-                            radSCZ = float(angSCZ.to_string(unit=u.rad, decimal=True))
-                            angZenith = coordsZenith.separation(coordsPix)
-                            degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
-                            aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti*aAreaPix_array[iR][jpix])
-                if iTI%20==0:
-                    print iTI, aSTART[iTI], aRA_SCZ[iTI], aDEC_SCZ[iTI], tbdataSC.field('LAT_MODE')[iTI], aDATA_QUAL[iTI]#math.degrees(aAngSCY[1]), math.degrees(math.pi/2.-aAngSCY[0]), degZenith, math.degrees(radSCY)
-                sys.stdout.flush()
-        print nTI_included, 'intervals are included.'
+        print "  ", fileToI, "(", nTI, "intervals in total)"
+
+        dict_cut = {}
+        dict_cut['time'] = np.array(( (aSTART>=metStart) * (aSTART<metStop) ) * ( ((metExStart==0) * (metExStop==0)) + (aSTOP<metExStart) + (aSTART>=metExStop)), dtype=bool)
+        dict_cut['qual'] = aDATA_QUAL>0
+        dict_cut['config'] = aLAT_CONFIG==1
+        print '* Cuts'
+        for k, v in dict_cut.items():
+            print '{k}: {v}'.format(k=k, v=v[:100])
+        cut_combined_interval =  np.array(dict_cut['time'] * dict_cut['qual'] * dict_cut['config'], dtype=bool) #np.prod(dict_cut.values())
+        print '* Combined cut'
+        print cut_combined_interval[:100]
+
+        # coordsSCZ_interval = SkyCoord(aRA_SCZ, aDEC_SCZ, unit="deg")
+        # coordsZenith_interval = SkyCoord(aRA_ZENITH, aDEC_ZENITH, unit="deg")
+        # tplot_interval = aSTART-origin_time
+        #vecSCX = np.array(hppf.ang2vec(math.pi/2.-math.radians(aDEC_SCX), math.radians(aRA_SCX)))
+        #vecSCZ = np.array(hppf.ang2vec(math.pi/2.-math.radians(aDEC_SCZ), math.radians(aRA_SCZ)))
+
+        for iR in range(nRegion):
+            if (isinstance(aAreaPix_array[iR], int) or isinstance(aAreaPix_array[iR], float)) and aAreaPix_array[iR]==0: # Point-like region
+                angSCZ = coordsSCZ.separation(aCoordsPix_array[iR])
+                radSCZ = float(angSCZ.to_string(unit=u.rad, decimal=True))
+                angZenith = coordsZenith.separation(aCoordsPix_array[iR])
+                degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
+                aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti)
+            else:  # Extended region
+                npixel = len(aAreaPix_array[iR])
+                coordsSCZ_interval = SkyCoord(np.array([aRA_SCZ]).T, np.array([aDEC_SCZ]).T, unit="deg")
+                print 'Telescope boresight has been reconstructed.'
+                coordsZenith_interval = SkyCoord(np.array([aRA_ZENITH]).T, np.array([aDEC_ZENITH]).T, unit="deg")
+                print 'Zenith direction has been reconstructed.'
+                #coordsPix_pixel = aCoordsPix_array[iR]
+
+                angSCZ_interval_pixel = coordsSCZ_interval.separation(aCoordsPix_array[iR])
+                cosSCZ_interval_pixel = np.cos(angSCZ_interval_pixel)
+                print 'Inclination for each pixel has been calculated.'
+
+                angZenith_interval_pixel = coordsZenith_interval.separation(aCoordsPix_array[iR])
+                #degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
+                print 'Zenith angle for each pixel has been calculated.'
+
+                tplot_interval = aSTART-origin_time
+
+                time_valid = cut_combined_interval * aLIVETIME #* aAreaPix_array[iR]
+                print time_valid[:100]
+                livetime_interval_pixel = np.dot(np.array([time_valid]).T, np.array([aAreaPix_array[iR]]))
+                print 'Livetime for each pixel has been calculated.'
+
+                for iTI in range(nTI):
+                    for jpix in range(len(aCoordsPix_array[iR])):
+#                         if iTI<10 and livetime_interval_pixel[iTI][jpix]>0:
+#                             print '''Inclination: {cth}
+# Zenith: {za}
+# Time: {tp}
+# Livetime: {lv}
+# '''.format(cth=cosSCZ_interval_pixel[iTI][jpix], za=float(angZenith_interval_pixel[iTI][jpix].to_string(unit=u.deg, decimal=True)), tp=tplot_interval[iTI], lv=livetime_interval_pixel[iTI][jpix])
+                        aHtgLt[iR].Fill(cosSCZ_interval_pixel[iTI][jpix], float(angZenith_interval_pixel[iTI][jpix].to_string(unit=u.deg, decimal=True)), tplot_interval[iTI], livetime_interval_pixel[iTI][jpix])
+                    if iTI%100==0:
+                        print '{0:2.0f}% have been filled.'.format(iTI*100/nTI)
+                        sys.stdout.flush()
+
+        # nTI_included = 0
+        # for iTI in range(nTI):
+        #     if ( aSTART[iTI]>=metStart and aSTART[iTI]<metStop ) and ( (metExStart==0 and metExStop==0) or aSTOP[iTI]<metExStart or aSTART[iTI]>=metExStop):
+        #         nTI_included = nTI_included+1
+        #         if not aDATA_QUAL[iTI]>0:
+        #             print 'Bad time interval', aSTART[iTI], '-', aSTOP[iTI], ':', aDATA_QUAL[iTI]
+        #             continue
+        #         if not aLAT_CONFIG[iTI]==1:
+        #             print 'LAT config:', aSTART[iTI], '-', aSTOP[iTI], ':', aLAT_CONFIG[iTI]
+        #             continue
+        #         tti = aLIVETIME[iTI]
+        #         coordsSCZ = SkyCoord(aRA_SCZ[iTI], aDEC_SCZ[iTI], unit="deg")
+        #         coordsZenith = SkyCoord(aRA_ZENITH[iTI], aDEC_ZENITH[iTI], unit="deg")
+        #         tplot = aSTART[iTI]-origin_time
+        #         vecSCX = np.array(hppf.ang2vec(math.pi/2.-math.radians(aDEC_SCX[iTI]), math.radians(aRA_SCX[iTI])))
+        #         vecSCZ = np.array(hppf.ang2vec(math.pi/2.-math.radians(aDEC_SCZ[iTI]), math.radians(aRA_SCZ[iTI])))
+        #         for iR in range(nRegion):
+        #             if aAreaPix_array[iR]==0:
+        #                 angSCZ = coordsSCZ.separation(aCoordsPix_array[iR])
+        #                 radSCZ = float(angSCZ.to_string(unit=u.rad, decimal=True))
+        #                 angZenith = coordsZenith.separation(aCoordsPix_array[iR])
+        #                 degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
+        #                 aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti)
+        #             else:                        
+        #                 for (jpix, coordsPix) in enumerate(aCoordsPix_array[iR]):
+        #                     angSCZ = coordsSCZ.separation(coordsPix)
+        #                     radSCZ = float(angSCZ.to_string(unit=u.rad, decimal=True))
+        #                     angZenith = coordsZenith.separation(coordsPix)
+        #                     degZenith = float(angZenith.to_string(unit=u.deg, decimal=True))
+        #                     aHtgLt[iR].Fill(cos(radSCZ), degZenith, tplot, tti*aAreaPix_array[iR][jpix])
+        #         if iTI%20==0:
+        #             print iTI, aSTART[iTI], aRA_SCZ[iTI], aDEC_SCZ[iTI], tbdataSC.field('LAT_MODE')[iTI], aDATA_QUAL[iTI]
+#                sys.stdout.flush()
+        print 'Histogram filling has been finished.' #print nTI_included, 'intervals are included.'
