@@ -4,7 +4,14 @@ import sys
 import math
 from math import cos, sin, tan, acos, asin, atan, radians, degrees
 
+
+##### Datetime #####
 JulYrInSec = 31557600
+
+
+##### Conversion from MeV to erg ######
+MEVtoERG = 1.6021766208E-6
+
 
 def anglePointsRadToRad(phi0, theta0, phi1, theta1):
     vec0 = numpy.array([cos(theta0)*cos(phi0), cos(theta0)*sin(phi0), sin(theta0)])
