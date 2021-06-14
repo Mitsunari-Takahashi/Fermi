@@ -10,12 +10,16 @@ import click
 from array import array
 import math
 from math import cos, sin, tan, acos, asin, atan, radians, degrees, log, log10, sqrt
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 
 ROOT.gROOT.SetBatch()
 
+LIST_MARKERS = ['o', 's', 'D', '*', 'p', 'v', '^', 'd', '<', '>']
 
-def get_ebl_count_integral(e0, e1, norm=1.03E-5, slope=-2.41):
+def get_egb_count_integral(e0, e1, norm=1.03E-5, slope=-2.41):
     count = norm * (pow(e1, slope+1)-pow(e0, slope+1)) / (pow(10**5, slope+1)-pow(10**2, slope+1)) * 1E4 # m^-2 s^-1 sr^-1
     return count
 
@@ -26,25 +30,41 @@ def create_galoff_roc3D(dir_out, hist_evt, hist_exp, hist_acc, negativecth, loge
 
     dir_out.cd()
     hist_covered = TH2F('hist_covered', 'hist_covered', hist_acc.GetXaxis().GetNbins(), hist_acc.GetXaxis().GetBinLowEdge(1), hist_acc.GetXaxis().GetBinLowEdge(hist_acc.GetXaxis().GetNbins()+1), hist_acc.GetZaxis().GetNbins(), hist_acc.GetZaxis().GetBinLowEdge(1), hist_acc.GetZaxis().GetBinLowEdge(hist_acc.GetZaxis().GetNbins()+1))
-    
+
+    NCOL_AX_ROC = 3
+    fig_roc_ene, axes_roc_ene = plt.subplots(3, NCOL_AX_ROC, squeeze=True, figsize=(24,15), sharex=False, sharey=False)
+    #plt.tight_layout()
+    fig_roc_cth, axes_roc_cth = plt.subplots(3, NCOL_AX_ROC, squeeze=True, figsize=(24,15), sharex=False, sharey=False)
+    #plt.tight_layout()
+    ix_count = 0
+
     for ix in range(1, 1+hist_exp.GetXaxis().GetNbins()): # Energy
+        iz_count = 0
         energy_cen = hist_exp.GetXaxis().GetBinCenter(ix)
         energy_lo = hist_exp.GetXaxis().GetBinLowEdge(ix)
         energy_up = hist_exp.GetXaxis().GetBinLowEdge(ix+1)
         str_label_energy = "{0:1.2f}<log10(Energy)<{1:1.2f}".format(energy_lo, energy_up)
         print '* ' + str_label_energy
 
-        ebl_count = get_ebl_count_integral(10**energy_lo, 10**energy_up)
-        print "EGB: {0} m^-2 s^-1 sr^-1".format(ebl_count)
-        evtdens_min_ebl = 1.
-        evtdens_max_ebl = 100.
-        evtdens_min = evtdens_min_ebl*ebl_count
-        evtdens_max = evtdens_max_ebl*ebl_count
+        egb_count = get_egb_count_integral(10**energy_lo, 10**energy_up)
+        print "EGB: {0} m^-2 s^-1 sr^-1".format(egb_count)
+        evtdens_min_egb = 1.
+        evtdens_max_egb = 100.
+        evtdens_min = evtdens_min_egb*egb_count
+        evtdens_max = evtdens_max_egb*egb_count
 
         if hist_exp.GetXaxis().GetBinCenter<logemin or hist_exp.GetXaxis().GetBinCenter(ix)>logemax:
             print '  Skipped.'
         else:
+            axes_roc_ene[ix_count/NCOL_AX_ROC][ix_count%NCOL_AX_ROC].set_title(str_label_energy)
+            axes_roc_ene[ix_count/NCOL_AX_ROC][ix_count%NCOL_AX_ROC].set_yscale('log')
+            axes_roc_ene[ix_count/NCOL_AX_ROC][ix_count%NCOL_AX_ROC].set_xlabel('Acceptance [m^2 sr]')
+            axes_roc_ene[ix_count/NCOL_AX_ROC][ix_count%NCOL_AX_ROC].set_ylabel('[EGB level]')
+            axes_roc_ene[ix_count/NCOL_AX_ROC][ix_count%NCOL_AX_ROC].set_ylim(1, 100)
+            axes_roc_ene[ix_count/NCOL_AX_ROC][ix_count%NCOL_AX_ROC].grid(True, axis='both')
+            axes_roc_ene[ix_count/NCOL_AX_ROC][ix_count%NCOL_AX_ROC].grid(True, axis='y', which='minor')
             for iz in range(1, 1+hist_exp.GetZaxis().GetNbins()): # Inclination
+                iy_count = 0
                 cth_lo = hist_exp.GetZaxis().GetBinLowEdge(iz)
                 cth_up = hist_exp.GetZaxis().GetBinLowEdge(iz+1)
                 str_label_cth = "{0:1.2f}<cos#theta<{1:1.2f}".format(cthsign*cth_lo, cthsign*cth_up)
@@ -53,6 +73,15 @@ def create_galoff_roc3D(dir_out, hist_evt, hist_exp, hist_acc, negativecth, loge
                 if hist_exp.GetZaxis().GetBinCenter(iz)<cthmin or hist_exp.GetZaxis().GetBinCenter(iz)>cthmax:
                     print '  Skipped.'
                 else:
+                    if ix_count==0:
+                        axes_roc_cth[iz_count/NCOL_AX_ROC][iz_count%NCOL_AX_ROC].set_title(str_label_cth)
+                        axes_roc_cth[iz_count/NCOL_AX_ROC][iz_count%NCOL_AX_ROC].set_yscale('log')
+                        axes_roc_cth[iz_count/NCOL_AX_ROC][iz_count%NCOL_AX_ROC].set_xlabel('Acceptance [m^2 sr]')
+                        axes_roc_cth[iz_count/NCOL_AX_ROC][iz_count%NCOL_AX_ROC].set_ylabel('[EGB level]')
+                        axes_roc_cth[iz_count/NCOL_AX_ROC][iz_count%NCOL_AX_ROC].set_xlim(0, 0.3)
+                        axes_roc_cth[iz_count/NCOL_AX_ROC][iz_count%NCOL_AX_ROC].set_ylim(1, 100)
+                        axes_roc_cth[iz_count/NCOL_AX_ROC][iz_count%NCOL_AX_ROC].grid(True, axis='both')
+                        axes_roc_cth[iz_count/NCOL_AX_ROC][iz_count%NCOL_AX_ROC].grid(True, axis='y', which='minor')
                     name_dir = 'E{0}_Z{1}'.format(ix, iz)
                     dir_xz = dir_out.mkdir(name_dir, str_label_com)
                     dir_xz.cd()
@@ -123,6 +152,9 @@ def create_galoff_roc3D(dir_out, hist_evt, hist_exp, hist_acc, negativecth, loge
 
                     acc_ideal = 0
 
+                    xacc = []
+                    ybkg = []
+                    cbdt = []
                     for iy in range(1, 1+hist_exp1D.GetNbinsX()): # BDT
                         bdt_cen = hist_exp1D.GetXaxis().GetBinCenter(iy)
                         bdt_lo = hist_exp1D.GetXaxis().GetBinLowEdge(iy)
@@ -176,6 +208,17 @@ def create_galoff_roc3D(dir_out, hist_evt, hist_exp, hist_acc, negativecth, loge
                         graph_energydens.SetPoint(iy-1, acc, energydens)
                         graph_cut.SetPoint(iy-1, acc, bdt_lo)
                         graph_cut.SetPointError(iy-1, acc_err, 0)
+                        if iy%2==0:
+                            xacc.append(acc)
+                            ybkg.append(evtdens/egb_count)
+                            cbdt.append(bdt_cen)
+
+                    cmap_ene = axes_roc_ene[ix_count/NCOL_AX_ROC][ix_count%NCOL_AX_ROC].scatter(xacc, ybkg, c=cbdt, cmap='plasma', marker=LIST_MARKERS[iz_count], linewidths=0, label=str_label_cth, vmin=2.0, vmax=3.5)
+                    cmap_cth = axes_roc_cth[iz_count/NCOL_AX_ROC][iz_count%NCOL_AX_ROC].scatter(xacc, ybkg, c=cbdt, cmap='viridis', marker=LIST_MARKERS[ix_count], linewidths=0, label=str_label_energy, vmin=2.0, vmax=3.5)
+                    if ix_count==0 and iz_count==0:
+                        fig_roc_ene.colorbar(cmap_ene, ax=axes_roc_ene[NCOL_AX_ROC-1][2])
+                        fig_roc_cth.colorbar(cmap_cth, ax=axes_roc_cth[NCOL_AX_ROC-1][2])
+
                     graph_evtrate.Write()
                     graph_energyrate.Write()
                     graph_evtdens.Write()
@@ -206,10 +249,10 @@ def create_galoff_roc3D(dir_out, hist_evt, hist_exp, hist_acc, negativecth, loge
                     graph_evtdens.GetYaxis().SetRangeUser(evtdens_min, evtdens_max)
                     graph_evtdens.GetXaxis().SetTitle("Acceptance [m^{2} sr]")
                     graph_evtdens.GetYaxis().SetTitle("Events [counts m^{-2} sr^{-1} s^{-1}]")
-                    gaxis_ebl = TGaxis(graph_evtdens.GetXaxis().GetXmax(),evtdens_min,graph_evtdens.GetXaxis().GetXmax(),evtdens_max,evtdens_min_ebl,evtdens_max_ebl,510,"GL+")
-                    #gaxis_ebl = TGaxis(can_evtdens.GetUxmax(),evtdens_min,can_evtdens.GetUxmax(),evtdens_max,evtdens_min_ebl,evtdens_max_ebl,510,"R-")
-                    gaxis_ebl.SetTitle("[EBL level]")
-                    gaxis_ebl.Draw()
+                    gaxis_egb = TGaxis(graph_evtdens.GetXaxis().GetXmax(),evtdens_min,graph_evtdens.GetXaxis().GetXmax(),evtdens_max,evtdens_min_egb,evtdens_max_egb,510,"GL+")
+                    #gaxis_egb = TGaxis(can_evtdens.GetUxmax(),evtdens_min,can_evtdens.GetUxmax(),evtdens_max,evtdens_min_egb,evtdens_max_egb,510,"R-")
+                    gaxis_egb.SetTitle("[EGB level]")
+                    gaxis_egb.Draw()
                     can_evtdens.SetGridy(1)
                     can_evtdens.SetLogy()
                     can_evtdens.Write()
@@ -222,8 +265,20 @@ def create_galoff_roc3D(dir_out, hist_evt, hist_exp, hist_acc, negativecth, loge
                     graph_energydens.GetYaxis().SetTitle("E^{2} #times Differencial energy rate [MeV m^{-2} sr^{-1} s^{-1}]")
                     can_energydens.SetLogy()
                     can_energydens.Write()
+                
+                    iz_count+=1
+            ix_count+=1
     dir_out.cd()
     hist_covered.Write()
+
+    h,l = axes_roc_ene[0][0].get_legend_handles_labels()
+    axes_roc_ene[NCOL_AX_ROC-1][2].legend(h, l)
+    h,l = axes_roc_cth[0][0].get_legend_handles_labels()
+    axes_roc_cth[NCOL_AX_ROC-1][2].legend(h, l)
+    #plt.tight_layout()
+    return {'energy':fig_roc_ene, 'cth':fig_roc_cth}
+
+    
 
 
 @click.command()
@@ -251,7 +306,9 @@ def main(eventhist, exposure, roc, outpath, logemin, logemax, cthmin, cthmax, ne
     file_out = TFile(outpath, "RECREATE")
     file_out.cd()
 
-    create_galoff_roc3D(file_out, hist_evt, hist_exp, hist_acc, negativecth, logemin, logemax, cthmin, cthmax, hist_bkg)
+    figs_roc = create_galoff_roc3D(file_out, hist_evt, hist_exp, hist_acc, negativecth, logemin, logemax, cthmin, cthmax, hist_bkg)
+    for roc_key, fig_roc in figs_roc.items():
+        fig_roc.savefig(outpath.replace('.root', '_{0}.pdf'.format(roc_key)))
 
 
 if __name__ == '__main__':
