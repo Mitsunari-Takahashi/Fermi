@@ -40,6 +40,8 @@ class EventClass:
         
 
     def calc_count(self, source_model_hist, livetime_hist, emin, emax):
+        '''Energy dispersion is not taken into account.'''
+        
         # source_model: vs. energy
         # livetime: vs. costheta vs. energy
         # acceptance: vs. costheta vs. energy
@@ -58,7 +60,10 @@ class EventClass:
             for jy in range(1, count_cth_hist.GetYaxis().GetNbins()+1):
                 # Exposure except for the edge bins
                 exp_err_nonedge = ROOT.Double(0)
-                exp_nonedge = exp_hist.IntegralAndError(nebin_lo+1, nebin_up-1, jy, jy, exp_err)
+                if nebin_lo+1>nebin_up-1:
+                    exp_nonedge = exp_hist.IntegralAndError(nebin_lo+1, nebin_up-1, jy, jy, exp_err_nonedge)
+                else:
+                    exp_nonedge = 0
 
                 # Exposure of the lowest bin
                 wfactor_loedge = (exp_hist.GetXaxis().GetBinUpEdge(nebin_lo)-count_cth_hist.GetXaxis().GetBinLowEdge(ix)) / exp_hist.GetXaxis().GetBinWidth(nebin_lo)
@@ -75,7 +80,7 @@ class EventClass:
                 exp_err = sqrt(exp_err_nonedge**2 + exp_loedge**2 + exp_err_hiedge**2)
 
                 cnt = flux * exp
-                cnt_err = 
+                cnt_err = sqrt( pow(flux*exp_err, 2) + pow(flux_err*exp, 2) )
                 count_cth_hist.SetBinContent(ix, jy, cnt)
                 count_cth_hist.SetBinError(ix, jy, cnt_err)
         return count_cth
